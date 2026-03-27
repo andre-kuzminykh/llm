@@ -17,6 +17,7 @@ export class TelegramService implements OnModuleInit {
   private readonly logger = new Logger(TelegramService.name);
   readonly bot: Bot;
   private userSessions: Map<bigint, string> = new Map(); // telegramId -> chatSessionId
+  private userModels: Map<bigint, string> = new Map(); // telegramId -> selected model
 
   constructor(
     private configService: ConfigService,
@@ -32,6 +33,13 @@ export class TelegramService implements OnModuleInit {
 
   async onModuleInit() {
     this.setupHandlers();
+
+    // Set bot menu commands (visible in hamburger menu)
+    await this.bot.api.setMyCommands([
+      { command: 'new', description: 'Start a new chat' },
+      { command: 'models', description: 'Choose a model' },
+      { command: 'balance', description: 'Check your balance' },
+    ]);
 
     const webhookUrl = this.configService.get('TELEGRAM_WEBHOOK_URL');
     if (webhookUrl) {
@@ -73,22 +81,31 @@ export class TelegramService implements OnModuleInit {
       );
     });
 
-    // /new command
+    // /new command — start new chat, then offer model selection
     this.bot.command('new', async (ctx) => {
       const user = await this.ensureUser(ctx);
       if (!user) return;
 
-      const session = await this.chatService.createSession(user.id);
-      this.userSessions.set(BigInt(ctx.from!.id), session.id);
-      await ctx.reply(`New chat started with ${session.model}. Send me a message!`);
+      const telegramId = BigInt(ctx.from!.id);
+      const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
+      const session = await this.chatService.createSession(user.id, currentModel);
+      this.userSessions.set(telegramId, session.id);
+
+      const keyboard = this.buildModelKeyboard(currentModel);
+      await ctx.reply(
+        `New chat started.\nModel: ${currentModel}\n\nChange model or just send a message:`,
+        { reply_markup: keyboard },
+      );
     });
 
-    // /models command
+    // /models command — show model selection as inline buttons
     this.bot.command('models', async (ctx) => {
-      const keyboard = new InlineKeyboard();
-      for (const model of DEFAULT_ALLOWED_MODELS) {
-        keyboard.text(model, `model:${model}`).row();
-      }
+      const user = await this.ensureUser(ctx);
+      if (!user) return;
+
+      const telegramId = BigInt(ctx.from!.id);
+      const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
+      const keyboard = this.buildModelKeyboard(currentModel);
       await ctx.reply('Choose a model:', { reply_markup: keyboard });
     });
 
@@ -106,10 +123,19 @@ export class TelegramService implements OnModuleInit {
       const user = await this.ensureUser(ctx);
       if (!user) return;
 
+      const telegramId = BigInt(ctx.from!.id);
+      this.userModels.set(telegramId, model);
+
+      // Create new session with selected model
       const session = await this.chatService.createSession(user.id, model);
-      this.userSessions.set(BigInt(ctx.from!.id), session.id);
-      await ctx.answerCallbackQuery({ text: `Model set to ${model}` });
-      await ctx.editMessageText(`Model: ${model}\nNew chat started. Send me a message!`);
+      this.userSessions.set(telegramId, session.id);
+
+      const keyboard = this.buildModelKeyboard(model);
+      await ctx.answerCallbackQuery({ text: `Model: ${model}` });
+      await ctx.editMessageText(
+        `Model: ${model}\nNew chat started. Send me a message!`,
+        { reply_markup: keyboard },
+      );
     });
 
     // Login confirmation callback
@@ -161,6 +187,15 @@ export class TelegramService implements OnModuleInit {
     this.bot.on('message:audio', async (ctx) => {
       await this.handleVoiceMessage(ctx);
     });
+  }
+
+  private buildModelKeyboard(currentModel: string): InlineKeyboard {
+    const keyboard = new InlineKeyboard();
+    for (const model of DEFAULT_ALLOWED_MODELS) {
+      const label = model === currentModel ? `✓ ${model}` : model;
+      keyboard.text(label, `model:${model}`).row();
+    }
+    return keyboard;
   }
 
   private async handleLoginConfirmation(ctx: Context, payload: string) {
