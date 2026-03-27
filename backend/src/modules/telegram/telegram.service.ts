@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Bot, Context, InlineKeyboard, InputFile } from 'grammy';
+import { Bot, Context, InlineKeyboard, Keyboard } from 'grammy';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatService } from '../chat/chat.service';
 import { UserService } from '../user/user.service';
@@ -53,6 +53,19 @@ export class TelegramService implements OnModuleInit {
     }
   }
 
+  private buildMainKeyboard(currentModel: string): Keyboard {
+    const keyboard = new Keyboard()
+      .text('New Chat').row();
+    // Model buttons in a row
+    for (const model of DEFAULT_ALLOWED_MODELS) {
+      const label = model === currentModel ? `✓ ${model}` : model;
+      keyboard.text(label);
+    }
+    keyboard.row();
+    keyboard.resized().persistent();
+    return keyboard;
+  }
+
   private setupHandlers() {
     // /start command
     this.bot.command('start', async (ctx) => {
@@ -71,17 +84,16 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
+      const telegramId = BigInt(from.id);
+      const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
+
       await ctx.reply(
-        `Welcome! I'm your AI assistant.\n\n` +
-        `Commands:\n` +
-        `/new — Start a new chat\n` +
-        `/models — Choose a model\n` +
-        `/balance — Check your balance\n\n` +
-        `Just send me a text or voice message to chat!`,
+        `Welcome! I'm your AI assistant.\n\nJust send me a text or voice message to chat!`,
+        { reply_markup: this.buildMainKeyboard(currentModel) },
       );
     });
 
-    // /new command — start new chat, then offer model selection
+    // /new command
     this.bot.command('new', async (ctx) => {
       const user = await this.ensureUser(ctx);
       if (!user) return;
@@ -91,22 +103,19 @@ export class TelegramService implements OnModuleInit {
       const session = await this.chatService.createSession(user.id, currentModel);
       this.userSessions.set(telegramId, session.id);
 
-      const keyboard = this.buildModelKeyboard(currentModel);
       await ctx.reply(
-        `New chat started.\nModel: ${currentModel}\n\nChange model or just send a message:`,
-        { reply_markup: keyboard },
+        `New chat started. Model: ${currentModel}`,
+        { reply_markup: this.buildMainKeyboard(currentModel) },
       );
     });
 
-    // /models command — show model selection as inline buttons
+    // /models command
     this.bot.command('models', async (ctx) => {
-      const user = await this.ensureUser(ctx);
-      if (!user) return;
-
       const telegramId = BigInt(ctx.from!.id);
       const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
-      const keyboard = this.buildModelKeyboard(currentModel);
-      await ctx.reply('Choose a model:', { reply_markup: keyboard });
+      await ctx.reply('Tap a model button below to switch:', {
+        reply_markup: this.buildMainKeyboard(currentModel),
+      });
     });
 
     // /balance command
@@ -115,27 +124,6 @@ export class TelegramService implements OnModuleInit {
       if (!user) return;
       const balance = await this.wallet.getBalance(user.id);
       await ctx.reply(`Your balance: $${balance.toFixed(6)}`);
-    });
-
-    // Model selection callback
-    this.bot.callbackQuery(/^model:(.+)$/, async (ctx) => {
-      const model = ctx.match![1];
-      const user = await this.ensureUser(ctx);
-      if (!user) return;
-
-      const telegramId = BigInt(ctx.from!.id);
-      this.userModels.set(telegramId, model);
-
-      // Create new session with selected model
-      const session = await this.chatService.createSession(user.id, model);
-      this.userSessions.set(telegramId, session.id);
-
-      const keyboard = this.buildModelKeyboard(model);
-      await ctx.answerCallbackQuery({ text: `Model: ${model}` });
-      await ctx.editMessageText(
-        `Model: ${model}\nNew chat started. Send me a message!`,
-        { reply_markup: keyboard },
-      );
     });
 
     // Login confirmation callback
@@ -160,12 +148,39 @@ export class TelegramService implements OnModuleInit {
       }
     });
 
-    // Admin commands (hidden)
+    // Handle all text messages (keyboard buttons + admin + chat)
     this.bot.on('message:text', async (ctx) => {
       const text = ctx.message!.text;
       const telegramId = BigInt(ctx.from!.id);
 
-      // Try admin commands first
+      // Handle "New Chat" keyboard button
+      if (text === 'New Chat') {
+        const user = await this.ensureUser(ctx);
+        if (!user) return;
+        const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
+        const session = await this.chatService.createSession(user.id, currentModel);
+        this.userSessions.set(telegramId, session.id);
+        await ctx.reply(`New chat started. Model: ${currentModel}`, {
+          reply_markup: this.buildMainKeyboard(currentModel),
+        });
+        return;
+      }
+
+      // Handle model selection keyboard buttons
+      const cleanText = text.replace('✓ ', '');
+      if (DEFAULT_ALLOWED_MODELS.includes(cleanText)) {
+        const user = await this.ensureUser(ctx);
+        if (!user) return;
+        this.userModels.set(telegramId, cleanText);
+        const session = await this.chatService.createSession(user.id, cleanText);
+        this.userSessions.set(telegramId, session.id);
+        await ctx.reply(`Model: ${cleanText}\nNew chat started. Send me a message!`, {
+          reply_markup: this.buildMainKeyboard(cleanText),
+        });
+        return;
+      }
+
+      // Try admin commands
       if (this.admin.isAdmin(telegramId)) {
         const adminResult = await this.handleAdminCommand(telegramId, text);
         if (adminResult) {
@@ -187,15 +202,6 @@ export class TelegramService implements OnModuleInit {
     this.bot.on('message:audio', async (ctx) => {
       await this.handleVoiceMessage(ctx);
     });
-  }
-
-  private buildModelKeyboard(currentModel: string): InlineKeyboard {
-    const keyboard = new InlineKeyboard();
-    for (const model of DEFAULT_ALLOWED_MODELS) {
-      const label = model === currentModel ? `✓ ${model}` : model;
-      keyboard.text(label, `model:${model}`).row();
-    }
-    return keyboard;
   }
 
   private async handleLoginConfirmation(ctx: Context, payload: string) {

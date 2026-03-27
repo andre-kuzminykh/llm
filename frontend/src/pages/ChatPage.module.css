@@ -70,32 +70,6 @@
   color: var(--text-secondary);
 }
 
-.sidebarFooter {
-  padding: 1rem;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.balanceBadge {
-  padding: 0.5rem;
-  background: rgba(108, 158, 255, 0.1);
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  text-align: center;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.logoutBtn {
-  padding: 0.4rem;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  text-decoration: underline;
-}
-
 /* Main */
 .main {
   flex: 1;
@@ -112,6 +86,11 @@
   gap: 1rem;
 }
 
+.title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
 .modelSelect {
   padding: 0.4rem 0.75rem;
   background: var(--bg-tertiary);
@@ -120,12 +99,6 @@
   color: var(--text);
   font-size: 0.85rem;
   outline: none;
-}
-
-.costBadge {
-  font-size: 0.8rem;
-  color: var(--cost);
-  margin-left: auto;
 }
 
 /* Messages */

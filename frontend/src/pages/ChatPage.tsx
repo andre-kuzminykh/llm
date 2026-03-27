@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import {
   getModels,
   createChat,
@@ -20,7 +19,6 @@ interface MessageItem {
 }
 
 export function ChatPage() {
-  const { balance, setBalance, logout } = useAuth();
   const [models, setModels] = useState<Array<{ id: string }>>([]);
   const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
   const [chatId, setChatId] = useState<string | null>(null);
@@ -29,10 +27,8 @@ export function ChatPage() {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
-  const [lastCost, setLastCost] = useState<number | null>(null);
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     getModels().then(setModels).catch(() => {});
@@ -48,7 +44,6 @@ export function ChatPage() {
     const msgs = await getMessages(id);
     setMessages(msgs);
     setStreamText('');
-    setLastCost(null);
   }, []);
 
   async function handleNewChat() {
@@ -57,7 +52,6 @@ export function ChatPage() {
       setChatId(result.chatId);
       setMessages([]);
       setStreamText('');
-      setLastCost(null);
       setSessions(prev => [{ id: result.chatId, model: result.model, updatedAt: new Date().toISOString() }, ...prev]);
     } catch (err: any) {
       setError(err.message);
@@ -92,24 +86,8 @@ export function ChatPage() {
       userMessage.content,
       (text) => setStreamText(prev => prev + text),
       (data) => {
-        setMessages(prev => [
-          ...prev,
-          { id: data.assistantMessageId, role: 'assistant', content: '' },
-        ]);
-        // Replace the temp streaming text with the final message
-        setMessages(prev => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last.id === data.assistantMessageId) {
-            // Content was streamed, get it from streamText
-          }
-          return updated;
-        });
-        setLastCost(data.costUsd);
-        setBalance(data.balanceUsd);
         setStreaming(false);
         setStreamText('');
-        // Reload messages to get full state
         getMessages(currentChatId!).then(setMessages);
       },
       (errMsg) => {
@@ -132,9 +110,7 @@ export function ChatPage() {
     setError('');
 
     try {
-      const result = await sendVoice(currentChatId, audioBlob);
-      setLastCost(result.totalCostUsd);
-      setBalance(result.balanceUsd);
+      await sendVoice(currentChatId, audioBlob);
       await loadChat(currentChatId);
     } catch (err: any) {
       setError(err.message);
@@ -173,20 +149,13 @@ export function ChatPage() {
             </button>
           ))}
         </div>
-        <div className={styles.sidebarFooter}>
-          <div className={styles.balanceBadge}>
-            Balance: ${balance.toFixed(4)}
-          </div>
-          <button className={styles.logoutBtn} onClick={logout}>
-            Logout
-          </button>
-        </div>
       </aside>
 
       {/* Main chat area */}
       <main className={styles.main}>
         {/* Header */}
         <header className={styles.header}>
+          <span className={styles.title}>LLM Chat</span>
           <select
             value={selectedModel}
             onChange={e => setSelectedModel(e.target.value)}
@@ -196,11 +165,6 @@ export function ChatPage() {
               <option key={m.id} value={m.id}>{m.id}</option>
             ))}
           </select>
-          {lastCost !== null && (
-            <span className={styles.costBadge}>
-              Last: ${lastCost.toFixed(6)}
-            </span>
-          )}
         </header>
 
         {/* Messages */}
@@ -235,11 +199,10 @@ export function ChatPage() {
         <div className={styles.inputArea}>
           <VoiceRecorder onRecorded={handleVoice} disabled={streaming} />
           <textarea
-            ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+            placeholder="Type a message... (Enter to send)"
             className={styles.textInput}
             rows={1}
             disabled={streaming}

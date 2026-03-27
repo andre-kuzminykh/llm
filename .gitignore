@@ -9,3 +9,4 @@ coverage/
 .next/
 tmp/
 uploads/
+tsconfig.tsbuildinfo
