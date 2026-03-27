@@ -19,7 +19,7 @@ export class AuthService {
     this.jwtExpiresIn = this.configService.get('JWT_EXPIRES_IN', '7d');
   }
 
-  async requestLogin(telegramUsername: string): Promise<{ challengeId: string; code: string }> {
+  async requestLogin(telegramUsername: string): Promise<{ challengeId: string; code: string; telegramId: bigint }> {
     const user = await this.userService.findByTelegramUsername(telegramUsername);
     if (!user) {
       throw new BadRequestException('User not found. Please start the Telegram bot first.');
@@ -40,7 +40,7 @@ export class AuthService {
       },
     });
 
-    return { challengeId: challenge.id, code };
+    return { challengeId: challenge.id, code, telegramId: user.telegramId };
   }
 
   async confirmLogin(challengeId: string, code: string): Promise<{ token: string; user: any }> {

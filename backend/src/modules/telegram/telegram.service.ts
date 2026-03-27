@@ -282,6 +282,13 @@ export class TelegramService implements OnModuleInit {
     return session;
   }
 
+  private startTypingInterval(ctx: Context): NodeJS.Timeout {
+    ctx.replyWithChatAction('typing').catch(() => {});
+    return setInterval(() => {
+      ctx.replyWithChatAction('typing').catch(() => {});
+    }, 4000);
+  }
+
   private async handleTextMessage(ctx: Context) {
     const user = await this.ensureUser(ctx);
     if (!user) return;
@@ -290,23 +297,22 @@ export class TelegramService implements OnModuleInit {
     const session = await this.getOrCreateSession(user, telegramId);
     const text = ctx.message!.text!;
 
+    const typingInterval = this.startTypingInterval(ctx);
+
     try {
-      await ctx.replyWithChatAction('typing');
       const result = await this.chatService.sendMessage(user.id, session.id, text);
+      clearInterval(typingInterval);
 
-      const costInfo = `\n\n💰 $${result.costUsd.toFixed(6)} | Balance: $${result.balanceUsd.toFixed(6)}`;
-      const response = result.content + costInfo;
-
-      // Telegram has a 4096 char limit
-      if (response.length <= 4096) {
-        await ctx.reply(response);
+      if (result.content.length <= 4096) {
+        await ctx.reply(result.content);
       } else {
-        const chunks = this.splitMessage(response);
+        const chunks = this.splitMessage(result.content);
         for (const chunk of chunks) {
           await ctx.reply(chunk);
         }
       }
     } catch (error: any) {
+      clearInterval(typingInterval);
       this.logger.error('Chat error:', error.message);
       await ctx.reply(`Error: ${error.message}`);
     }
@@ -319,23 +325,17 @@ export class TelegramService implements OnModuleInit {
     const telegramId = BigInt(ctx.from!.id);
     const session = await this.getOrCreateSession(user, telegramId);
 
-    try {
-      await ctx.replyWithChatAction('typing');
+    const typingInterval = this.startTypingInterval(ctx);
 
+    try {
       // Download voice file
       const file = await ctx.getFile();
       const filePath = await this.downloadTelegramFile(file.file_path!);
 
       const result = await this.chatService.sendVoiceMessage(user.id, session.id, filePath);
+      clearInterval(typingInterval);
 
-      const response = [
-        `🎙 "${result.transcriptText}"`,
-        '',
-        result.content,
-        '',
-        `💰 Transcription: $${result.transcriptionCostUsd.toFixed(6)} | Chat: $${result.llmCostUsd.toFixed(6)} | Total: $${result.totalCostUsd.toFixed(6)}`,
-        `Balance: $${result.balanceUsd.toFixed(6)}`,
-      ].join('\n');
+      const response = `🎙 "${result.transcriptText}"\n\n${result.content}`;
 
       if (response.length <= 4096) {
         await ctx.reply(response);
@@ -346,6 +346,7 @@ export class TelegramService implements OnModuleInit {
         }
       }
     } catch (error: any) {
+      clearInterval(typingInterval);
       this.logger.error('Voice error:', error.message);
       await ctx.reply(`Error processing voice: ${error.message}`);
     }
