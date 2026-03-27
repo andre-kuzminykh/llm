@@ -62,7 +62,7 @@ export class AuthService {
     const token = jwt.sign(
       { userId: challenge.userId, telegramId: challenge.user.telegramId.toString() },
       this.jwtSecret,
-      { expiresIn: this.jwtExpiresIn },
+      { expiresIn: this.jwtExpiresIn } as jwt.SignOptions,
     );
 
     return {

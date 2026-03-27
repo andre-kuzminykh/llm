@@ -95,14 +95,17 @@ export class OpenAIService {
     const file = fs.createReadStream(filePath);
 
     const response = await this.client.audio.transcriptions.create({
-      model: transcriptionModel,
+      model: transcriptionModel as any,
       file,
+      response_format: 'verbose_json',
     });
 
+    const result = response as any;
+
     return {
-      text: typeof response === 'string' ? response : response.text,
-      durationSeconds: (response as any).duration ?? 0,
-      model: transcriptionModel,
+      text: result.text ?? '',
+      durationSeconds: result.duration ?? 0,
+      model: transcriptionModel!,
     };
   }
 }
