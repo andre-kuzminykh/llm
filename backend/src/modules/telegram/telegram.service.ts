@@ -12,12 +12,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
 
+// Minimum interval between message edits (Telegram rate limit)
+const EDIT_INTERVAL_MS = 1500;
+
 @Injectable()
 export class TelegramService implements OnModuleInit {
   private readonly logger = new Logger(TelegramService.name);
   readonly bot: Bot;
-  private userSessions: Map<bigint, string> = new Map(); // telegramId -> chatSessionId
-  private userModels: Map<bigint, string> = new Map(); // telegramId -> selected model
+  private userSessions: Map<bigint, string> = new Map();
+  private userModels: Map<bigint, string> = new Map();
 
   constructor(
     private configService: ConfigService,
@@ -34,7 +37,6 @@ export class TelegramService implements OnModuleInit {
   async onModuleInit() {
     this.setupHandlers();
 
-    // Set bot menu commands (visible in hamburger menu)
     await this.bot.api.setMyCommands([
       { command: 'new', description: 'Start a new chat' },
       { command: 'models', description: 'Choose a model' },
@@ -47,78 +49,75 @@ export class TelegramService implements OnModuleInit {
       await this.bot.api.setWebhook(webhookUrl, { secret_token: secret });
       this.logger.log(`Webhook set to ${webhookUrl}`);
     } else {
-      // Polling mode for development
       this.bot.start();
       this.logger.log('Bot started in polling mode');
     }
   }
 
-  private buildMainKeyboard(currentModel: string): Keyboard {
-    const keyboard = new Keyboard()
-      .text('New Chat').row();
-    // Model buttons in a row
+  // Main keyboard: just two buttons
+  private buildMainKeyboard(): Keyboard {
+    return new Keyboard()
+      .text('New Chat').text('Choose Model')
+      .row()
+      .resized()
+      .persistent();
+  }
+
+  // Model selection keyboard: models in a column + back button
+  private buildModelKeyboard(currentModel: string): Keyboard {
+    const keyboard = new Keyboard();
     for (const model of DEFAULT_ALLOWED_MODELS) {
       const label = model === currentModel ? `✓ ${model}` : model;
-      keyboard.text(label);
+      keyboard.text(label).row();
     }
-    keyboard.row();
+    keyboard.text('« Back').row();
     keyboard.resized().persistent();
     return keyboard;
   }
 
   private setupHandlers() {
-    // /start command
+    // /start
     this.bot.command('start', async (ctx) => {
       const from = ctx.from!;
       await this.userService.findOrCreateByTelegram(
-        BigInt(from.id),
-        from.username,
-        from.first_name,
-        from.last_name ?? undefined,
+        BigInt(from.id), from.username, from.first_name, from.last_name ?? undefined,
       );
 
-      // Check if this is a login confirmation deep link
       const payload = ctx.match;
       if (payload?.startsWith('login_')) {
         await this.handleLoginConfirmation(ctx, payload);
         return;
       }
 
-      const telegramId = BigInt(from.id);
-      const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
-
       await ctx.reply(
         `Welcome! I'm your AI assistant.\n\nJust send me a text or voice message to chat!`,
-        { reply_markup: this.buildMainKeyboard(currentModel) },
+        { reply_markup: this.buildMainKeyboard() },
       );
     });
 
-    // /new command
+    // /new
     this.bot.command('new', async (ctx) => {
       const user = await this.ensureUser(ctx);
       if (!user) return;
-
       const telegramId = BigInt(ctx.from!.id);
       const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
       const session = await this.chatService.createSession(user.id, currentModel);
       this.userSessions.set(telegramId, session.id);
-
-      await ctx.reply(
-        `New chat started. Model: ${currentModel}`,
-        { reply_markup: this.buildMainKeyboard(currentModel) },
-      );
-    });
-
-    // /models command
-    this.bot.command('models', async (ctx) => {
-      const telegramId = BigInt(ctx.from!.id);
-      const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
-      await ctx.reply('Tap a model button below to switch:', {
-        reply_markup: this.buildMainKeyboard(currentModel),
+      await ctx.reply(`New chat started. Model: ${currentModel}`, {
+        reply_markup: this.buildMainKeyboard(),
       });
     });
 
-    // /balance command
+    // /models
+    this.bot.command('models', async (ctx) => {
+      const telegramId = BigInt(ctx.from!.id);
+      const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
+      await ctx.reply('Choose a model:', {
+        reply_markup: this.buildModelKeyboard(currentModel),
+      });
+    });
+
+    // /balance
     this.bot.command('balance', async (ctx) => {
       const user = await this.ensureUser(ctx);
       if (!user) return;
@@ -126,7 +125,7 @@ export class TelegramService implements OnModuleInit {
       await ctx.reply(`Your balance: $${balance.toFixed(6)}`);
     });
 
-    // Login confirmation callback
+    // Login confirmation callback (inline button)
     this.bot.callbackQuery(/^confirm_login:(.+)$/, async (ctx) => {
       const challengeId = ctx.match![1];
       try {
@@ -142,18 +141,18 @@ export class TelegramService implements OnModuleInit {
           data: { confirmed: true, usedAt: new Date() },
         });
         await ctx.answerCallbackQuery({ text: 'Login confirmed!' });
-        await ctx.editMessageText('✓ Web login confirmed. You can now use the web app.');
+        await ctx.editMessageText('Web login confirmed.');
       } catch {
         await ctx.answerCallbackQuery({ text: 'Error confirming login' });
       }
     });
 
-    // Handle all text messages (keyboard buttons + admin + chat)
+    // All text messages
     this.bot.on('message:text', async (ctx) => {
       const text = ctx.message!.text;
       const telegramId = BigInt(ctx.from!.id);
 
-      // Handle "New Chat" keyboard button
+      // "New Chat" button
       if (text === 'New Chat') {
         const user = await this.ensureUser(ctx);
         if (!user) return;
@@ -161,12 +160,27 @@ export class TelegramService implements OnModuleInit {
         const session = await this.chatService.createSession(user.id, currentModel);
         this.userSessions.set(telegramId, session.id);
         await ctx.reply(`New chat started. Model: ${currentModel}`, {
-          reply_markup: this.buildMainKeyboard(currentModel),
+          reply_markup: this.buildMainKeyboard(),
         });
         return;
       }
 
-      // Handle model selection keyboard buttons
+      // "Choose Model" button
+      if (text === 'Choose Model') {
+        const currentModel = this.userModels.get(telegramId) || 'gpt-4o-mini';
+        await ctx.reply('Choose a model:', {
+          reply_markup: this.buildModelKeyboard(currentModel),
+        });
+        return;
+      }
+
+      // "Back" button — return to main keyboard
+      if (text === '« Back') {
+        await ctx.reply('OK', { reply_markup: this.buildMainKeyboard() });
+        return;
+      }
+
+      // Model selection (from model keyboard)
       const cleanText = text.replace('✓ ', '');
       if (DEFAULT_ALLOWED_MODELS.includes(cleanText)) {
         const user = await this.ensureUser(ctx);
@@ -174,13 +188,13 @@ export class TelegramService implements OnModuleInit {
         this.userModels.set(telegramId, cleanText);
         const session = await this.chatService.createSession(user.id, cleanText);
         this.userSessions.set(telegramId, session.id);
-        await ctx.reply(`Model: ${cleanText}\nNew chat started. Send me a message!`, {
-          reply_markup: this.buildMainKeyboard(cleanText),
+        await ctx.reply(`Model: ${cleanText}\nNew chat started.`, {
+          reply_markup: this.buildMainKeyboard(),
         });
         return;
       }
 
-      // Try admin commands
+      // Admin commands
       if (this.admin.isAdmin(telegramId)) {
         const adminResult = await this.handleAdminCommand(telegramId, text);
         if (adminResult) {
@@ -189,8 +203,8 @@ export class TelegramService implements OnModuleInit {
         }
       }
 
-      // Regular text message → chat
-      await this.handleTextMessage(ctx);
+      // Regular chat message — stream response
+      await this.handleTextMessageStreaming(ctx);
     });
 
     // Voice messages
@@ -198,18 +212,112 @@ export class TelegramService implements OnModuleInit {
       await this.handleVoiceMessage(ctx);
     });
 
-    // Audio files
     this.bot.on('message:audio', async (ctx) => {
       await this.handleVoiceMessage(ctx);
     });
   }
 
+  private async handleTextMessageStreaming(ctx: Context) {
+    const user = await this.ensureUser(ctx);
+    if (!user) return;
+
+    const telegramId = BigInt(ctx.from!.id);
+    const session = await this.getOrCreateSession(user, telegramId);
+    const text = ctx.message!.text!;
+
+    try {
+      // Send initial placeholder message
+      const sentMsg = await ctx.reply('...');
+      const chatId = sentMsg.chat.id;
+      const messageId = sentMsg.message_id;
+
+      let fullText = '';
+      let lastEditTime = 0;
+      let pendingEdit = false;
+
+      const doEdit = async (content: string) => {
+        try {
+          await this.bot.api.editMessageText(chatId, messageId, content);
+        } catch (e: any) {
+          // Ignore "message is not modified" errors
+          if (!e.message?.includes('not modified')) {
+            this.logger.error('Edit error:', e.message);
+          }
+        }
+      };
+
+      for await (const event of this.chatService.sendMessageStream(user.id, session.id, text)) {
+        if (event.type === 'delta' && event.data.text) {
+          fullText += event.data.text;
+
+          const now = Date.now();
+          if (now - lastEditTime >= EDIT_INTERVAL_MS) {
+            lastEditTime = now;
+            pendingEdit = false;
+            await doEdit(fullText + ' ▍');
+          } else {
+            pendingEdit = true;
+          }
+        }
+
+        if (event.type === 'done') {
+          // Final edit with complete text
+          if (fullText) {
+            await doEdit(fullText);
+          }
+        }
+      }
+
+      // If there's a pending edit that didn't fire
+      if (pendingEdit && fullText) {
+        await doEdit(fullText);
+      }
+    } catch (error: any) {
+      this.logger.error('Chat error:', error.message);
+      await ctx.reply(`Error: ${error.message}`);
+    }
+  }
+
+  private async handleVoiceMessage(ctx: Context) {
+    const user = await this.ensureUser(ctx);
+    if (!user) return;
+
+    const telegramId = BigInt(ctx.from!.id);
+    const session = await this.getOrCreateSession(user, telegramId);
+
+    const sentMsg = await ctx.reply('Transcribing...');
+    const chatId = sentMsg.chat.id;
+    const messageId = sentMsg.message_id;
+
+    try {
+      const file = await ctx.getFile();
+      const filePath = await this.downloadTelegramFile(file.file_path!);
+      const result = await this.chatService.sendVoiceMessage(user.id, session.id, filePath);
+
+      const response = `🎙 "${result.transcriptText}"\n\n${result.content}`;
+
+      try {
+        await this.bot.api.editMessageText(chatId, messageId, response);
+      } catch {
+        // If edit fails, send new message
+        await ctx.reply(response);
+      }
+    } catch (error: any) {
+      this.logger.error('Voice error:', error.message);
+      try {
+        await this.bot.api.editMessageText(chatId, messageId, `Error: ${error.message}`);
+      } catch {
+        await ctx.reply(`Error: ${error.message}`);
+      }
+    }
+  }
+
   private async handleLoginConfirmation(ctx: Context, payload: string) {
     const challengeId = payload.replace('login_', '');
     const keyboard = new InlineKeyboard()
-      .text('✓ Confirm login', `confirm_login:${challengeId}`);
+      .text('Confirm login', `confirm_login:${challengeId}`);
     await ctx.reply(
-      'Someone is trying to log into the web app with your account.\n\nIf this was you, tap the button below to confirm:',
+      'Someone is trying to log into the web app.\n\nIf this was you, tap confirm:',
       { reply_markup: keyboard },
     );
   }
@@ -260,17 +368,12 @@ export class TelegramService implements OnModuleInit {
   private async ensureUser(ctx: Context) {
     const from = ctx.from!;
     const user = await this.userService.findOrCreateByTelegram(
-      BigInt(from.id),
-      from.username,
-      from.first_name,
-      from.last_name ?? undefined,
+      BigInt(from.id), from.username, from.first_name, from.last_name ?? undefined,
     );
-
     if (user.isBlocked) {
-      await ctx.reply('Your account is blocked. Contact support.');
+      await ctx.reply('Your account is blocked.');
       return null;
     }
-
     return user;
   }
 
@@ -282,80 +385,10 @@ export class TelegramService implements OnModuleInit {
         if (session.isActive) return session;
       } catch {}
     }
-
-    const session = await this.chatService.createSession(user.id);
+    const model = this.userModels.get(telegramId) || 'gpt-4o-mini';
+    const session = await this.chatService.createSession(user.id, model);
     this.userSessions.set(telegramId, session.id);
     return session;
-  }
-
-  private startTypingInterval(ctx: Context): NodeJS.Timeout {
-    ctx.replyWithChatAction('typing').catch(() => {});
-    return setInterval(() => {
-      ctx.replyWithChatAction('typing').catch(() => {});
-    }, 4000);
-  }
-
-  private async handleTextMessage(ctx: Context) {
-    const user = await this.ensureUser(ctx);
-    if (!user) return;
-
-    const telegramId = BigInt(ctx.from!.id);
-    const session = await this.getOrCreateSession(user, telegramId);
-    const text = ctx.message!.text!;
-
-    const typingInterval = this.startTypingInterval(ctx);
-
-    try {
-      const result = await this.chatService.sendMessage(user.id, session.id, text);
-      clearInterval(typingInterval);
-
-      if (result.content.length <= 4096) {
-        await ctx.reply(result.content);
-      } else {
-        const chunks = this.splitMessage(result.content);
-        for (const chunk of chunks) {
-          await ctx.reply(chunk);
-        }
-      }
-    } catch (error: any) {
-      clearInterval(typingInterval);
-      this.logger.error('Chat error:', error.message);
-      await ctx.reply(`Error: ${error.message}`);
-    }
-  }
-
-  private async handleVoiceMessage(ctx: Context) {
-    const user = await this.ensureUser(ctx);
-    if (!user) return;
-
-    const telegramId = BigInt(ctx.from!.id);
-    const session = await this.getOrCreateSession(user, telegramId);
-
-    const typingInterval = this.startTypingInterval(ctx);
-
-    try {
-      // Download voice file
-      const file = await ctx.getFile();
-      const filePath = await this.downloadTelegramFile(file.file_path!);
-
-      const result = await this.chatService.sendVoiceMessage(user.id, session.id, filePath);
-      clearInterval(typingInterval);
-
-      const response = `🎙 "${result.transcriptText}"\n\n${result.content}`;
-
-      if (response.length <= 4096) {
-        await ctx.reply(response);
-      } else {
-        const chunks = this.splitMessage(response);
-        for (const chunk of chunks) {
-          await ctx.reply(chunk);
-        }
-      }
-    } catch (error: any) {
-      clearInterval(typingInterval);
-      this.logger.error('Voice error:', error.message);
-      await ctx.reply(`Error processing voice: ${error.message}`);
-    }
   }
 
   private async downloadTelegramFile(filePath: string): Promise<string> {
@@ -385,30 +418,13 @@ export class TelegramService implements OnModuleInit {
     });
   }
 
-  private splitMessage(text: string, maxLength = 4096): string[] {
-    const chunks: string[] = [];
-    let remaining = text;
-    while (remaining.length > 0) {
-      if (remaining.length <= maxLength) {
-        chunks.push(remaining);
-        break;
-      }
-      let splitIndex = remaining.lastIndexOf('\n', maxLength);
-      if (splitIndex === -1) splitIndex = maxLength;
-      chunks.push(remaining.slice(0, splitIndex));
-      remaining = remaining.slice(splitIndex).trimStart();
-    }
-    return chunks;
-  }
-
-  // Called by AuthService to send login confirmation to user
   async sendLoginChallenge(telegramId: bigint, challengeId: string, code: string) {
     const keyboard = new InlineKeyboard()
-      .text('✓ Confirm login', `confirm_login:${challengeId}`);
+      .text('Confirm login', `confirm_login:${challengeId}`);
 
     await this.bot.api.sendMessage(
       telegramId.toString(),
-      `Web login request.\n\nYour code: ${code}\n\nIf this was you, tap confirm:`,
+      `Web login code: ${code}\n\nIf this was you, tap confirm:`,
       { reply_markup: keyboard },
     );
   }
