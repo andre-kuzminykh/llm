@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  telegramId      BigInt    @unique
+  telegramUsername String?
+  firstName       String?
+  lastName        String?
+  balanceUsd      Decimal   @default(0) @db.Decimal(12, 6)
+  isBlocked       Boolean   @default(false)
+  isAdmin         Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  chatSessions    ChatSession[]
+  ledgerEntries   WalletLedgerEntry[]
+  usageRecords    UsageRecord[]
+  authChallenges  AuthChallenge[]
+
+  @@index([telegramUsername])
+}
+
+model AuthChallenge {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  confirmed Boolean  @default(false)
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([code])
+  @@index([userId])
+}
+
+model ChatSession {
+  id        String   @id @default(uuid())
+  userId    String
+  model     String   @default("gpt-4o-mini")
+  title     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id])
+  messages Message[]
+
+  @@index([userId])
+}
+
+model Message {
+  id            String   @id @default(uuid())
+  chatSessionId String
+  role          String   // "user" | "assistant" | "system"
+  content       String
+  createdAt     DateTime @default(now())
+
+  chatSession    ChatSession      @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  audioTranscript AudioTranscript?
+  usageRecord    UsageRecord?
+
+  @@index([chatSessionId])
+}
+
+model AudioTranscript {
+  id                  String   @id @default(uuid())
+  messageId           String   @unique
+  originalFileName    String?
+  durationSeconds     Float?
+  transcriptText      String
+  transcriptionModel  String
+  createdAt           DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model UsageRecord {
+  id              String   @id @default(uuid())
+  userId          String
+  messageId       String?  @unique
+  model           String
+  operationType   String   // "chat" | "transcription"
+  inputTokens     Int?
+  outputTokens    Int?
+  audioDurationSec Float?
+  costUsd         Decimal  @db.Decimal(12, 8)
+  priceSnapshotId String?
+  createdAt       DateTime @default(now())
+
+  user          User           @relation(fields: [userId], references: [id])
+  message       Message?       @relation(fields: [messageId], references: [id])
+  priceSnapshot PriceSnapshot? @relation(fields: [priceSnapshotId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PriceSnapshot {
+  id                  String   @id @default(uuid())
+  model               String
+  operationType       String   // "chat" | "transcription"
+  inputPricePerToken  Decimal? @db.Decimal(18, 12)
+  outputPricePerToken Decimal? @db.Decimal(18, 12)
+  pricePerMinute      Decimal? @db.Decimal(12, 6)
+  effectiveFrom       DateTime @default(now())
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  usageRecords UsageRecord[]
+
+  @@unique([model, operationType, isActive])
+  @@index([model, operationType, isActive])
+}
+
+model WalletLedgerEntry {
+  id          String   @id @default(uuid())
+  userId      String
+  amountUsd   Decimal  @db.Decimal(12, 6)
+  type        String   // "credit" | "debit" | "admin_credit" | "admin_debit"
+  description String?
+  balanceAfter Decimal @db.Decimal(12, 6)
+  referenceId String?  // links to UsageRecord or admin action
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id            String   @id @default(uuid())
+  adminTelegramId BigInt
+  action        String
+  targetUserId  String?
+  details       String?
+  createdAt     DateTime @default(now())
+
+  @@index([adminTelegramId])
+  @@index([createdAt])
+}
