@@ -331,8 +331,9 @@ select.nr-field {
   text-align: left; cursor: inherit; color: inherit; font-size: var(--nr-fs-sm); line-height: 1.32; border-radius: inherit;
 }
 .cp-card__rub { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; font-size: 10.5px; color: var(--nr-text-3); white-space: nowrap; }
-.cp-card__fmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: var(--nr-fw-medium); }
-.cp-card__time { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: var(--nr-fw-semibold); color: var(--nr-text-2); }
+/* когда места мало, первым сжимается формат, рубрика — последней */
+.cp-card__fmt { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: var(--nr-fw-medium); }
+.cp-card__time { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; font-weight: var(--nr-fw-semibold); color: var(--nr-text-2); }
 .cp-card__title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-weight: var(--nr-fw-medium); }
 .cp-card__icons { display: flex; flex-wrap: wrap; gap: 3px; color: var(--nr-text-3); }
 .cp-card--mini .cp-card__title { -webkit-line-clamp: 2; }
@@ -346,7 +347,7 @@ select.nr-field {
 
 /* рубрика — метка */
 .cp-rub {
-  flex: none; display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 4px;
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; height: 16px; line-height: 16px; padding: 0 6px; border-radius: 4px;
   font-size: 9.5px; font-weight: var(--nr-fw-bold); letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--nr-text-2); background: var(--nr-fill-2); box-shadow: inset 0 0 0 1px var(--nr-sep);
 }
@@ -428,6 +429,9 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-tg__col .cp-card { overflow: hidden; }
 .cp-tg__col .cp-card__open { gap: 1px; padding-top: 3px; padding-bottom: 3px; }
 .cp-tg__col .cp-card__title { -webkit-line-clamp: 1; }
+.cp-tg__col .cp-rub { letter-spacing: 0.02em; padding: 0 4px; }
+.cp-tg__col .cp-card__open { padding-right: 20px; }
+.cp-tg__col .cp-card__fmt { display: none; } /* на шкале места мало: рубрика, время и тема; формат — в подсказке */
 .cp-week__daybtn { gap: 6px; padding: 0 6px; }
 .cp-week__date { font-weight: var(--nr-fw-semibold); font-size: var(--nr-fs-md); }
 .cp-week__date--today { color: #fff; background: var(--nr-accent); border-radius: 10px; padding: 1px 7px; }

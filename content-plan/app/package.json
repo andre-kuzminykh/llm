@@ -10,7 +10,8 @@
     "preview": "vite preview --port 5174",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "node e2e/smoke.mjs"
+    "test:e2e": "node e2e/smoke.mjs",
+    "demo": "node e2e/demo.mjs"
   },
   "dependencies": {
     "@fontsource-variable/montserrat": "5.3.0",
