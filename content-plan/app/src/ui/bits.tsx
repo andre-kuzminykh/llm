@@ -1,6 +1,6 @@
 // Мелкие общие части: карточка материала, площадки, статусы, переключатели, перетаскивание.
-import { useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
-import { isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Status } from '../model/types'
+import { useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
+import { isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { Icon } from './Icon'
@@ -67,7 +67,7 @@ export function PlatformIcon({ platform, size = 14 }: { platform: string; size?:
   )
 }
 
-/** Рубрика — меткой: «ДЕМО». Формат и время — рядом мелко. */
+/** Рубрика — словом: «Демо». Формат и время — рядом мелко. */
 export function RubricChip({ name }: { name: string }) {
   return (
     <span className="cp-rub" aria-label={`Рубрика: ${name}`}>
@@ -130,11 +130,16 @@ export function TaskButton({ unit }: { unit: Unit }) {
   )
 }
 
-export type CardVariant = 'mini' | 'compact' | 'full'
+export type CardVariant = 'mini' | 'compact' | 'line' | 'full'
 
-/** Карточка материала: рубрика меткой, тема, площадки (в полном виде — что выходит на каждой).
- *  Полоска слева — цвет канала. Тянется на другой день, по нажатию открывает форму. */
-export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false }: { unit: Unit; variant?: CardVariant; style?: CSSProperties; showTime?: boolean; narrow?: boolean }) {
+/** Главный канал плана — у кого больше всего форматов (Dataist): его имя в строках не повторяется. */
+export const mainChannelId = (plan: Plan) =>
+  [...plan.channels].sort((x, y) => plan.rules.filter((r) => r.channelId === y.id).length - plan.rules.filter((r) => r.channelId === x.id).length)[0]?.id
+
+/** Карточка материала — тихая строка: полоска слева — цвет канала, рубрика словом, тема.
+ *  mini — месяц (рубрика и тема), compact — шкала времени и лента, line — дорожки недели (время и тема),
+ *  full — панель дня: под темой площадки и что на каждой выходит. ▶ в углу — задача. */
+export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, kind, children }: { unit: Unit; variant?: CardVariant; style?: CSSProperties; showTime?: boolean; narrow?: boolean; kind?: string; children?: ReactNode }) {
   const { plan, channels, rubrics, rules, badIds, openItem } = usePlan()
   const [dragging, setDragging] = useState(false)
   const { head } = unit
@@ -148,11 +153,13 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const plats = platformTypes(unit, rules, plan.platforms)
   const bad = unit.items.some((it) => badIds.has(it.id))
   const full = !!rule?.full && !head.derive
-  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', bad && 'cp-card--bad', full && 'cp-card--full', dragging && 'cp-card--dragging']
+  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--full', dragging && 'cp-card--dragging']
     .filter(Boolean)
     .join(' ')
   const st = statusOf(head.status)
-  const platLabel = plats.map((p) => `${p.platform}: ${p.parts.map((x) => x.type).join(', ')}`).join('; ')
+  const label = `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
+  const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
+  const line = variant === 'line'
   return (
     <div
       className={cls}
@@ -173,39 +180,96 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
           e.stopPropagation()
           openItem(head.id)
         }}
-        aria-label={`${rubric?.name ?? ''}${format ? ` · ${format}` : ''}: ${title}${showTime ? `, ${unit.time}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}`}
-        title={variant === 'full' ? undefined : `${rubric?.name ?? ''}${format ? ` · ${format}` : ''} · ${unit.time}\n${title}\n${platLabel}`}
+        aria-label={`${label}: ${title}${showTime ? `, ${unit.time}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}`}
+        title={variant === 'full' ? undefined : `${label} · ${unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
       >
-        <span className="cp-card__rub">
-          {rubric && <RubricChip name={rubric.name} />}
-          {format && <span className="cp-card__fmt">{format}</span>}
-          {showTime && <span className="cp-card__time">{unit.time}</span>}
-        </span>
-        <span className="cp-card__title">{title}</span>
-        {variant === 'full' ? (
-          <span className="cp-plats" aria-label={`Площадки: ${platLabel}`}>
-            {plats.map(({ platform, parts }) => (
-              <span key={platform} className="cp-plats__p">
-                <span className="cp-plats__head">
-                  <PlatformIcon platform={platform} />
-                  {platform}
-                </span>
-                {parts.map((x) => (
-                  <span key={x.type} className="cp-plats__t">{x.type}</span>
-                ))}
-              </span>
-            ))}
-          </span>
+        {line ? (
+          <>
+            <span className="cp-card__rub">
+              {showTime && <span className="cp-card__time">{unit.time}</span>}
+              {kind ? <span className="cp-card__kind">{kind}</span> : rubric && <RubricChip name={rubric.name} />}
+              {bad && <span className="cp-card__bad" aria-hidden="true" />}
+            </span>
+            <span className="cp-card__title">{title}</span>
+          </>
         ) : (
-          <span className="cp-card__icons" aria-label={`Площадки: ${platLabel}`}>
-            {plats.map(({ platform }) => (
-              <PlatformIcon key={platform} platform={platform} size={12} />
+          <>
+            <span className="cp-card__rub">
+              {rubric && <RubricChip name={rubric.name} />}
+              {format && variant !== 'mini' && <span className="cp-card__fmt">{format}</span>}
+              {bad && <span className="cp-card__bad" aria-hidden="true" />}
+              {showTime && <span className="cp-card__time">{unit.time}</span>}
+            </span>
+            <span className="cp-card__title">{title}</span>
+          </>
+        )}
+        {variant === 'full' && (
+          <span className="cp-types" aria-label={`Площадки: ${platLabel}`}>
+            {plats.map(({ platform, parts }) => (
+              <span key={platform} className="cp-types__p">
+                <PlatformIcon platform={platform} size={13} />
+                <span className="cp-types__name">{platform}</span>
+                <span className="cp-types__dash" aria-hidden="true">—</span>
+                <span className="cp-types__list">
+                  {parts.map((x) => (
+                    <span key={x.type} className="cp-types__t">{x.type}</span>
+                  ))}
+                </span>
+              </span>
             ))}
           </span>
         )}
       </button>
       <TaskButton unit={unit} />
+      {children}
     </div>
+  )
+}
+
+/** Фильтр по статусу словами: «Все», «В работе»… Выбран один; «Все» — без фильтра. */
+export function StatusFilter({ value, onChange, options = STATUSES.map((s) => s.id) }: { value: Status[]; onChange: (v: Status[]) => void; options?: Status[] }) {
+  const cur = value.length === 1 ? value[0] : value.length ? null : 'all'
+  return (
+    <div className="cp-stf" role="radiogroup" aria-label="Статус">
+      {(['all', ...options] as const).map((id) => (
+        <button
+          key={id}
+          type="button"
+          role="radio"
+          aria-checked={cur === id}
+          className="cp-stf__item"
+          onClick={() => onChange(id === 'all' ? [] : [id])}
+        >
+          {id === 'all' ? 'Все' : statusOf(id).label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Дата или время текстом («Пн, 26 окт», «12:00»); по нажатию — системный выбор. Поле подписано для диктора. */
+export function PickText({ type, value, label, text, onChange, placeholder }: { type: 'date' | 'time'; value: string; label: string; text: string; onChange: (v: string) => void; placeholder?: string }) {
+  const input = useRef<HTMLInputElement>(null)
+  return (
+    <span className="cp-pick">
+      <button
+        type="button"
+        className={`cp-pick__btn${value ? '' : ' cp-pick__btn--empty'}`}
+        title={label}
+        onClick={() => {
+          const el = input.current
+          if (!el) return
+          try {
+            el.showPicker()
+          } catch {
+            el.focus()
+          }
+        }}
+      >
+        {value ? text : placeholder ?? label}
+      </button>
+      <input ref={input} className="cp-pick__in" type={type} step={type === 'time' ? 900 : undefined} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
+    </span>
   )
 }
 

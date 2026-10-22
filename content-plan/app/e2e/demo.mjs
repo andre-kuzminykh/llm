@@ -93,7 +93,7 @@ await cap('«Сейчас» — что подготовить на две нед
 await page.mouse.wheel(0, 420)
 await wait(1200)
 await page.mouse.wheel(0, -420)
-await cap('Рубрика — меткой, тема — отдельно, площадки — значками', 2600)
+await cap('Строка — время, рубрика словом и тема; ▶ — начать', 2600)
 
 // 2. Календарь без конца и переход к дате
 await click(page.getByRole('button', { name: 'Календарь', exact: true }))
@@ -107,15 +107,15 @@ for (let i = 0; i < 4; i++) {
 await cap('Нажать на заголовок — и сразу к нужной дате', 900)
 await jump('2027-03-15')
 await page.getByRole('heading', { name: 'Март 2027' }).waitFor()
-await moveTo(page.locator('[data-date="2027-03-15"] .nr-tag--warn'))
-await cap('«без темы: …» — каким рубрикам не хватает тем', 2600)
+await moveTo(page.locator('[data-date="2027-03-15"] .cp-day__more'))
+await cap('«ещё N» — остальное в дне; «без темы» — каким рубрикам нужна тема', 2600)
 
 // 3. Пустой слот → задача → готово → вышло
 await click(page.getByRole('button', { name: 'Открыть день 2027-03-15' }), 700)
 await cap('День: по каналам и по времени, под каждой площадкой — что выходит', 3400)
 const day = page.getByRole('complementary', { name: /15 марта 2027/ })
 await cap('▶ — начать: открывается задача по созданию контента', 900)
-await click(day.getByRole('group', { name: 'Статус: Демо · FULL: Нужна тема' }).getByRole('button', { name: 'В работе' }), 900)
+await click(day.locator('.cp-card').filter({ has: page.getByRole('button', { name: /^Демо · FULL: Нужна тема/ }) }).getByRole('button', { name: /^Начать/ }), 900)
 const task = page.getByRole('complementary', { name: 'Задача' })
 await cap('Пустой слот: вписываю тему — тизер и анонсы получат её же')
 await type(task.getByLabel('Тема'), 'ИИ-бухгалтер')
@@ -132,7 +132,7 @@ await cap('Всё сделано — «Готово» одной кнопкой'
 await click(task.getByRole('button', { name: /Всё сделано/ }), 900)
 await cap('Вышло — ●', 600)
 await click(task.getByRole('group', { name: 'Статус задачи' }).getByRole('button', { name: 'Вышло' }), 900)
-await click(task.locator('.cp-sheet__foot').getByRole('button', { name: 'Закрыть' }), 600)
+await click(task.getByRole('button', { name: 'Закрыть' }), 600)
 await cap('На карточке — тема и статус значком', 2800)
 await page.keyboard.press('Escape')
 await wait(400)
@@ -164,10 +164,8 @@ await click(page.locator('.cp-toast').getByRole('button', { name: 'Поменя�
 
 // 6. Банк тем
 await click(page.getByRole('button', { name: 'Банк тем', exact: true }), 500)
-await cap('Банк тем: рубрики — галочками', 900)
-const pick = page.getByRole('group', { name: 'Какие рубрики показывать' })
-await click(pick.getByRole('button', { name: 'Снять все' }), 400)
-await click(pick.locator('label').filter({ hasText: /^Тезисы/ }), 900)
+await cap('Банк тем: слева рубрики, справа — темы выбранной', 900)
+await click(page.getByRole('navigation', { name: 'Рубрики банка' }).getByRole('button', { name: 'Тезисы · Тезис дня' }), 900)
 await type(page.getByLabel('Новые темы: Тезисы · Тезис дня'), 'Агенты вместо отделов\nИИ не отнимет работу\nСколько стоит ИИ-сотрудник')
 const bank = page.getByRole('region', { name: 'Банк: Тезисы · Тезис дня' })
 await click(bank.getByRole('button', { name: 'Добавить' }), 700)
@@ -175,12 +173,13 @@ await cap('«Разложить по слотам» — и сразу видно
 await click(bank.getByRole('button', { name: 'Разложить по слотам' }), 2600)
 await cap('Любую тему можно вернуть в банк', 600)
 await click(bank.getByRole('button', { name: 'Вернуть в банк: ИИ не отнимет работу' }), 2000)
-await click(pick.getByRole('button', { name: 'Выбрать все' }), 300)
 
 // 7. Сетка
 await click(page.getByRole('button', { name: 'Сетка', exact: true }), 500)
 await click(page.getByRole('button', { name: 'Раскрыть: Демо' }), 500)
-await cap('Сетка: у формата — дни, время и что выходит на каждой площадке', 3600)
+await cap('Сетка: дни, время и площадки — строками; правка — по нажатию на формат', 1400)
+await click(page.getByRole('button', { name: 'Править: Демо · FULL' }), 2600)
+await page.keyboard.press('Escape')
 
 // 8. Конец
 await click(page.getByRole('button', { name: 'Сейчас', exact: true }), 500)

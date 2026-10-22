@@ -15,11 +15,13 @@ interface Opts {
   onFocus: (d: ISODate) => void // дата, которая сейчас в фокусе экрана
   focusAt?: number // где «фокус» на экране: 0 — у начала, 0.5 — посередине
   overscan?: number
+  /** Положение по второй оси для даты — прокручивается тем же движением (на шкале времени — к первому часу недели). */
+  cross?: (d: ISODate) => number | undefined
 }
 
 const CHUNK = { 1: 56, 7: 26 } // насколько дорастать у края
 
-export function useInfinite({ axis, step, size, start, end, anchor, jump, onFocus, focusAt = 0, overscan = 3 }: Opts) {
+export function useInfinite({ axis, step, size, start, end, anchor, jump, onFocus, focusAt = 0, overscan = 3, cross }: Opts) {
   const ref = useRef<HTMLDivElement>(null)
   const align = (d: ISODate) => (step === 7 ? mondayOf(d) : d)
   const [range, setRange] = useState(() => {
@@ -52,15 +54,21 @@ export function useInfinite({ axis, step, size, start, end, anchor, jump, onFocu
       const pos = Math.max(0, indexOf(date) * size)
       guard.current = { pos, until: Date.now() + 1200 }
       focused.current = date
-      if (axis === 'y') el.scrollTo?.({ top: pos, behavior: smooth ? 'smooth' : 'auto' })
-      else el.scrollTo?.({ left: pos, behavior: smooth ? 'smooth' : 'auto' })
+      // вторая ось — в том же вызове: отдельная прокрутка оборвала бы плавную
+      const c = cross?.(date)
+      if (axis === 'y') el.scrollTo?.({ top: pos, left: c, behavior: smooth ? 'smooth' : 'auto' })
+      else el.scrollTo?.({ left: pos, top: c, behavior: smooth ? 'smooth' : 'auto' })
       if (!el.scrollTo || !smooth) {
         if (axis === 'y') el.scrollTop = pos
         else el.scrollLeft = pos
+        if (c !== undefined) {
+          if (axis === 'y') el.scrollLeft = c
+          else el.scrollTop = c
+        }
       }
       measure()
     },
-    [axis, indexOf, size, measure],
+    [axis, indexOf, size, measure, cross],
   )
 
   /** К дате; если её нет в ленте — лента сначала дорастает до неё. */

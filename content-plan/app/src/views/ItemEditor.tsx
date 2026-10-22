@@ -1,9 +1,9 @@
 import { useId, useMemo, useState } from 'react'
-import { dayTitle, WEEKDAYS, weekday } from '../model/dates'
+import { addDays, dayTitle, shortDate, WEEKDAYS, weekday } from '../model/dates'
 import { newId } from '../model/store'
 import { isSlot, PLACEHOLDER, timeOf, type Item, type Rule, type Status } from '../model/types'
 import { dueOf, leadOf } from '../model/units'
-import { IconButton, StatusPicker, Switch } from '../ui/bits'
+import { IconButton, PickText, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
@@ -50,6 +50,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [withGroup, setWithGroup] = useState(true)
   const [withFamily, setWithFamily] = useState(true)
   const [error, setError] = useState('')
+  const [more, setMore] = useState(false)
 
   const channel = channels.get(channelId)
   const rule = rules.get(ruleId)
@@ -58,7 +59,6 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     () => (existing?.group && existing.date ? plan.items.filter((x) => x.group === existing.group && x.date === existing.date && x.id !== existing.id) : []),
     [plan.items, existing],
   )
-  const isHead = !!existing && !existing.derive && members.some((m) => m.derive)
   const isBank = !!existing && existing.date === null
   const fromFull = !!existing?.derive // рубрика берётся у FULL группы
   // разовый материал на «чужой» день — сразу вне сетки, чтобы проверка не ругалась; можно выключить
@@ -88,7 +88,10 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
 
   const save = () => {
     const t = title.trim() || PLACEHOLDER
-    if (!platforms.length) return setError('Выберите хотя бы одну площадку')
+    if (!platforms.length) {
+      setMore(true)
+      return setError('Выберите хотя бы одну площадку')
+    }
     if (!rule) return setError('Выберите формат')
     const patch: Partial<Item> = {
       title: t,
@@ -148,6 +151,12 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   }
 
   const heading = existing ? (isBank ? 'Тема в банке' : 'Материал') : 'Новый материал'
+  const offGridField = (
+    <div className="cp-field">
+      <Switch checked={isOffGrid} onChange={setOffGrid}>Вне сетки — разовый, проверка его не трогает</Switch>
+      {offDay && rule && <span className="cp-hint">По сетке «{labelOf({ rubricId, ruleId })}» не выходит в {WEEKDAYS[weekday(date)]}.</span>}
+    </div>
+  )
   return (
     <aside className="cp-sheet" aria-label={heading} onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && save()}>
       <div className="cp-sheet__head">
@@ -164,45 +173,23 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             rows={2}
             value={title}
             autoFocus={!existing}
-            placeholder="Только тема, без рубрики: «Агент продаж»"
+            placeholder={existing && isSlot(existing) ? 'Нужна тема' : 'Только тема, без рубрики: «Агент продаж»'}
             onChange={(e) => setTitle(e.target.value)}
           />
-          {existing && isSlot(existing) && <span className="cp-hint">Тема не задана: впишите её или возьмите из банка тем.</span>}
-          {isHead && <span className="cp-hint">У тизера, анонсов и писем группы тема поменяется вместе с этой.</span>}
+        </div>
+
+        <div className="cp-form__when">
+          <PickText type="date" label="Дата" value={date} text={date ? dayTitle(date) : ''} placeholder="Без даты — в банк тем" onChange={setDate} />
+          {date && (
+            <>
+              <span className="cp-task__sep" aria-hidden="true">·</span>
+              <PickText type="time" label="Время выхода" value={time || (rule ? timeOf({}, rule) : '')} text={time || (rule ? timeOf({}, rule) : '')} onChange={setTime} />
+            </>
+          )}
         </div>
 
         <div className="cp-field__row">
-          <label className="cp-field">
-            <span className="nr-label">Дата</span>
-            <input className="nr-field" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
-          <label className="cp-field">
-            <span className="nr-label">Канал</span>
-            <select className="nr-field" value={channelId} onChange={(e) => pickChannel(e.target.value)} disabled={!!existing?.group && members.length > 0}>
-              {plan.channels.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {!date && !existing && <span className="cp-hint">Без даты материал попадёт в банк тем.</span>}
-        {date && <span className="cp-hint">{dayTitle(date)}</span>}
-        {date && (
-          <div className="cp-field__row">
-            <label className="cp-field">
-              <span className="nr-label">Время выхода</span>
-              <input className="nr-field" type="time" step={900} value={time || (rule ? timeOf({}, rule) : '')} onChange={(e) => setTime(e.target.value)} />
-            </label>
-            <label className="cp-field">
-              <span className="nr-label">Подготовить к</span>
-              <input className="nr-field" type="date" value={due || (existing ? dueOf({ ...existing, date }, rule) ?? '' : '')} onChange={(e) => setDue(e.target.value)} />
-            </label>
-          </div>
-        )}
-        {date && !due && <span className="cp-hint">Время — как у формата ({rule?.time ?? '—'}); готовить за {leadOf(rule)} дн. до выхода.</span>}
-
-        <div className="cp-field__row">
-          <label className="cp-field">
+          <label className="cp-field" title={rubric?.what || undefined}>
             <span className="nr-label">Рубрика</span>
             <select className="nr-field" value={rubricId ?? ''} onChange={(e) => pickRubric(e.target.value)} disabled={fromFull}>
               {rubricsFor(channelId, rubricId).map((r) => (
@@ -210,7 +197,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
               ))}
             </select>
           </label>
-          <label className="cp-field">
+          <label className="cp-field" title={rule?.what || undefined}>
             <span className="nr-label">Формат</span>
             <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
               {rulesFor(channelId, rubricId).map((r) => (
@@ -219,76 +206,101 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             </select>
           </label>
         </div>
-        {fromFull && <p className="cp-hint">Рубрика — как у FULL этой группы.</p>}
-        {(rubric?.what || rule?.what) && <p className="cp-hint">{[rubric?.what, rule?.what].filter(Boolean).join(' · ')}</p>}
-        {channel && channel.sections.length > 0 && (
-          <label className="cp-field">
-            <span className="nr-label">Раздел</span>
-            <select className="nr-field" value={sectionId ?? ''} onChange={(e) => setSectionId(e.target.value || undefined)}>
-              <option value="">—</option>
-              {channel.sections.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </label>
-        )}
 
-        <div className="cp-field">
-          <span className="nr-label">Площадки</span>
-          <div className="cp-pills" style={{ padding: 0 }}>
-            {plan.platforms.map((p) => {
-              const allowed = channel?.platforms.includes(p)
-              if (!allowed && !platforms.includes(p)) return null
-              return (
-                <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
-                  {p}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        {date && offDay && offGridField}
 
-        <div className="cp-field">
-          <span className="nr-label">Статус</span>
-          <StatusPicker value={status} onChange={setStatus} />
-          <span className="cp-hint">Без значка — в плане. Нажмите значок ещё раз, чтобы снять.</span>
-        </div>
+        <button type="button" className="cp-more-btn" aria-expanded={more} onClick={() => setMore(!more)}>
+          <Icon name="chev-right" size={14} />
+          Подробнее
+        </button>
+        {more && (
+          <div className="cp-form__more">
+            <label className="cp-field">
+              <span className="nr-label">Канал</span>
+              <select className="nr-field" value={channelId} onChange={(e) => pickChannel(e.target.value)} disabled={!!existing?.group && members.length > 0}>
+                {plan.channels.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </label>
+            {channel && channel.sections.length > 0 && (rule?.sectionId || sectionId) && (
+              <label className="cp-field">
+                <span className="nr-label">Раздел</span>
+                <select className="nr-field" value={sectionId ?? ''} onChange={(e) => setSectionId(e.target.value || undefined)}>
+                  <option value="">—</option>
+                  {channel.sections.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
 
-        <label className="cp-field">
-          <span className="nr-label">Кто делает</span>
-          <input className="nr-field" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Имя" />
-        </label>
-
-        <label className="cp-field">
-          <span className="nr-label">Заметка</span>
-          <textarea className="nr-field" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Сценарий, ссылки, что учесть" />
-        </label>
-
-        {date && (
-          <div className="cp-field">
-            <Switch checked={isOffGrid} onChange={setOffGrid}>Вне сетки — разовый, проверка его не трогает</Switch>
-            {offDay && rule && <span className="cp-hint">По сетке «{labelOf({ rubricId, ruleId })}» не выходит в {WEEKDAYS[weekday(date)]}.</span>}
-          </div>
-        )}
-
-        {members.length > 0 && (
-          <div className="cp-field">
-            <span className="nr-label">Группа · {members.length + 1}</span>
-            <div className="cp-members">
-              {members.map((m) => (
-                <button key={m.id} type="button" className="nr-pill" onClick={() => openItem(m.id)} title="Открыть этот материал">
-                  {rules.get(m.ruleId)?.name ?? m.ruleId}
-                  {m.channelId !== existing?.channelId && <span className="cp-muted">· {channels.get(m.channelId)?.name}</span>}
-                </button>
-              ))}
+            <div className="cp-field">
+              <span className="nr-label">Площадки</span>
+              <div className="cp-pills" style={{ padding: 0 }}>
+                {plan.platforms.map((p) => {
+                  const allowed = channel?.platforms.includes(p)
+                  if (!allowed && !platforms.includes(p)) return null
+                  return (
+                    <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
+                      {p}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
+
+            <div className="cp-task__status">
+              <span className="nr-label">Статус</span>
+              <StatusPicker size="sm" value={status} onChange={setStatus} />
+            </div>
+
+            <div className="cp-field__row">
+              <label className="cp-field">
+                <span className="nr-label">Кто делает</span>
+                <input className="nr-field" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Имя" />
+              </label>
+              {date && (
+                <div className="cp-field">
+                  <span className="nr-label">Подготовить к</span>
+                  <PickText
+                    type="date"
+                    label="Подготовить к"
+                    value={due || (existing ? dueOf({ ...existing, date }, rule) ?? '' : '')}
+                    text={shortDate(due || (existing ? dueOf({ ...existing, date }, rule) ?? date : addDays(date, -leadOf(rule))))}
+                    onChange={setDue}
+                  />
+                </div>
+              )}
+            </div>
+
+            <label className="cp-field">
+              <span className="nr-label">Заметка</span>
+              <textarea className="nr-field" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Сценарий, ссылки, что учесть" />
+            </label>
+
+            {date && !offDay && offGridField}
+
+            {members.length > 0 && (
+              <div className="cp-field">
+                <span className="nr-label">Группа · {members.length + 1}</span>
+                <div className="cp-members">
+                  {members.map((m) => (
+                    <button key={m.id} type="button" className="nr-pill" onClick={() => openItem(m.id)} title="Открыть этот материал">
+                      {rules.get(m.ruleId)?.name ?? m.ruleId}
+                      {m.channelId !== existing?.channelId && <span className="cp-muted">· {channels.get(m.channelId)?.name}</span>}
+                    </button>
+                  ))}
+                </div>
+                <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
+              </div>
+            )}
+            {!existing && (
+              <Switch checked={withFamily} onChange={setWithFamily}>С сопутствующими публикациями, как у ближайшего материала рубрики</Switch>
+            )}
+            {existing?.origDate && <p className="cp-hint">В исходной сетке стоял {shortDate(existing.origDate)}.</p>}
           </div>
         )}
-        {!existing && (
-          <Switch checked={withFamily} onChange={setWithFamily}>С сопутствующими публикациями (как у ближайшего материала рубрики)</Switch>
-        )}
-        {existing?.origDate && <p className="cp-hint">В исходной сетке стоял {existing.origDate}.</p>}
         {error && <p className="cp-hint" style={{ color: 'var(--nr-danger)' }} role="alert">{error}</p>}
       </div>
       <div className="cp-sheet__foot">

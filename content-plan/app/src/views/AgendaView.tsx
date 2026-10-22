@@ -4,7 +4,6 @@ import type { ISODate } from '../model/types'
 import { UnitCard } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { DateJump, TopBar } from '../ui/TopBar'
-import { SlotsTag } from './MonthView'
 
 /** Календарь на телефоне: лента по дням, листается без конца вверх и вниз; ▶ на карточке — задача. */
 export function AgendaView() {
@@ -100,14 +99,12 @@ function AgendaDay({ date }: { date: ISODate }) {
     <section className={`cp-agenda__day${weekday(date) === SAT ? ' cp-agenda__day--rest' : ''}`} data-day={date} aria-label={dayTitle(date)}>
       <button type="button" className={`cp-agenda__head${date === today() ? ' cp-agenda__head--today' : ''}`} onClick={() => openDay(date)} aria-label={`Открыть день ${date}`}>
         {dayTitle(date)}
-        {weekday(date) === SAT && <span className="nr-tag nr-tag--rest">отдых</span>}
-        <SlotsTag units={units} />
       </button>
       <div className="cp-list">
         {units.map((u) => (
           <UnitCard key={u.key} unit={u} variant="compact" />
         ))}
-        {units.length === 0 && <span className="cp-hint">Ничего не стоит.</span>}
+        {units.length === 0 && <span className="cp-hint">Пусто</span>}
       </div>
     </section>
   )

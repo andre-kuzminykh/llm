@@ -1,9 +1,9 @@
 import { useState, type CSSProperties } from 'react'
 import { addDays, addMonths, dayTitle, monthKey, monthTitle, today } from '../model/dates'
 import { visible } from '../model/filters'
-import { isSlot, shownTitle, titleIsFormat, type ISODate } from '../model/types'
-import { platformTypes, unitsOf, type Unit } from '../model/units'
-import { ChannelDot, IconButton, PlatformIcon, RubricChip, StatusPicker } from '../ui/bits'
+import { isSlot, shownTitle, type ISODate } from '../model/types'
+import { unitsOf, type Unit } from '../model/units'
+import { IconButton, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { DateJump, TopBar } from '../ui/TopBar'
 
@@ -67,7 +67,7 @@ export function PlanView() {
             <section key={d} aria-label={dayTitle(d)}>
               <div className="cp-plan__day">
                 {dayTitle(d)}
-                {(violByDate.get(d)?.length ?? 0) > 0 && <span className="nr-tag nr-tag--danger">нарушений: {violByDate.get(d)!.length}</span>}
+                {(violByDate.get(d)?.length ?? 0) > 0 && <span className="cp-viol" role="img" aria-label={`Нарушений: ${violByDate.get(d)!.length}`} title={violByDate.get(d)!.map((v) => v.text).join('\n')} />}
               </div>
               {list.map((u) => (
                 <PlanRow key={u.key} unit={u} />
@@ -82,33 +82,18 @@ export function PlanView() {
 }
 
 function PlanRow({ unit }: { unit: Unit }) {
-  const { plan, channels, rubrics, rules, labelOf, openItem, setStatus } = usePlan()
+  const { channels, labelOf, openItem, setStatus } = usePlan()
   const { head } = unit
   const c = channels.get(unit.channelId)
   const section = c?.sections.find((s) => s.id === head.sectionId)
-  const rule = rules.get(head.ruleId)
-  const rubric = rubrics.get(head.rubricId ?? '')
-  const format = rule && rule.name !== rubric?.name && !titleIsFormat(head.title, rule) ? rule.name : ''
-  const plats = platformTypes(unit, rules, plan.platforms)
   return (
     <div className="cp-plan__row" style={{ '--cp-c': c?.color } as CSSProperties}>
       <span className="cp-plan__time">{unit.time}</span>
-      <span className="cp-ch">
-        <ChannelDot color={c?.color ?? '#999'} />
-        {section?.name ?? c?.name}
-      </span>
-      <span className="cp-plan__label">
-        {rubric && <RubricChip name={rubric.name} />}
-        {format && <span className="cp-muted">{format}</span>}
-      </span>
-      <button type="button" className={`cp-link${isSlot(head) ? ' cp-slot-text' : ''}`} onClick={() => openItem(head.id)}>
+      <span className="cp-plan__ch">{section?.name ?? c?.name}</span>
+      <span className="cp-plan__label">{labelOf(head)}</span>
+      <button type="button" className={`cp-link cp-plan__title${isSlot(head) ? ' cp-slot-text' : ''}`} onClick={() => openItem(head.id)}>
         {shownTitle(head)}
       </button>
-      <span className="cp-card__icons" aria-label={`Площадки: ${plats.map((p) => `${p.platform}: ${p.parts.map((x) => x.type).join(', ')}`).join('; ')}`}>
-        {plats.map(({ platform }) => (
-          <PlatformIcon key={platform} platform={platform} size={13} />
-        ))}
-      </span>
       <StatusPicker size="sm" label={`Статус: ${labelOf(head)}: ${shownTitle(head)}`} value={head.status} onChange={(s) => setStatus(unit, s)} />
     </div>
   )

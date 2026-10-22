@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { shortDate, today } from './model/dates'
-import { indexByDate, NO_FILTERS, visible, type Filters } from './model/filters'
+import { indexByDate, visible, type Filters } from './model/filters'
 import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, type AnyPlan } from './model/io'
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
@@ -10,11 +10,12 @@ import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
 import { PlanCtx, usePlan, type Ctx, type Drag, type ToastOpts, type View } from './ui/ctx'
 import { Icon } from './ui/Icon'
-import { Sidebar } from './ui/Sidebar'
+import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { BankView } from './views/BankView'
 import { ChecksView } from './views/ChecksView'
 import { DayPanel } from './views/DayPanel'
+import { HelpSheet } from './views/HelpSheet'
 import { ItemEditor } from './views/ItemEditor'
 import { MonthView } from './views/MonthView'
 import { NowView } from './views/NowView'
@@ -28,14 +29,15 @@ type Sheet =
   | { kind: 'item'; id: string; back?: ISODate }
   | { kind: 'new'; draft: Partial<Item>; back?: ISODate }
   | { kind: 'task'; id: string; back?: ISODate }
+  | { kind: 'help' }
   | null
 
-const NAV: { id: View; label: string; icon: string }[] = [
-  { id: 'now', label: 'Сейчас', icon: 'now' },
-  { id: 'month', label: 'Календарь', icon: 'calendar' },
+const NAV: { id: View; label: string; icon: string; main?: boolean }[] = [
+  { id: 'now', label: 'Сейчас', icon: 'now', main: true },
+  { id: 'month', label: 'Календарь', icon: 'calendar', main: true },
   { id: 'week', label: 'Неделя', icon: 'week' },
-  { id: 'plan', label: 'План', icon: 'list' },
-  { id: 'bank', label: 'Банк тем', icon: 'bank' },
+  { id: 'plan', label: 'План', icon: 'list', main: true },
+  { id: 'bank', label: 'Банк тем', icon: 'bank', main: true },
   { id: 'rules', label: 'Сетка', icon: 'grid' },
   { id: 'checks', label: 'Проверка', icon: 'alert' },
 ]
@@ -153,13 +155,22 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
   const [anchor, setAnchorState] = useState<ISODate>(() => readLS('cp:anchor', today()))
   const [jump, setJump] = useState({ date: anchor, n: 0 })
-  const [filters, setFiltersState] = useState<Filters>(() => ({ ...NO_FILTERS, hideAuto: true, ...readLS<Partial<Filters>>('cp:filters', {}) }))
+  const [filters, setFiltersState] = useState<Filters>(() => ({ ...DEFAULT_FILTERS, ...readLS<Partial<Filters>>('cp:filters', {}) }))
   const [sheet, setSheet] = useState<Sheet>(null)
   const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)
-  const [sideOpen, setSideOpen] = useState(false)
-  const [menu, setMenu] = useState(false)
-  const theme = useTheme()
+  const narrow = useMedia('(max-width: 900px)')
   const phone = useMedia('(max-width: 600px)')
+  // фильтры — за кнопкой; на большом экране панель помнит, открыта ли, на узком — всегда поверх и закрыта
+  const [sideOpen, setSideState] = useState<boolean>(() => !narrow && readLS('cp:side', false))
+  const setSideOpen = (v: boolean | ((o: boolean) => boolean)) =>
+    setSideState((o) => {
+      const next = typeof v === 'function' ? v(o) : v
+      if (!narrow) writeLS('cp:side', next)
+      return next
+    })
+  const [menu, setMenu] = useState(false)
+  const [more, setMore] = useState(false)
+  const theme = useTheme()
 
   const setView = (v: View) => {
     setViewState(v)
@@ -238,8 +249,9 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
       if (e.key === 'Escape') {
         setMenu(false)
-        setSideOpen(false)
-        setSheet((s) => (s && s.kind !== 'day' && s.back ? { kind: 'day', date: s.back } : null))
+        setMore(false)
+        if (narrow) setSideState(false)
+        setSheet((s) => (s && s.kind !== 'day' && s.kind !== 'help' && s.back ? { kind: 'day', date: s.back } : null))
       }
       if (typing || !(e.metaKey || e.ctrlKey)) return
       if (e.key.toLowerCase() === 'z') {
@@ -252,7 +264,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dispatch])
+  }, [dispatch, narrow])
 
   const openDayId = sheet?.kind === 'day' ? sheet.date : sheet && 'back' in sheet ? sheet.back ?? null : null
   const ctx: Ctx = {
@@ -291,35 +303,80 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     },
     toast,
     toggleSide: () => setSideOpen((o) => !o),
+    sideOpen,
+    openHelp: () => setSheet({ kind: 'help' }),
     saved,
     phone,
   }
 
   const closeSheet = () => setSheet(null)
-  const back = sheet && sheet.kind !== 'day' && sheet.back ? () => setSheet({ kind: 'day', date: sheet.back! }) : undefined
+  const back = sheet && sheet.kind !== 'day' && sheet.kind !== 'help' && sheet.back ? () => setSheet({ kind: 'day', date: sheet.back! }) : undefined
   const withSide = view === 'month' || view === 'week' || view === 'plan' || view === 'now'
 
   return (
     <PlanCtx.Provider value={ctx}>
       <div className="nr-app">
-        <nav className="nr-rail" aria-label="Разделы">
-          <div className="nr-rail-brand" aria-hidden="true">КП</div>
-          {NAV.map((n) => (
-            <button key={n.id} type="button" className="nr-rail-item" aria-current={view === n.id ? 'page' : undefined} aria-label={n.label} onClick={() => setView(n.id)}>
-              <Icon name={n.icon} size={22} />
-              <span className="cp-rail-tip" aria-hidden="true">{n.label}</span>
-              {n.id === 'checks' && violations.length > 0 && <span className="cp-rail-badge">{violations.length > 99 ? '99+' : violations.length}</span>}
+        {phone ? (
+          <nav className="nr-rail cp-tabs" aria-label="Разделы">
+            {NAV.filter((n) => n.main).map((n) => (
+              <button key={n.id} type="button" className="cp-tab" aria-current={view === n.id ? 'page' : undefined} onClick={() => setView(n.id)}>
+                <Icon name={n.icon} size={22} />
+                <span>{n.id === 'bank' ? 'Банк' : n.label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="cp-tab"
+              aria-expanded={more}
+              aria-current={NAV.some((n) => !n.main && n.id === view) ? 'page' : undefined}
+              onClick={() => setMore((m) => !m)}
+            >
+              <Icon name="more" size={22} />
+              <span>Ещё</span>
+              {violations.length > 0 && <span className="cp-rail-badge">{violations.length > 99 ? '99+' : violations.length}</span>}
             </button>
-          ))}
-          <span className="nr-rail-spacer" />
-          <button type="button" className="nr-rail-item" aria-label="Данные и тема" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-            <Icon name="more" size={22} />
-            <span className="cp-rail-tip" aria-hidden="true">Данные и тема</span>
-          </button>
-          {menu && <DataMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} />}
-        </nav>
-        {withSide && sideOpen && <div className="cp-scrim cp-only-phone" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {withSide && <Sidebar open={sideOpen} withBank={view === 'month' || view === 'week'} onClose={() => setSideOpen(false)} />}
+            {more && (
+              <div className="cp-menu nr-glass" role="menu" aria-label="Ещё">
+                {NAV.filter((n) => !n.main).map((n) => (
+                  <button key={n.id} type="button" role="menuitem" className="cp-menu__item" onClick={() => { setView(n.id); setMore(false) }}>
+                    <Icon name={n.icon} size={18} /> {n.label}
+                    {n.id === 'checks' && violations.length > 0 && <span className="cp-menu__count">{violations.length}</span>}
+                  </button>
+                ))}
+                <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { setMore(false); setMenu(true) }}>
+                  <Icon name="more" size={18} /> Данные и тема
+                </button>
+                <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { setMore(false); setSheet({ kind: 'help' }) }}>
+                  <Icon name="help" size={18} /> Как пользоваться
+                </button>
+              </div>
+            )}
+            {menu && <DataMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} />}
+          </nav>
+        ) : (
+          <nav className="nr-rail" aria-label="Разделы">
+            <div className="nr-rail-brand" aria-hidden="true">КП</div>
+            {NAV.map((n) => (
+              <button key={n.id} type="button" className="nr-rail-item" aria-current={view === n.id ? 'page' : undefined} aria-label={n.label} onClick={() => setView(n.id)}>
+                <Icon name={n.icon} size={22} />
+                <span className="cp-rail-tip" aria-hidden="true">{n.label}</span>
+                {n.id === 'checks' && violations.length > 0 && <span className="cp-rail-badge">{violations.length > 99 ? '99+' : violations.length}</span>}
+              </button>
+            ))}
+            <span className="nr-rail-spacer" />
+            <button type="button" className="nr-rail-item" aria-label="Как пользоваться" aria-pressed={sheet?.kind === 'help'} onClick={() => setSheet((s) => (s?.kind === 'help' ? null : { kind: 'help' }))}>
+              <Icon name="help" size={22} />
+              <span className="cp-rail-tip" aria-hidden="true">Как пользоваться</span>
+            </button>
+            <button type="button" className="nr-rail-item" aria-label="Данные и тема" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+              <Icon name="more" size={22} />
+              <span className="cp-rail-tip" aria-hidden="true">Данные и тема</span>
+            </button>
+            {menu && <DataMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} />}
+          </nav>
+        )}
+        {withSide && sideOpen && narrow && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
+        {withSide && sideOpen && <Sidebar open={sideOpen} withBank={view === 'month' || view === 'week'} onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
           {view === 'now' && <NowView />}
           {view === 'month' && <MonthView />}
@@ -332,6 +389,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
+          {sheet?.kind === 'help' && <HelpSheet view={view} onClose={closeSheet} />}
         </main>
         {toastState && (
           <div className="cp-toast nr-glass" role="status" key={toastState.n}>
@@ -374,14 +432,11 @@ function DataMenu({ onClose, seedUrl, theme, onTheme }: { onClose: () => void; s
   const stamp = today()
   return (
     <div className="cp-menu nr-glass" role="menu" aria-label="Данные и тема">
-      <p className="cp-menu__note">
-        {saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON.' : 'План хранится в этом браузере. Выгрузка — чтобы перенести или поделиться.'}
-      </p>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { download(`content-plan-${stamp}.json`, exportJSON(plan), 'application/json'); onClose() }}>
         <Icon name="download" size={18} /> Выгрузить JSON
       </button>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { download(`calendar-${stamp}.csv`, calendarCSV(plan), 'text/csv;charset=utf-8'); onClose() }}>
-        <Icon name="download" size={18} /> CSV-календарь (как 4_calendar.csv)
+        <Icon name="download" size={18} /> Календарь для таблицы (CSV)
       </button>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={() => file.current?.click()}>
         <Icon name="upload" size={18} /> Загрузить JSON
@@ -434,6 +489,7 @@ function DataMenu({ onClose, seedUrl, theme, onTheme }: { onClose: () => void; s
           ]}
         />
       </div>
+      <p className="cp-menu__note">{saved === 'memory' ? 'Хранилище браузера недоступно — выгрузите JSON до перезагрузки.' : 'План хранится в этом браузере.'}</p>
     </div>
   )
 }

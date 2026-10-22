@@ -1,14 +1,14 @@
 import { addDays, dayTitle } from '../model/dates'
-import { KIND_LABEL } from '../model/rules'
-import { shownTitle, type ISODate } from '../model/types'
+import type { ISODate } from '../model/types'
 import type { Unit } from '../model/units'
-import { ChannelDot, IconButton, StatusPicker, UnitCard, useDrop } from '../ui/bits'
+import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
-/** Все материалы дня по каналам и по времени; сюда можно бросить материал или тему из банка. */
+/** Все материалы дня по каналам и по времени; сюда можно бросить материал или тему из банка.
+ *  Статус — значком в углу карточки: ▶ начинает задачу. */
 export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void }) {
-  const { byDate, unitsOn, channels, labelOf, violByDate, openDay, openNew, dropOn, setStatus, goto, phone } = usePlan()
+  const { byDate, unitsOn, channels, violByDate, openDay, openNew, dropOn, goto } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const units = unitsOn(date)
   const total = (byDate.get(date) ?? []).length
@@ -30,31 +30,21 @@ export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void
           <div className="cp-viol-box" role="alert">
             {viol.map((v, i) => (
               <span key={i}>
-                <b>{KIND_LABEL[v.kind]}:</b> {v.text}
+                <span className="cp-viol" aria-hidden="true" /> {v.text}
               </span>
             ))}
           </div>
         )}
-        {!phone && <p className="cp-hint">Перетащите карточку на день в календаре, чтобы перенести. Тизер, анонсы и письма FULL поедут вместе. ▶ — начать и открыть задачу.</p>}
         {[...groups].map(([cid, list]) => {
           const c = channels.get(cid)
           return (
-            <section key={cid} className="cp-list" aria-label={c?.name}>
-              <div className="cp-group-head" style={{ color: c?.color }}>
-                <ChannelDot color={c?.color ?? '#999'} />
+            <section key={cid} className="cp-day-group" aria-label={c?.name}>
+              <div className="cp-group-head">
                 {c?.name}
-                <span className="cp-muted" style={{ fontWeight: 500 }}>{list.length}</span>
+                <span className="cp-muted">{list.length}</span>
               </div>
               {list.map((u) => (
-                <div key={u.key} className="cp-day-item">
-                  <UnitCard unit={u} variant="full" />
-                  <StatusPicker
-                    size="sm"
-                    label={`Статус: ${labelOf(u.head)}: ${shownTitle(u.head)}`}
-                    value={u.head.status}
-                    onChange={(s) => setStatus(u, s)}
-                  />
-                </div>
+                <UnitCard key={u.key} unit={u} variant="full" />
               ))}
             </section>
           )
@@ -63,13 +53,12 @@ export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void
         {hidden > 0 && units.length > 0 && <p className="cp-hint">Скрыто фильтрами: {hidden}.</p>}
       </div>
       <div className="cp-sheet__foot">
-        <button type="button" className="nr-btn nr-btn--secondary" onClick={() => openNew({ date })}>
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => openNew({ date })}>
           <Icon name="plus" size={16} />
           Материал на этот день
         </button>
         <span className="cp-top__spacer" />
         <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => goto('week', date)}>
-          <Icon name="week" size={16} />
           Открыть неделю
         </button>
       </div>

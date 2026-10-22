@@ -51,6 +51,8 @@ export interface Ctx {
   setStatus: (unit: Unit, status: Status) => void
   toast: (msg: string, opts?: boolean | ToastOpts) => void
   toggleSide: () => void
+  sideOpen: boolean
+  openHelp: () => void
   saved: 'idle' | 'saving' | 'saved' | 'memory' | 'error'
   phone: boolean
 }

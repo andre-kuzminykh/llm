@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { shortDate, today } from '../model/dates'
 import { bankOf, planFill } from '../model/store'
 import { isSlot, type ISODate, type Item, type Plan, type Rule } from '../model/types'
-import { ChannelDot, Check, IconButton, startDrag, useDrop } from '../ui/bits'
+import { IconButton, startDrag, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { TopBar } from '../ui/TopBar'
 
@@ -49,32 +49,48 @@ const range = (dates: ISODate[]) => {
 export function BankView() {
   const { plan } = usePlan()
   const from = today() < plan.start ? plan.start : today()
-  const choice = useBankChoice('cp:bank-shown', plan)
   const rules = bankRules(plan)
+  const [sel, setSel] = useState<string>(() => {
+    try {
+      return localStorage.getItem('cp:bank-sel') ?? ''
+    } catch {
+      return ''
+    }
+  })
+  const pick = (id: string) => {
+    setSel(id)
+    try {
+      localStorage.setItem('cp:bank-sel', id)
+    } catch {
+      /* до перезагрузки */
+    }
+  }
+  const rule = rules.find((r) => r.id === sel) ?? rules[0]
+  const slots = (r: Rule) => plan.items.filter((x) => x.ruleId === r.id && x.date && x.date >= from && !x.derive && isSlot(x)).length
   return (
     <>
       <TopBar title="Банк тем" side={false} />
       <div className="cp-body nr-scroll">
-        <p className="cp-hint" style={{ padding: '14px 20px 0' }}>
-          Темы без даты. «Разложить по слотам» ставит их по порядку в ближайшие пустые места рубрики начиная с {shortDate(from)};
-          тему можно и перетащить на день в календаре — из боковой панели.
-        </p>
-        <div className="cp-bank__pick" role="group" aria-label="Какие рубрики показывать">
-          {rules.map((r) => (
-            <Check key={r.id} checked={choice.list.includes(r.id)} onChange={() => choice.toggle(r.id)}>
-              {bankLabel(plan, r)} <span className="cp-muted">{bankOf(plan, r.id).length}</span>
-            </Check>
-          ))}
-          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={choice.list.length === rules.length ? choice.none : choice.all}>
-            {choice.list.length === rules.length ? 'Снять все' : 'Выбрать все'}
-          </button>
-        </div>
         <div className="cp-bank">
-          {rules
-            .filter((r) => choice.list.includes(r.id))
-            .map((r) => (
-              <BankColumn key={r.id} rule={r} from={from} />
-            ))}
+          <nav className="cp-bank__list" aria-label="Рубрики банка">
+            {rules.map((r) => {
+              const n = bankOf(plan, r.id).length
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="nr-row"
+                  aria-current={r.id === rule?.id ? 'true' : undefined}
+                  title={`Тем в банке: ${n} · пустых слотов: ${slots(r)}`}
+                  onClick={() => pick(r.id)}
+                >
+                  <span className="cp-bank__name">{bankLabel(plan, r)}</span>
+                  {n > 0 && <span className="cp-side__count">{n}</span>}
+                </button>
+              )
+            })}
+          </nav>
+          {rule && <BankColumn key={rule.id} rule={rule} from={from} />}
         </div>
       </div>
     </>
@@ -82,7 +98,7 @@ export function BankView() {
 }
 
 function BankColumn({ rule, from }: { rule: Rule; from: string }) {
-  const { plan, dispatch, channels, toast, goto } = usePlan()
+  const { plan, dispatch, toast, goto } = usePlan()
   const [text, setText] = useState('')
   const [, rerender] = useState(0)
   const topics = bankOf(plan, rule.id)
@@ -91,7 +107,6 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
   const nextSlot = plan.items
     .filter((x) => x.ruleId === rule.id && x.date && x.date >= from && !x.derive && isSlot(x))
     .reduce<string | null>((m, x) => (!m || x.date! < m ? x.date! : m), null)
-  const c = channels.get(rule.channelId)
   // недавно разложенные, которые всё ещё стоят на своих местах с этой темой
   const placed = (recent.get(rule.id) ?? []).filter((r) => plan.items.some((x) => x.id === r.id && x.date === r.date && x.title === r.title))
   const remember = (list: { id: string; title: string; date: ISODate }[]) => {
@@ -104,29 +119,30 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
     dispatch({ type: 'bankAdd', ruleId: rule.id, topics: list })
     setText('')
   }
+  const slotWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'слот ждёт' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'слота ждут' : 'слотов ждут')
   return (
-    <section className="cp-bank__col nr-panel" aria-label={`Банк: ${title}`}>
+    <section className="cp-bank__col" aria-label={`Банк: ${title}`}>
       <div className="cp-bank__head">
-        <ChannelDot color={c?.color ?? '#999'} />
-        {title}
+        <h2 className="cp-bank__title">{title}</h2>
+        <span className="cp-muted">
+          {fill.freeSlots ? `${fill.freeSlots} ${slotWord(fill.freeSlots)} тему${nextSlot ? `, ближайший — ${shortDate(nextSlot)}` : ''}` : 'пустых слотов нет'}
+        </span>
       </div>
-      <span className="cp-muted">
-        тем: {topics.length} · свободных слотов: {fill.freeSlots}
-        {nextSlot ? ` · ближайший ${shortDate(nextSlot)}` : ''}
-      </span>
-      <textarea
-        className="nr-field"
-        rows={2}
-        placeholder="Темы, по одной на строку"
-        aria-label={`Новые темы: ${title}`}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && add()}
-      />
-      <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={add} disabled={!text.trim()}>
-        Добавить
-      </button>
-      <div className="cp-list">
+      <div className="cp-bank__add">
+        <textarea
+          className="nr-field"
+          rows={2}
+          placeholder="Новые темы, по одной на строку"
+          aria-label={`Новые темы: ${title}`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && add()}
+        />
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={add} disabled={!text.trim()}>
+          Добавить
+        </button>
+      </div>
+      <div className="cp-list cp-bank__topics">
         {topics.map((t) => (
           <Topic
             key={t.id}
@@ -138,11 +154,13 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
             }}
           />
         ))}
+        {topics.length === 0 && <p className="cp-hint">Тем пока нет.</p>}
       </div>
       {topics.length > 0 && (
         <button
           type="button"
           className="nr-btn nr-btn--primary nr-btn--sm"
+          style={{ alignSelf: 'flex-start' }}
           disabled={!fill.freeSlots}
           onClick={() => {
             const pairs = fill.pairs.map((p) => ({ id: p.slot.id, title: p.bank.title, date: p.slot.date! }))

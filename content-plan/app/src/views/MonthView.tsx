@@ -1,8 +1,7 @@
-import type { CSSProperties } from 'react'
 import { addDays, addMonths, monthKey, monthTitle, SAT, shortDate, today, WEEKDAYS, weekday } from '../model/dates'
 import { isSlot, type ISODate } from '../model/types'
 import type { Unit } from '../model/units'
-import { ChannelDot, IconButton, UnitCard, useDrop } from '../ui/bits'
+import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { useInfinite } from '../ui/infinite'
 import { DateJump, TopBar } from '../ui/TopBar'
@@ -78,26 +77,25 @@ export function missingOf(units: Unit[], rubricName: (id: string | null) => stri
   return names
 }
 
+/** «2 без темы» — тихо, рубрики — в подсказке. */
 export function SlotsTag({ units }: { units: Unit[] }) {
   const { rubrics } = usePlan()
   const names = missingOf(units, (id) => rubrics.get(id ?? '')?.name ?? 'без рубрики')
   const n = units.filter((u) => isSlot(u.head)).length
   if (!n) return null
-  const text = names.length === 1 ? `без темы: ${names[0]}` : `${n} без темы`
   return (
-    <span className="nr-tag nr-tag--warn" title={`Нужна тема: ${names.join(', ')}`}>
-      {text}
+    <span className="cp-slots" title={`Нужна тема: ${names.join(', ')}`}>
+      {n} без темы
     </span>
   )
 }
 
 function MonthDay({ date, current }: { date: ISODate; current: boolean }) {
-  const { plan, unitsOn, rules, channels, violByDate, openDay, openDayId, dropOn } = usePlan()
+  const { plan, unitsOn, rules, violByDate, openDay, openDayId, dropOn } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const units = unitsOn(date)
   const fulls = units.filter((u) => rules.get(u.head.ruleId)?.full && !u.head.derive)
-  const counts = new Map<string, number>()
-  for (const u of units) counts.set(u.channelId, (counts.get(u.channelId) ?? 0) + 1)
+  const others = units.filter((u) => !fulls.includes(u))
   const viol = violByDate.get(date)?.length ?? 0
   const inPlan = date >= plan.start && date <= plan.end
   const day = Number(date.slice(8))
@@ -106,7 +104,6 @@ function MonthDay({ date, current }: { date: ISODate; current: boolean }) {
     weekday(date) === SAT && 'cp-day--rest',
     !current && 'cp-day--other',
     !inPlan && 'cp-day--out',
-    Number(date.slice(5, 7)) % 2 === 0 && 'cp-day--even',
     date === today() && 'cp-day--today',
     drop.over && 'cp-day--drop',
     openDayId === date && 'cp-day--open',
@@ -127,28 +124,16 @@ function MonthDay({ date, current }: { date: ISODate; current: boolean }) {
         >
           {day === 1 ? shortDate(date) : day}
         </button>
-        {weekday(date) === SAT && inPlan && <span className="nr-tag nr-tag--rest">отдых</span>}
-        <SlotsTag units={units} />
         {viol > 0 && <span className="cp-viol" title={`Нарушений: ${viol}`} aria-label={`Нарушений: ${viol}`} role="img" />}
       </div>
       {fulls.map((u) => (
         <UnitCard key={u.key} unit={u} variant="mini" showTime={false} />
       ))}
-      {fulls.map((u) => (
-        <span key={`m-${u.key}`} className="cp-day__mark" style={{ '--cp-c': channels.get(u.channelId)?.color } as CSSProperties} aria-hidden="true" />
-      ))}
-      {units.length > 0 && (
-        <div className="cp-day__counts" aria-label="Материалов по каналам">
-          {[...counts].map(([cid, n]) => {
-            const c = channels.get(cid)
-            return (
-              <span key={cid} title={c?.name}>
-                <ChannelDot color={c?.color ?? '#999'} />
-                {n}
-              </span>
-            )
-          })}
-        </div>
+      {others.length > 0 && (
+        <span className="cp-day__more">
+          ещё {others.length}
+          <SlotsTag units={others} />
+        </span>
       )}
     </div>
   )

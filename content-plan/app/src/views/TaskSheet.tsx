@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { dayTitle, shortDate } from '../model/dates'
-import { isSlot, statusOf, timeOf, titleIsFormat, type Item } from '../model/types'
+import { shortDate, WEEKDAYS, weekday } from '../model/dates'
+import { isSlot, timeOf, titleIsFormat, type Item } from '../model/types'
 import { dueOf, leadOf, taskParts, unitsOf, type Unit } from '../model/units'
-import { IconButton, PlatformIcon, RubricChip, StatusPicker } from '../ui/bits'
+import { IconButton, mainChannelId, PickText, PlatformIcon, RubricChip, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
-/** Задача по созданию контента: что сделать на каждой площадке, к какому дню, кто делает.
+/** Задача по созданию контента: тема, что сделать на каждой площадке; ниже строкой — когда выход, к какому дню, кто делает.
  *  Открывается по ▶. Правки сохраняются сразу, каждая — шаг истории. */
 export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => void; onBack?: () => void }) {
   const { plan, byDate, dispatch, rules, rubrics, channels, openItem, setStatus, toast } = usePlan()
@@ -14,6 +14,7 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
   const [title, setTitle] = useState(head && !isSlot(head) ? head.title : '')
   const [owner, setOwner] = useState(head?.owner ?? '')
   const [note, setNote] = useState(head?.note ?? '')
+  const [noteOpen, setNoteOpen] = useState(!!head?.note)
   // текст сохраняется, когда поле теряет фокус; если лист закрыли раньше — при закрытии
   const latest = useRef({ head, title, owner, note })
   latest.current = { head, title, owner, note }
@@ -40,9 +41,9 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
   const format = rule && rule.name !== rubric?.name && !titleIsFormat(head.title, rule) ? rule.name : ''
   const parts = taskParts(unit, rules, plan.platforms)
   const done = new Set(unit.head.done ?? [])
-  const allDone = parts.length > 0 && parts.every((p) => done.has(p.key))
+  const doneN = parts.filter((p) => done.has(p.key)).length
+  const allDone = parts.length > 0 && doneN === parts.length
   const due = dueOf(head, rule)
-  const st = statusOf(head.status)
 
   const update = (patch: Partial<Item>) => dispatch({ type: 'update', id: head.id, patch })
   const toggle = (key: string) => update({ done: done.has(key) ? [...done].filter((k) => k !== key) : [...done, key] })
@@ -51,44 +52,33 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
     if (t && t !== head.title) update({ title: t, source: head.source === 'нужна тема' ? 'вручную' : head.source })
     if (!t && !isSlot(head)) setTitle(head.title)
   }
+  const day = (d: string) => `${WEEKDAYS[weekday(d)]}, ${shortDate(d)}`
 
   return (
     <aside className="cp-sheet cp-task" aria-label="Задача" style={{ '--cp-c': channel?.color } as CSSProperties}>
       <div className="cp-sheet__head">
         {onBack && <IconButton icon="chev-left" label="Назад к дню" onClick={onBack} size="sm" />}
-        <h2 className="cp-sheet__title">Задача · {st.label.toLowerCase()}</h2>
+        <input
+          className="cp-task__title"
+          aria-label="Тема"
+          value={title}
+          placeholder="Нужна тема"
+          autoFocus={isSlot(head)}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        />
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
       <div className="cp-sheet__body nr-scroll">
-        <div className="cp-task__what">
-          <span className="cp-card__rub">
-            {rubric && <RubricChip name={rubric.name} />}
-            {format && <span className="cp-card__fmt">{format}</span>}
-            <span className="cp-ch" style={{ marginLeft: 'auto' }}>
-              <span className="nr-dot" style={{ background: channel?.color }} aria-hidden="true" />
-              {channel?.name}
-            </span>
-          </span>
-          <label className="cp-field">
-            <span className="nr-label">Тема</span>
-            <input
-              className="nr-field cp-task__title"
-              value={title}
-              placeholder={isSlot(head) ? 'Нужна тема — впишите или возьмите из банка' : ''}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            />
-          </label>
-        </div>
+        <span className="cp-card__rub cp-task__label">
+          {rubric && <RubricChip name={rubric.name} />}
+          {format && <span className="cp-card__fmt">{format}</span>}
+          {unit.channelId !== mainChannelId(plan) && channel && !format.includes(channel.name) && <span className="cp-card__fmt">{channel.name}</span>}
+        </span>
 
         <div className="cp-field">
-          <span className="nr-label">Статус</span>
-          <StatusPicker value={head.status} onChange={(s) => setStatus(unit, s)} label="Статус задачи" />
-        </div>
-
-        <div className="cp-field">
-          <span className="nr-label">Что сделать · {done.size ? `${parts.filter((p) => done.has(p.key)).length} из ${parts.length}` : parts.length}</span>
+          <span className="nr-label">Что сделать · {doneN ? `${doneN} из ${parts.length}` : parts.length}</span>
           <div className="cp-task__parts">
             {parts.map((p) => (
               <label key={p.key} className={`cp-task__part${done.has(p.key) ? ' cp-task__part--done' : ''}`}>
@@ -98,7 +88,7 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
                 </span>
                 <PlatformIcon platform={p.platform} />
                 <span>
-                  <b>{p.platform}</b> — {p.type}
+                  {p.platform} — {p.type}
                 </span>
               </label>
             ))}
@@ -110,58 +100,67 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
           )}
         </div>
 
-        <div className="cp-field__row">
+        <div className="cp-task__when">
+          {head.date && (
+            <>
+              <PickText
+                type="date"
+                label="Дата выхода"
+                value={head.date}
+                text={day(head.date)}
+                onChange={(d) => {
+                  if (!d || !head.date || d === head.date) return
+                  dispatch({ type: 'move', id: head.id, date: d })
+                  toast(`Перенесено на ${shortDate(d)}${head.group ? ' вместе с группой' : ''}`, true)
+                }}
+              />
+              <PickText type="time" label="Время выхода" value={unit.time} text={unit.time} onChange={(t) => t && head.date && dispatch({ type: 'move', id: head.id, date: head.date, time: t })} />
+              <span className="cp-task__sep" aria-hidden="true">·</span>
+            </>
+          )}
+          <span className="cp-task__due" title={head.due ? undefined : `По умолчанию — за ${leadOf(rule)} дн. до выхода`}>
+            срок <PickText type="date" label="Подготовить к" value={due ?? ''} text={due ? shortDate(due) : ''} placeholder="—" onChange={(d) => update({ due: d || undefined })} />
+          </span>
+          <span className="cp-task__sep" aria-hidden="true">·</span>
+          <input
+            className="cp-inline"
+            aria-label="Кто делает"
+            placeholder="кто делает"
+            value={owner}
+            size={Math.max(10, owner.length + 1)}
+            onChange={(e) => setOwner(e.target.value)}
+            onBlur={() => owner.trim() !== (head.owner ?? '') && update({ owner: owner.trim() || undefined })}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        </div>
+
+        <div className="cp-task__status">
+          <span className="nr-label">Статус</span>
+          <StatusPicker size="sm" value={head.status} onChange={(s) => setStatus(unit, s)} label="Статус задачи" />
+        </div>
+
+        {noteOpen ? (
           <label className="cp-field">
-            <span className="nr-label">Выход · перенести на</span>
-            <input
+            <span className="nr-label">Заметка</span>
+            <textarea
               className="nr-field"
-              type="date"
-              value={head.date ?? ''}
-              onChange={(e) => {
-                if (!e.target.value || !head.date) return
-                dispatch({ type: 'move', id: head.id, date: e.target.value })
-                toast(`Перенесено на ${shortDate(e.target.value)}${head.group ? ' вместе с группой' : ''}`, true)
-              }}
+              rows={4}
+              value={note}
+              autoFocus={!head.note}
+              placeholder="Сценарий, ссылки, что учесть"
+              onChange={(e) => setNote(e.target.value)}
+              onBlur={() => note !== (head.note ?? '') && update({ note: note || undefined })}
             />
           </label>
-          <label className="cp-field">
-            <span className="nr-label">Время</span>
-            <input
-              className="nr-field"
-              type="time"
-              step={900}
-              value={unit.time}
-              onChange={(e) => e.target.value && head.date && dispatch({ type: 'move', id: head.id, date: head.date, time: e.target.value })}
-            />
-          </label>
-        </div>
-        {head.date && <span className="cp-hint">{dayTitle(head.date)}, {unit.time}</span>}
-
-        <div className="cp-field__row">
-          <label className="cp-field">
-            <span className="nr-label">Подготовить к</span>
-            <input className="nr-field" type="date" value={due ?? ''} onChange={(e) => update({ due: e.target.value || undefined })} />
-          </label>
-          <label className="cp-field">
-            <span className="nr-label">Кто делает</span>
-            <input className="nr-field" value={owner} placeholder="Имя" onChange={(e) => setOwner(e.target.value)} onBlur={() => owner.trim() !== (head.owner ?? '') && update({ owner: owner.trim() || undefined })} />
-          </label>
-        </div>
-        {!head.due && <span className="cp-hint">По умолчанию — за {leadOf(rule)} дн. до выхода{rule?.full ? ': FULL снимают заранее' : ''}.</span>}
-
-        <label className="cp-field">
-          <span className="nr-label">Заметка</span>
-          <textarea className="nr-field" rows={4} value={note} placeholder="Сценарий, ссылки, что учесть" onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (head.note ?? '') && update({ note: note || undefined })} />
-        </label>
+        ) : (
+          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-task__add" onClick={() => setNoteOpen(true)}>
+            <Icon name="plus" size={14} /> Заметка
+          </button>
+        )}
       </div>
       <div className="cp-sheet__foot">
-        <button type="button" className="nr-btn nr-btn--ghost" onClick={() => openItem(head.id)}>
-          <Icon name="list" size={16} />
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => openItem(head.id)}>
           Открыть материал
-        </button>
-        <span className="cp-top__spacer" />
-        <button type="button" className="nr-btn nr-btn--primary" onClick={onClose}>
-          Закрыть
         </button>
       </div>
     </aside>
