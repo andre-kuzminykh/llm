@@ -2,13 +2,13 @@ import { addDays, dayTitle } from '../model/dates'
 import { visible } from '../model/filters'
 import { KIND_LABEL } from '../model/rules'
 import type { ISODate, Item } from '../model/types'
-import { ChannelDot, IconButton, ItemCard, useDrop } from '../ui/bits'
+import { ChannelDot, IconButton, ItemCard, StatusPicker, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
 /** Все материалы дня по каналам; сюда можно бросить материал или тему из банка. */
 export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void }) {
-  const { plan, byDate, filters, channels, violByDate, openDay, openNew, dropOn } = usePlan()
+  const { plan, byDate, filters, channels, violByDate, openDay, openNew, dropOn, dispatch, labelOf } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const all = byDate.get(date) ?? []
   const items = all.filter((it) => visible(it, filters))
@@ -45,7 +45,10 @@ export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void
                 <span className="cp-muted" style={{ fontWeight: 500 }}>{list.length}</span>
               </div>
               {list.map((it) => (
-                <ItemCard key={it.id} item={it} />
+                <div key={it.id} className="cp-day-item">
+                  <ItemCard item={it} />
+                  <StatusPicker size="sm" label={`Статус: ${labelOf(it)}: ${it.title}`} value={it.status} onChange={(status) => dispatch({ type: 'update', id: it.id, patch: { status } })} />
+                </div>
               ))}
             </section>
           )

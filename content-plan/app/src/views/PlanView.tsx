@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { addDays, addMonths, clampDate, dayTitle, monthKey, monthTitle, today } from '../model/dates'
 import { visible } from '../model/filters'
-import { isSlot, STATUSES, type ISODate, type Item, type Status } from '../model/types'
-import { ChannelDot, IconButton, Platforms } from '../ui/bits'
+import { isSlot, type ISODate, type Item } from '../model/types'
+import { ChannelDot, IconButton, Platforms, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { TopBar } from '../ui/TopBar'
 
@@ -88,16 +88,7 @@ function PlanRow({ item }: { item: Item }) {
         {item.title}
       </button>
       <Platforms list={item.platforms} />
-      <select
-        className="nr-field nr-field--sm"
-        aria-label={`Статус: ${item.title}`}
-        value={item.status}
-        onChange={(e) => dispatch({ type: 'update', id: item.id, patch: { status: e.target.value as Status } })}
-      >
-        {STATUSES.map((s) => (
-          <option key={s.id} value={s.id}>{s.label}</option>
-        ))}
-      </select>
+      <StatusPicker size="sm" label={`Статус: ${labelOf(item)}: ${item.title}`} value={item.status} onChange={(status) => dispatch({ type: 'update', id: item.id, patch: { status } })} />
     </div>
   )
 }

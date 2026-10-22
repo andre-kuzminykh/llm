@@ -47,4 +47,31 @@ describe('T-CP-005 FR-CP-005 форма материала', () => {
     await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
     expect(within(form).getByRole('alert')).toHaveTextContent('Выберите хотя бы одну площадку')
   })
+
+  it('статус ставится значком в форме; без значка — в плане', async () => {
+    renderApp()
+    await userEvent.click(await screen.findByRole('button', { name: /Демо · FULL: Демо \/ Стратегия/ }))
+    const form = screen.getByRole('complementary', { name: 'Материал' })
+    expect(within(form).queryByRole('combobox', { name: /Статус/ })).toBeNull()
+    await userEvent.click(within(within(form).getByRole('group', { name: 'Статус' })).getByRole('button', { name: 'Готово' }))
+    await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
+    const card = screen.getByRole('button', { name: /Демо \/ Стратегия — готово/ })
+    expect(within(card).getByRole('img', { name: 'Готово' })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-016 FR-CP-016 статус значком в панели дня', () => {
+  it('нажали ▶ — в работе, нажали ещё раз — снова в плане', async () => {
+    renderApp()
+    await userEvent.click(await screen.findByRole('button', { name: 'Открыть день 2026-10-26' }))
+    const panel = screen.getByRole('complementary', { name: /26 октября 2026/ })
+    const picker = within(panel).getByRole('group', { name: 'Статус: Демо · FULL: Демо / Стратегия' })
+    const play = within(picker).getByRole('button', { name: 'В работе' })
+    await userEvent.click(play)
+    expect(play).toHaveAttribute('aria-pressed', 'true')
+    expect(within(day('2026-10-26')).getByRole('img', { name: 'В работе' })).toBeInTheDocument()
+    await userEvent.click(play)
+    expect(play).toHaveAttribute('aria-pressed', 'false')
+    expect(within(day('2026-10-26')).queryByRole('img', { name: 'В работе' })).toBeNull()
+  })
 })

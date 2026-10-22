@@ -42,6 +42,11 @@ await page.keyboard.press('Control+z')
 await page.getByRole('button', { name: 'Открыть день 2026-11-09' }).click()
 await page.getByRole('complementary', { name: /9 ноября 2026/ }).waitFor()
 await page.waitForTimeout(400) // лист выезжает 320 мс
+// статус значком: ▶ в панели дня → значок на карточке месяца; ещё раз — снова в плане
+const dayPanel = page.getByRole('complementary', { name: /9 ноября 2026/ })
+await dayPanel.getByRole('group', { name: 'Статус: Демо · FULL: Демо / Neuronium' }).getByRole('button', { name: 'В работе' }).click()
+await dayPanel.getByRole('group', { name: 'Статус: Демо · Тизер FULL: Тизер: Демо / Neuronium' }).getByRole('button', { name: 'Готово' }).click()
+;(await page.locator('[data-date="2026-11-09"] .cp-card').getByRole('img', { name: 'В работе' }).count()) ? ok('статус ▶ на карточке') : fail('нет значка статуса')
 await page.screenshot({ path: `${SHOTS}/3-day.png` })
 ok('панель дня')
 
@@ -68,6 +73,12 @@ await page.getByRole('region', { name: 'Банк: Демо', exact: true }).getB
 const toast = await page.getByRole('status').filter({ hasText: 'Разложено' }).textContent()
 toast?.includes('Разложено: 2') ? ok(`банк тем: ${toast.replace('Отменить', '').trim()}`) : fail(`банк: ${toast}`)
 await page.screenshot({ path: `${SHOTS}/6-bank.png` })
+
+// план: статус значками в строке, без выпадающего списка
+await page.getByRole('button', { name: 'План', exact: true }).click()
+await page.getByRole('button', { name: 'Следующий месяц' }).click()
+;(await page.locator('.cp-plan select').count()) ? fail('в плане остался выпадающий список статуса') : ok('план: статус значками')
+await page.screenshot({ path: `${SHOTS}/6b-plan.png` })
 
 // сетка
 await page.getByRole('button', { name: 'Сетка', exact: true }).click()

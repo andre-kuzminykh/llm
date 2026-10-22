@@ -46,7 +46,7 @@ export interface Rule {
   pattern?: string // заголовок из темы: «Демо / {topic}»
 }
 
-export type Status = 'planned' | 'progress' | 'ready' | 'published'
+export type Status = 'planned' | 'progress' | 'paused' | 'ready' | 'published'
 
 export interface Item {
   id: string
@@ -78,12 +78,15 @@ export interface Plan {
   items: Item[]
 }
 
-export const STATUSES: { id: Status; label: string }[] = [
-  { id: 'planned', label: 'План' },
-  { id: 'progress', label: 'В работе' },
-  { id: 'ready', label: 'Готово' },
-  { id: 'published', label: 'Вышло' },
+/** Статус показывается значком; «в плане» — без значка. Подпись — для подсказки и экранного диктора. */
+export const STATUSES: { id: Status; label: string; icon?: string }[] = [
+  { id: 'planned', label: 'В плане' },
+  { id: 'progress', label: 'В работе', icon: 'play' },
+  { id: 'paused', label: 'На паузе', icon: 'pause' },
+  { id: 'ready', label: 'Готово', icon: 'check' },
+  { id: 'published', label: 'Вышло', icon: 'published' },
 ]
+export const statusOf = (id: Status) => STATUSES.find((s) => s.id === id) ?? STATUSES[0]
 
 export const PLACEHOLDER = '…'
 export const SPREAD = 'С каждым FULL'

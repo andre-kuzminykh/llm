@@ -61,6 +61,16 @@ const P: Record<string, ReactElement> = {
   more: <path d="M5.5 12h.01M12 12h.01M18.5 12h.01" />,
   arrow: <path d="M5 12h14M13 6l6 6-6 6" />,
   spark: <path d="M12 3.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z" />,
+  // статусы материала: заливка, чтобы читались в 12 px
+  play: <path d="M8.5 6.3v11.4a1 1 0 0 0 1.5.86l9.3-5.7a1 1 0 0 0 0-1.72L10 5.44a1 1 0 0 0-1.5.86z" fill="currentColor" />,
+  pause: <path d="M8.5 6.5v11M15.5 6.5v11" strokeWidth={3.5} />,
+  check: <path d="M5 12.5l4.5 4.5L19 7.5" strokeWidth={2.5} />,
+  published: (
+    <>
+      <circle cx="12" cy="12" r="9" fill="currentColor" stroke="none" />
+      <path d="M7.8 12.3l2.9 2.9 5.5-5.6" strokeWidth={2.25} style={{ stroke: 'var(--nr-surface, #fff)' }} />
+    </>
+  ),
   today: (
     <>
       <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />

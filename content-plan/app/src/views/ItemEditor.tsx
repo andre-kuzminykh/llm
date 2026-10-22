@@ -1,8 +1,8 @@
 import { useId, useMemo, useState } from 'react'
 import { dayTitle } from '../model/dates'
 import { newId, slotTitle } from '../model/store'
-import { isSlot, STATUSES, type Item, type Rule, type Status } from '../model/types'
-import { IconButton, Seg, Switch } from '../ui/bits'
+import { isSlot, type Item, type Rule, type Status } from '../model/types'
+import { IconButton, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
@@ -210,7 +210,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
 
         <div className="cp-field">
           <span className="nr-label">Статус</span>
-          <Seg value={status} onChange={setStatus} label="Статус" options={STATUSES} />
+          <StatusPicker value={status} onChange={setStatus} />
+          <span className="cp-hint">Без значка — в плане. Нажмите значок ещё раз, чтобы снять.</span>
         </div>
 
         <label className="cp-field">

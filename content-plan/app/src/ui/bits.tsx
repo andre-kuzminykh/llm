@@ -1,6 +1,6 @@
 // Мелкие общие части: карточка материала, площадки, переключатели, перетаскивание.
 import { useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
-import { isSlot, STATUSES, type Item, type Status } from '../model/types'
+import { isSlot, STATUSES, statusOf, type Item, type Status } from '../model/types'
 import { usePlan, type Drag } from './ctx'
 import { Icon } from './Icon'
 
@@ -54,9 +54,36 @@ export function ChannelDot({ color }: { color: string }) {
   return <span className="nr-dot" style={{ background: color }} aria-hidden="true" />
 }
 
-export function StatusDot({ status }: { status: Status }) {
-  const label = STATUSES.find((s) => s.id === status)?.label ?? status
-  return <span className={`cp-status cp-status--${status}`} title={label} aria-label={label} role="img" />
+/** Статус значком: ▶ в работе, ⏸ на паузе, ✓ готово, ● вышло; «в плане» — без значка. */
+export function StatusIcon({ status }: { status: Status }) {
+  const s = statusOf(status)
+  if (!s.icon) return null
+  return (
+    <span className={`cp-st cp-st--${s.id}`} title={s.label} aria-label={s.label} role="img">
+      <Icon name={s.icon} size={12} />
+    </span>
+  )
+}
+
+/** Статус кнопками-значками: нажали — поставили, нажали ещё раз — снова в плане. */
+export function StatusPicker({ value, onChange, label = 'Статус', size = 'md' }: { value: Status; onChange: (v: Status) => void; label?: string; size?: 'sm' | 'md' }) {
+  return (
+    <div className={`cp-stp cp-stp--${size}`} role="group" aria-label={label}>
+      {STATUSES.filter((s) => s.icon).map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          className={`cp-stp__btn cp-st--${s.id}`}
+          aria-pressed={value === s.id}
+          aria-label={s.label}
+          title={value === s.id ? `${s.label} · нажмите ещё раз, чтобы вернуть в план` : s.label}
+          onClick={() => onChange(value === s.id ? 'planned' : s.id)}
+        >
+          <Icon name={s.icon!} size={size === 'sm' ? 14 : 18} />
+        </button>
+      ))}
+    </div>
+  )
 }
 
 export function Platforms({ list }: { list: string[] }) {
@@ -95,11 +122,11 @@ export function ItemCard({ item, compact = false, showRubric = true }: { item: I
         e.stopPropagation()
         openItem(item.id)
       }}
-      aria-label={`${label}: ${item.title}${slot ? ' — нужна тема' : ''}`}
+      aria-label={`${label}: ${item.title}${slot ? ' — нужна тема' : ''}${item.status !== 'planned' ? ` — ${statusOf(item.status).label.toLowerCase()}` : ''}`}
     >
       {showRubric && (
         <span className="cp-card__rub">
-          <StatusDot status={item.status} />
+          <StatusIcon status={item.status} />
           {label}
         </span>
       )}
