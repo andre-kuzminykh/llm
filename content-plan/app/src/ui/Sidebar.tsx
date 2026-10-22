@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { bankOf } from '../model/store'
 import { bankRules, bankTitle } from '../views/BankView'
-import { ChannelDot, startDrag, Switch } from './bits'
+import { ChannelDot, IconButton, startDrag, Switch } from './bits'
 import { usePlan } from './ctx'
 
 /** Боковая панель календаря: фильтры и банк тем под рукой — темы тянутся на день. */
-export function Sidebar({ open, withBank }: { open: boolean; withBank: boolean }) {
+export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: boolean; onClose: () => void }) {
   const { plan, filters, setFilters, goto } = usePlan()
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   const bank = bankRules(plan)
@@ -13,6 +13,9 @@ export function Sidebar({ open, withBank }: { open: boolean; withBank: boolean }
   const topics = ruleId ? bankOf(plan, ruleId) : []
   return (
     <aside className="cp-side nr-scroll" data-open={open} aria-label="Фильтры и банк тем">
+      <div className="cp-only-phone" style={{ justifyContent: 'flex-end', marginBottom: -12 }}>
+        <IconButton icon="close" label="Закрыть фильтры" onClick={onClose} />
+      </div>
       <div className="cp-side__block">
         <span className="nr-label">Каналы</span>
         {plan.channels.map((c) => (

@@ -208,6 +208,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
       if (e.key === 'Escape') {
         setMenu(false)
+        setSideOpen(false)
         setSheet((s) => (s && s.kind !== 'day' && s.back ? { kind: 'day', date: s.back } : null))
       }
       if (typing || !(e.metaKey || e.ctrlKey)) return
@@ -282,7 +283,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           </button>
           {menu && <DataMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} />}
         </nav>
-        {withSide && <Sidebar open={sideOpen} withBank={view !== 'plan'} />}
+        {withSide && sideOpen && <div className="cp-scrim cp-only-phone" onClick={() => setSideOpen(false)} aria-hidden="true" />}
+        {withSide && <Sidebar open={sideOpen} withBank={view !== 'plan'} onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
           {view === 'month' && <MonthView />}
           {view === 'week' && <WeekView />}
