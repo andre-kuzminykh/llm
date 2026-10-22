@@ -46,7 +46,7 @@ await page.screenshot({ path: `${SHOTS}/3-day.png` })
 ok('панель дня')
 
 // форма материала из панели дня
-await page.getByRole('complementary', { name: /9 ноября 2026/ }).getByRole('button', { name: /FULL: Демо: Демо \/ Neuronium/ }).click()
+await page.getByRole('complementary', { name: /9 ноября 2026/ }).getByRole('button', { name: /Демо · FULL: Демо \/ Neuronium/ }).click()
 await page.getByRole('complementary', { name: 'Материал' }).waitFor()
 await page.waitForTimeout(400) // лист выезжает 320 мс
 await page.screenshot({ path: `${SHOTS}/4-editor.png` })
@@ -62,9 +62,9 @@ ok('неделя')
 
 // банк тем: добавить и разложить по слотам
 await page.getByRole('button', { name: 'Банк тем', exact: true }).click()
-await page.getByLabel('Новые темы: FULL: Демо', { exact: true }).fill('Агент продаж\nИИ-бухгалтер')
-await page.getByRole('region', { name: 'Банк: FULL: Демо', exact: true }).getByRole('button', { name: 'Добавить' }).click()
-await page.getByRole('region', { name: 'Банк: FULL: Демо', exact: true }).getByRole('button', { name: 'Разложить по слотам' }).click()
+await page.getByLabel('Новые темы: Демо', { exact: true }).fill('Агент продаж\nИИ-бухгалтер')
+await page.getByRole('region', { name: 'Банк: Демо', exact: true }).getByRole('button', { name: 'Добавить' }).click()
+await page.getByRole('region', { name: 'Банк: Демо', exact: true }).getByRole('button', { name: 'Разложить по слотам' }).click()
 const toast = await page.getByRole('status').filter({ hasText: 'Разложено' }).textContent()
 toast?.includes('Разложено: 2') ? ok(`банк тем: ${toast.replace('Отменить', '').trim()}`) : fail(`банк: ${toast}`)
 await page.screenshot({ path: `${SHOTS}/6-bank.png` })
@@ -73,6 +73,7 @@ await page.screenshot({ path: `${SHOTS}/6-bank.png` })
 await page.getByRole('button', { name: 'Сетка', exact: true }).click()
 await page.getByRole('heading', { name: 'Типовая неделя' }).waitFor()
 await page.screenshot({ path: `${SHOTS}/7-rules.png` })
+;(await page.getByLabel('Формат: Академия · FULL').count()) ? ok('сетка: рубрика Академия, формат FULL') : fail('нет формата FULL у Академии')
 ok('сетка')
 
 // тёмная тема

@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { dayTitle } from '../model/dates'
 import { newId, slotTitle } from '../model/store'
-import { isSlot, STATUSES, type Item, type Status } from '../model/types'
+import { isSlot, STATUSES, type Item, type Rule, type Status } from '../model/types'
 import { IconButton, Seg, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
@@ -15,23 +15,30 @@ interface Props {
 
 /** Форма материала: новый или существующий. Сохранение — один шаг истории. */
 export function ItemEditor({ id, draft, onClose, onBack }: Props) {
-  const { plan, dispatch, rubrics, channels, toast } = usePlan()
+  const { plan, dispatch, rubrics, rules, channels, toast } = usePlan()
   const existing = id ? plan.items.find((x) => x.id === id) : undefined
   const base: Partial<Item> = existing ?? draft ?? {}
-  // по умолчанию — канал, у которого больше всего рубрик (Dataist)
-  const busiest = [...plan.channels].sort((a, b) => plan.rubrics.filter((r) => r.channelId === b.id).length - plan.rubrics.filter((r) => r.channelId === a.id).length)[0]
-  const firstChannel = base.channelId ?? busiest?.id ?? plan.channels[0].id
   const titleId = useId()
-  const rubricsOf = (cid: string, sid?: string) =>
-    plan.rubrics.filter((r) => r.channelId === cid && (sid === undefined || !r.sectionId || r.sectionId === sid))
-  const firstRubric = base.rubricId ?? rubricsOf(firstChannel, base.sectionId)[0]?.id ?? plan.rubrics[0].id
+
+  // форматы канала для рубрики: свои форматы рубрики и общие, которые выходят с любым FULL
+  const rulesFor = (cid: string, rb: string | null) =>
+    plan.rules.filter((r) => r.channelId === cid && (r.rubricId === rb || r.rubricId === null))
+      .sort((x, y) => Number(x.rubricId === null) - Number(y.rubricId === null))
+  const rubricsFor = (cid: string, keep?: string | null) =>
+    plan.rubrics.filter((rb) => rb.id === keep || plan.rules.some((r) => r.channelId === cid && r.rubricId === rb.id))
+  // по умолчанию — канал, у которого больше всего форматов (Dataist)
+  const busiest = [...plan.channels].sort((x, y) => plan.rules.filter((r) => r.channelId === y.id).length - plan.rules.filter((r) => r.channelId === x.id).length)[0]
+  const firstChannel = base.channelId ?? busiest?.id ?? plan.channels[0].id
+  const firstRule = base.ruleId ?? rulesFor(firstChannel, base.rubricId ?? rubricsFor(firstChannel)[0]?.id ?? null)[0]?.id ?? plan.rules[0].id
+  const firstRubric = base.rubricId !== undefined ? base.rubricId : rules.get(firstRule)?.rubricId ?? null
 
   const [title, setTitle] = useState(base.title ?? '')
   const [date, setDate] = useState(base.date ?? '')
   const [channelId, setChannelId] = useState(firstChannel)
-  const [sectionId, setSectionId] = useState<string | undefined>(base.sectionId ?? rubrics.get(firstRubric)?.sectionId)
-  const [rubricId, setRubricId] = useState(firstRubric)
-  const [platforms, setPlatforms] = useState<string[]>(base.platforms ?? rubrics.get(firstRubric)?.platforms ?? [])
+  const [rubricId, setRubricId] = useState<string | null>(firstRubric)
+  const [ruleId, setRuleId] = useState(firstRule)
+  const [sectionId, setSectionId] = useState<string | undefined>(base.sectionId ?? rules.get(firstRule)?.sectionId)
+  const [platforms, setPlatforms] = useState<string[]>(base.platforms ?? rules.get(firstRule)?.platforms ?? [])
   const [status, setStatus] = useState<Status>(base.status ?? 'planned')
   const [note, setNote] = useState(base.note ?? '')
   const [withGroup, setWithGroup] = useState(true)
@@ -39,36 +46,43 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [error, setError] = useState('')
 
   const channel = channels.get(channelId)
-  const rubric = rubrics.get(rubricId)
+  const rule = rules.get(ruleId)
+  const rubric = rubricId ? rubrics.get(rubricId) : undefined
   const members = useMemo(
     () => (existing?.group && existing.date ? plan.items.filter((x) => x.group === existing.group && x.date === existing.date && x.id !== existing.id) : []),
     [plan.items, existing],
   )
   const isHead = !!existing && !existing.derive && members.some((m) => m.derive)
   const isBank = !!existing && existing.date === null
+  const fromFull = !!existing?.derive // рубрика берётся у FULL группы
 
+  const takeRule = (r: Rule | undefined) => {
+    setRuleId(r?.id ?? '')
+    if (r?.sectionId) setSectionId(r.sectionId)
+    if (!existing && r) setPlatforms(r.platforms)
+  }
   const pickChannel = (cid: string) => {
     setChannelId(cid)
-    const c = channels.get(cid)
-    const r = rubricsOf(cid)[0]
+    const rb = rubricsFor(cid)[0]?.id ?? null
+    setRubricId(rb)
+    const r = rulesFor(cid, rb)[0]
     setSectionId(r?.sectionId)
-    setRubricId(r?.id ?? '')
+    takeRule(r)
+    const c = channels.get(cid)
     setPlatforms((r?.platforms ?? c?.platforms ?? []).filter((p) => c?.platforms.includes(p)))
   }
-  const pickRubric = (rid: string) => {
-    setRubricId(rid)
-    const r = rubrics.get(rid)
-    if (r?.sectionId) setSectionId(r.sectionId)
-    if (!existing) setPlatforms(r?.platforms ?? [])
+  const pickRubric = (rb: string) => {
+    setRubricId(rb)
+    if (rule?.rubricId !== null) takeRule(rulesFor(channelId, rb)[0])
   }
   const togglePlatform = (p: string) => setPlatforms((list) => (list.includes(p) ? list.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || list.includes(x))))
 
   const save = () => {
-    const t = title.trim() || (rubric ? slotTitle(rubric) : '')
+    const t = title.trim() || (rule ? slotTitle(rule, rubric) : '')
     if (!t) return setError('Нужен заголовок')
     if (!platforms.length) return setError('Выберите хотя бы одну площадку')
-    if (!rubric) return setError('Выберите рубрику')
-    const patch: Partial<Item> = { title: t, channelId, sectionId, rubricId, platforms, status, note: note || undefined, format: existing?.format ?? rubric.format }
+    if (!rule) return setError('Выберите формат')
+    const patch: Partial<Item> = { title: t, channelId, sectionId, ruleId, rubricId, platforms, status, note: note || undefined, format: existing?.format ?? rule.format }
     if (existing && isBank && date) {
       dispatch({ type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } })
       dispatch({ type: 'assign', bankId: existing.id, date })
@@ -77,15 +91,16 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       dispatch({ type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup })
       toast('Сохранено', true)
     } else {
-      const sample = plan.items.find((x) => x.rubricId === rubricId && x.date && !x.derive)
+      const sample = plan.items.find((x) => x.ruleId === ruleId && x.date && !x.derive)
       const item: Item = {
         id: newId(),
         date: date || null,
         channelId,
         sectionId,
+        ruleId,
         rubricId,
         title: t,
-        format: rubric.format,
+        format: rule.format,
         platforms,
         status,
         source: date ? 'вручную' : 'банк тем',
@@ -122,7 +137,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             rows={2}
             value={title}
             autoFocus={!existing}
-            placeholder={rubric ? slotTitle(rubric) : ''}
+            placeholder={rule ? slotTitle(rule, rubric) : ''}
             onChange={(e) => setTitle(e.target.value)}
           />
           {existing && isSlot(existing) && <span className="cp-hint">Тема не задана: впишите её вместо «…» или возьмите из банка тем.</span>}
@@ -143,31 +158,40 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             </select>
           </label>
         </div>
-        {!date && !existing && <span className="cp-hint">Без даты материал попадёт в банк тем рубрики.</span>}
+        {!date && !existing && <span className="cp-hint">Без даты материал попадёт в банк тем.</span>}
         {date && <span className="cp-hint">{dayTitle(date)}</span>}
 
         <div className="cp-field__row">
           <label className="cp-field">
             <span className="nr-label">Рубрика</span>
-            <select className="nr-field" value={rubricId} onChange={(e) => pickRubric(e.target.value)}>
-              {rubricsOf(channelId).map((r) => (
+            <select className="nr-field" value={rubricId ?? ''} onChange={(e) => pickRubric(e.target.value)} disabled={fromFull}>
+              {rubricsFor(channelId, rubricId).map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </select>
           </label>
-          {channel && channel.sections.length > 0 && (
-            <label className="cp-field">
-              <span className="nr-label">Раздел</span>
-              <select className="nr-field" value={sectionId ?? ''} onChange={(e) => setSectionId(e.target.value || undefined)}>
-                <option value="">—</option>
-                {channel.sections.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
+          <label className="cp-field">
+            <span className="nr-label">Формат</span>
+            <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
+              {rulesFor(channelId, rubricId).map((r) => (
+                <option key={r.id} value={r.id}>{r.rubricId ? r.name : `${r.name} (с FULL)`}</option>
+              ))}
+            </select>
+          </label>
         </div>
-        {rubric?.what && <p className="cp-hint">{rubric.what}</p>}
+        {fromFull && <p className="cp-hint">Рубрика — как у FULL этой группы.</p>}
+        {(rubric?.what || rule?.what) && <p className="cp-hint">{[rubric?.what, rule?.what].filter(Boolean).join(' · ')}</p>}
+        {channel && channel.sections.length > 0 && (
+          <label className="cp-field">
+            <span className="nr-label">Раздел</span>
+            <select className="nr-field" value={sectionId ?? ''} onChange={(e) => setSectionId(e.target.value || undefined)}>
+              <option value="">—</option>
+              {channel.sections.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className="cp-field">
           <span className="nr-label">Площадки</span>
@@ -197,7 +221,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         {members.length > 0 && (
           <div className="cp-field">
             <span className="nr-label">Группа · {members.length + 1}</span>
-            <p className="cp-hint">{members.map((m) => rubrics.get(m.rubricId)?.name ?? m.rubricId).join(' · ')}</p>
+            <p className="cp-hint">{members.map((m) => rules.get(m.ruleId)?.name ?? m.ruleId).join(' · ')}</p>
             <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
           </div>
         )}

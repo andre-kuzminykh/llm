@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { bankOf } from '../model/store'
-import { bankRubrics } from '../views/BankView'
+import { bankRules, bankTitle } from '../views/BankView'
 import { ChannelDot, startDrag, Switch } from './bits'
 import { usePlan } from './ctx'
 
@@ -8,9 +8,9 @@ import { usePlan } from './ctx'
 export function Sidebar({ open, withBank }: { open: boolean; withBank: boolean }) {
   const { plan, filters, setFilters, goto } = usePlan()
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
-  const rubrics = bankRubrics(plan.rubrics, plan.items)
-  const [rubricId, setRubricId] = useState(rubrics[0]?.id ?? '')
-  const topics = rubricId ? bankOf(plan, rubricId) : []
+  const bank = bankRules(plan)
+  const [ruleId, setRuleId] = useState(bank[0]?.id ?? '')
+  const topics = ruleId ? bankOf(plan, ruleId) : []
   return (
     <aside className="cp-side nr-scroll" data-open={open} aria-label="Фильтры и банк тем">
       <div className="cp-side__block">
@@ -48,19 +48,35 @@ export function Sidebar({ open, withBank }: { open: boolean; withBank: boolean }
       <div className="cp-side__block" style={{ padding: '0 6px' }}>
         <span className="nr-label" style={{ padding: '0 4px 4px' }}>Показывать</span>
         <Switch checked={!filters.hideAuto} onChange={(v) => setFilters({ ...filters, hideAuto: !v })}>
-          Ежедневные авто-рубрики
+          Ежедневные авто-публикации
         </Switch>
         <Switch checked={filters.onlySlots} onChange={(v) => setFilters({ ...filters, onlySlots: v })}>
           Только без темы
         </Switch>
       </div>
-      {withBank && rubrics.length > 0 && (
+      <div className="cp-side__block">
+        <span className="nr-label">Рубрики</span>
+        <div className="cp-pills">
+          {plan.rubrics.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className="nr-pill"
+              aria-pressed={!filters.hiddenRubrics.includes(r.id)}
+              onClick={() => setFilters({ ...filters, hiddenRubrics: toggle(filters.hiddenRubrics, r.id) })}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      </div>
+      {withBank && bank.length > 0 && (
         <div className="cp-side__block" style={{ padding: '0 6px' }}>
           <span className="nr-label" style={{ padding: '0 4px 4px' }}>Банк тем</span>
-          <select className="nr-field nr-field--sm" aria-label="Рубрика банка" value={rubricId} onChange={(e) => setRubricId(e.target.value)}>
-            {rubrics.map((r) => (
+          <select className="nr-field nr-field--sm" aria-label="Рубрика банка" value={ruleId} onChange={(e) => setRuleId(e.target.value)}>
+            {bank.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name} · {bankOf(plan, r.id).length}
+                {bankTitle(plan, r)}{r.name !== 'FULL' ? ` · ${r.name}` : ''} · {bankOf(plan, r.id).length}
               </option>
             ))}
           </select>

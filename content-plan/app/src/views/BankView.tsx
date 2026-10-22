@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { clampDate, shortDate, today } from '../model/dates'
 import { bankOf, planFill } from '../model/store'
-import { isSlot, type Item, type Rubric } from '../model/types'
+import { isSlot, type Item, type Plan, type Rule } from '../model/types'
 import { ChannelDot, IconButton, startDrag, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { TopBar } from '../ui/TopBar'
 
-/** Рубрики, для которых есть смысл вести банк: темы собираются в заголовок или уже лежат в банке. */
-export const bankRubrics = (rubrics: Rubric[], items: Item[]) =>
-  rubrics.filter((r) => r.pattern || items.some((x) => x.date === null && x.rubricId === r.id))
+/** Форматы, для которых есть смысл вести банк: тема собирается в заголовок или уже лежит в банке. */
+export const bankRules = (plan: Plan) =>
+  plan.rules.filter((r) => r.pattern || plan.items.some((x: Item) => x.date === null && x.ruleId === r.id))
+
+/** Подпись банка — рубрика; формат — мелко, если у рубрики их несколько. */
+export const bankTitle = (plan: Plan, rule: Rule) => plan.rubrics.find((r) => r.id === rule.rubricId)?.name ?? rule.name
 
 export function BankView() {
   const { plan } = usePlan()
@@ -22,8 +25,8 @@ export function BankView() {
           тему можно и перетащить на день в календаре — из боковой панели.
         </p>
         <div className="cp-bank">
-          {bankRubrics(plan.rubrics, plan.items).map((r) => (
-            <BankColumn key={r.id} rubric={r} from={from} />
+          {bankRules(plan).map((r) => (
+            <BankColumn key={r.id} rule={r} from={from} />
           ))}
         </div>
       </div>
@@ -31,26 +34,28 @@ export function BankView() {
   )
 }
 
-function BankColumn({ rubric, from }: { rubric: Rubric; from: string }) {
+function BankColumn({ rule, from }: { rule: Rule; from: string }) {
   const { plan, dispatch, channels, toast } = usePlan()
   const [text, setText] = useState('')
-  const topics = bankOf(plan, rubric.id)
-  const fill = planFill(plan, rubric.id, from)
+  const topics = bankOf(plan, rule.id)
+  const fill = planFill(plan, rule.id, from)
+  const title = bankTitle(plan, rule)
   const nextSlot = plan.items
-    .filter((x) => x.rubricId === rubric.id && x.date && x.date >= from && !x.derive && isSlot(x))
+    .filter((x) => x.ruleId === rule.id && x.date && x.date >= from && !x.derive && isSlot(x))
     .reduce<string | null>((m, x) => (!m || x.date! < m ? x.date! : m), null)
-  const c = channels.get(rubric.channelId)
+  const c = channels.get(rule.channelId)
   const add = () => {
     const list = text.split('\n').map((s) => s.trim()).filter(Boolean)
     if (!list.length) return
-    dispatch({ type: 'bankAdd', rubricId: rubric.id, topics: list })
+    dispatch({ type: 'bankAdd', ruleId: rule.id, topics: list })
     setText('')
   }
   return (
-    <section className="cp-bank__col nr-panel" aria-label={`Банк: ${rubric.name}`}>
+    <section className="cp-bank__col nr-panel" aria-label={`Банк: ${title}`}>
       <div className="cp-bank__head">
         <ChannelDot color={c?.color ?? '#999'} />
-        {rubric.name}
+        {title}
+        <span className="nr-tag">{rule.name}</span>
       </div>
       <span className="cp-muted">
         тем: {topics.length} · свободных слотов: {fill.freeSlots}
@@ -60,7 +65,7 @@ function BankColumn({ rubric, from }: { rubric: Rubric; from: string }) {
         className="nr-field"
         rows={2}
         placeholder="Темы, по одной на строку"
-        aria-label={`Новые темы: ${rubric.name}`}
+        aria-label={`Новые темы: ${title}`}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && add()}
@@ -80,7 +85,7 @@ function BankColumn({ rubric, from }: { rubric: Rubric; from: string }) {
           disabled={!fill.freeSlots}
           onClick={() => {
             const n = fill.pairs.length
-            dispatch({ type: 'fillSlots', rubricId: rubric.id, from })
+            dispatch({ type: 'fillSlots', ruleId: rule.id, from })
             toast(`Разложено: ${n}${fill.left ? `, не влезло: ${fill.left}` : ''}`, true)
           }}
         >

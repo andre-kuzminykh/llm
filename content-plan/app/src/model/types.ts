@@ -1,5 +1,8 @@
 // Данные контент-плана. Тот же формат лежит в public/seed.json (его пишет ../build.py)
 // и в выгрузке JSON — поэтому поля плоские и сериализуемые.
+//
+// Рубрика — о чём материал: Демо, Академия, Тезисы… Правило — как рубрика выходит:
+// формат (FULL, тизер, анонс, урок, письмо), канал, площадки и дни недели.
 
 export type ISODate = string // 'YYYY-MM-DD'
 
@@ -20,10 +23,17 @@ export interface Channel {
 
 export interface Rubric {
   id: string
+  name: string
+  what: string
+}
+
+export interface Rule {
+  id: string
+  rubricId: string | null // null — общий формат: выходит с FULL любой рубрики (тизер, анонсы)
+  name: string // формат: «FULL», «Урок дня», «Тизер FULL»
   channelId: string
   sectionId?: string
-  channel: string // подпись «канал / раздел» из правил
-  name: string
+  channel: string // где выходит: «YouTube Dataist», «Dataist Lab»
   what: string
   format: string
   platforms: string[]
@@ -32,7 +42,7 @@ export interface Rubric {
   freq: string
   source: string
   full: boolean
-  limit: number // сколько материалов рубрики в день на канал (группа — один)
+  limit: number // сколько материалов правила в день на канал (группа — один)
   pattern?: string // заголовок из темы: «Демо / {topic}»
 }
 
@@ -43,7 +53,8 @@ export interface Item {
   date: ISODate | null // null — тема в банке, ещё без даты
   channelId: string
   sectionId?: string
-  rubricId: string
+  ruleId: string
+  rubricId: string | null
   title: string
   format: string
   platforms: string[]
@@ -57,12 +68,13 @@ export interface Item {
 }
 
 export interface Plan {
-  version: 1
+  version: 2
   start: ISODate
   end: ISODate
   platforms: string[]
   channels: Channel[]
   rubrics: Rubric[]
+  rules: Rule[]
   items: Item[]
 }
 
@@ -74,4 +86,14 @@ export const STATUSES: { id: Status; label: string }[] = [
 ]
 
 export const PLACEHOLDER = '…'
+export const SPREAD = 'С каждым FULL'
 export const isSlot = (it: Pick<Item, 'title'>) => it.title.includes(PLACEHOLDER)
+
+/** Подпись материала: «Демо · FULL», «Демо · Тизер FULL»; формат, совпадающий с рубрикой, не повторяется. */
+export function labelOf(rubric: Rubric | undefined, rule: Rule | undefined) {
+  const r = rubric?.name
+  const f = rule?.name
+  if (!r) return f ?? ''
+  if (!f || f === r) return r
+  return `${r} · ${f}`
+}

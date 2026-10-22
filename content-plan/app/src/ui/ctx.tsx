@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { Filters } from '../model/filters'
 import type { Violation } from '../model/rules'
 import type { Action } from '../model/store'
-import type { Channel, ISODate, Item, Plan, Rubric } from '../model/types'
+import type { Channel, ISODate, Item, Plan, Rubric, Rule } from '../model/types'
 
 export type View = 'month' | 'week' | 'plan' | 'bank' | 'rules' | 'checks'
 
@@ -19,6 +19,8 @@ export interface Ctx {
   badIds: Set<string>
   channels: Map<string, Channel>
   rubrics: Map<string, Rubric>
+  rules: Map<string, Rule>
+  labelOf: (it: Pick<Item, 'rubricId' | 'ruleId'>) => string
   filters: Filters
   setFilters: (f: Filters) => void
   anchor: ISODate

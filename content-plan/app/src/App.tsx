@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { clampDate, monthKey, shortDate, today } from './model/dates'
 import { indexByDate, NO_FILTERS, type Filters } from './model/filters'
-import { calendarCSV, download, exportJSON, parsePlan } from './model/io'
+import { calendarCSV, download, exportJSON, isV1, migrateV1, parsePlan, type PlanV1 } from './model/io'
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer } from './model/store'
-import type { ISODate, Item, Plan } from './model/types'
+import { labelOf, type ISODate, type Item, type Plan } from './model/types'
 import { Seg } from './ui/bits'
 import { PlanCtx, usePlan, type Ctx, type Drag, type View } from './ui/ctx'
 import { Icon } from './ui/Icon'
@@ -50,7 +50,14 @@ function writeLS(key: string, v: unknown) {
 async function fetchSeed(url: string): Promise<Plan> {
   const r = await fetch(url)
   if (!r.ok) throw new Error(`Не загрузился исходный план (${r.status})`)
-  return parsePlan(await r.text())
+  const p = parsePlan(await r.text())
+  if (isV1(p)) throw new Error('Исходный план старого формата — перезапустите ../build.py')
+  return p
+}
+
+/** План из хранилища или файла; старый формат переводится на рубрики и форматы нового исходного плана. */
+async function upgrade(p: Plan | PlanV1, seedUrl: string): Promise<Plan> {
+  return isV1(p) ? migrateV1(p, await fetchSeed(seedUrl)) : p
 }
 
 export interface AppProps {
@@ -70,8 +77,8 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
       try {
         const st = await storageFactory()
         storage.current = st
-        const stored = await st.load().catch(() => null)
-        const plan = stored ?? (await fetchSeed(seedUrl))
+        const stored = (await st.load().catch(() => null)) as Plan | PlanV1 | null
+        const plan = stored ? await upgrade(stored, seedUrl) : await fetchSeed(seedUrl)
         if (!alive) return
         dispatch({ type: 'init', plan })
         setSaved(st.persistent ? 'idle' : 'memory')
@@ -168,6 +175,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   const badIds = useMemo(() => new Set(violations.flatMap((v) => v.itemIds)), [violations])
   const channels = useMemo(() => new Map(plan.channels.map((c) => [c.id, c])), [plan.channels])
   const rubrics = useMemo(() => new Map(plan.rubrics.map((r) => [r.id, r])), [plan.rubrics])
+  const rules = useMemo(() => new Map(plan.rules.map((r) => [r.id, r])), [plan.rules])
 
   const toast = useCallback((msg: string, undo = false) => setToast((t) => ({ msg, undo, n: (t?.n ?? 0) + 1 })), [])
   useEffect(() => {
@@ -227,6 +235,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     badIds,
     channels,
     rubrics,
+    rules,
+    labelOf: (it) => labelOf(rubrics.get(it.rubricId ?? ''), rules.get(it.ruleId)),
     filters,
     setFilters,
     anchor,
@@ -334,7 +344,7 @@ function DataMenu({ onClose, seedUrl, theme, onTheme }: { onClose: () => void; s
           e.target.value = ''
           if (!f) return
           try {
-            dispatch({ type: 'replace', plan: parsePlan(await f.text()) })
+            dispatch({ type: 'replace', plan: await upgrade(parsePlan(await f.text()), seedUrl) })
             toast(`Загружен план из ${f.name}`, true)
           } catch (err) {
             toast(err instanceof Error ? err.message : 'Не удалось прочитать файл')

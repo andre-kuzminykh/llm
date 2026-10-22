@@ -16,7 +16,7 @@ import {
   removeItem,
   topicOf,
   updateItem,
-  updateRubric,
+  updateRule,
 } from './store'
 
 describe('T-CP-003 FR-CP-003 перенос', () => {
@@ -69,21 +69,21 @@ describe('T-CP-005 FR-CP-005 создать, дублировать, удали�
     expect(byId(p, 'teaser')).toMatchObject({ title: 'Тизер: Демо / HR', date: '2026-11-16' })
   })
   it('новый материал с копией группы по образцу ближайшего', () => {
-    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', rubricId: 'f_demo', title: 'Демо / HR', format: 'FULL', platforms: ['YouTube'] }))
+    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', ruleId: 'f_demo', title: 'Демо / HR', format: 'FULL', platforms: ['YouTube'] }))
     const fresh = p.items.filter((x) => x.date === '2026-11-16')
-    expect(fresh.map((x) => x.rubricId).sort()).toEqual(['f_demo', 'sh_teaser'])
-    expect(fresh.find((x) => x.rubricId === 'sh_teaser')!.title).toBe('Тизер: Демо / HR')
+    expect(fresh.map((x) => x.ruleId).sort()).toEqual(['f_demo', 'sh_teaser'])
+    expect(fresh.find((x) => x.ruleId === 'sh_teaser')!.title).toBe('Тизер: Демо / HR')
     expect(new Set(fresh.map((x) => x.group)).size).toBe(1)
   })
   it('без сопутствующих — один материал', () => {
-    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', rubricId: 'f_demo', title: 'Демо / HR' }), false)
+    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', ruleId: 'f_demo', title: 'Демо / HR' }), false)
     expect(p.items.filter((x) => x.date === '2026-11-16')).toHaveLength(1)
   })
   it('дублирование группы — новая группа на тот же день', () => {
     const p = duplicateItem(smallPlan(), 'demo')
     const day = p.items.filter((x) => x.date === '2026-10-26')
     expect(day).toHaveLength(9) // 4 исходных + 4 копии + Тезис
-    expect(new Set(day.filter((x) => x.rubricId === 'f_demo').map((x) => x.group)).size).toBe(2)
+    expect(new Set(day.filter((x) => x.ruleId === 'f_demo').map((x) => x.group)).size).toBe(2)
   })
   it('удаление с группой и без', () => {
     expect(removeItem(smallPlan(), 'demo').items.some((x) => x.group === 'full-2026-10-26')).toBe(false)
@@ -121,24 +121,33 @@ describe('T-CP-006 FR-CP-006 банк тем', () => {
   it('тема на день без слота создаёт материал', () => {
     const p0 = bankAdd(smallPlan(), 'sh_thesis', ['Новая'])
     const p = assignTopic(p0, bankOf(p0, 'sh_thesis')[0].id, '2026-10-29')
-    expect(p.items.find((x) => x.date === '2026-10-29' && x.rubricId === 'sh_thesis')!.title).toBe('Новая')
+    expect(p.items.find((x) => x.date === '2026-10-29' && x.ruleId === 'sh_thesis')!.title).toBe('Новая')
   })
   it('слоты на дни рубрики, где её ещё нет', () => {
     const p = createSlots(smallPlan(), 'f_demo', '2026-11-01', '2026-11-30')
-    const mondays = p.items.filter((x) => x.rubricId === 'f_demo').map((x) => x.date)
+    const mondays = p.items.filter((x) => x.ruleId === 'f_demo').map((x) => x.date)
     expect(mondays).toEqual(['2026-10-26', '2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30'])
-    expect(p.items.find((x) => x.date === '2026-11-16' && x.rubricId === 'f_demo')!.title).toBe('Демо / …')
+    expect(p.items.find((x) => x.date === '2026-11-16' && x.ruleId === 'f_demo')!.title).toBe('Демо / …')
   })
   it('слоты не раньше старта канала', () => {
     const p = createSlots(smallPlan(), 'lan_upd', '2026-10-26', '2026-11-03')
-    expect(p.items.filter((x) => x.rubricId === 'lan_upd').map((x) => x.date)).toEqual(['2026-11-02', '2026-11-03'])
+    expect(p.items.filter((x) => x.ruleId === 'lan_upd').map((x) => x.date)).toEqual(['2026-11-02', '2026-11-03'])
   })
 })
 
 describe('T-CP-008 FR-CP-008 сетка', () => {
-  it('правка рубрики', () => {
-    const p = updateRubric(smallPlan(), 'f_demo', { days: [false, false, false, false, false, false, true] })
-    expect(p.rubrics.find((r) => r.id === 'f_demo')!.days[6]).toBe(true)
+  it('правка формата', () => {
+    const p = updateRule(smallPlan(), 'f_demo', { days: [false, false, false, false, false, false, true] })
+    expect(p.rules.find((r) => r.id === 'f_demo')!.days[6]).toBe(true)
+  })
+  it('у тизера и анонсов рубрика FULL; смена рубрики FULL переносится на них', () => {
+    const p = updateItem(smallPlan(), 'demo', { rubricId: 'tech', title: 'Технологии / Агенты' })
+    expect(byId(p, 'teaser')).toMatchObject({ rubricId: 'tech', title: 'Тизер: Технологии / Агенты' })
+    expect(byId(p, 'office').rubricId).toBe('tech')
+  })
+  it('тема из банка получает рубрику формата', () => {
+    const p = bankAdd(smallPlan(), 'sh_thesis', ['Новая'])
+    expect(bankOf(p, 'sh_thesis')[0].rubricId).toBe('thesis')
   })
 })
 

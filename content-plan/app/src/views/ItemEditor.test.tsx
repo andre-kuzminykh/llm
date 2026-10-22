@@ -7,7 +7,7 @@ const day = (date: string) => document.querySelector(`[data-date="${date}"]`) as
 describe('T-CP-005 FR-CP-005 форма материала', () => {
   it('правка заголовка FULL пересобирает тизер; отмена возвращает', async () => {
     renderApp()
-    await userEvent.click(await screen.findByRole('button', { name: /FULL: Демо: Демо \/ Стратегия/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /Демо · FULL: Демо \/ Стратегия/ }))
     const form = screen.getByRole('complementary', { name: 'Материал' })
     const title = within(form).getByRole('textbox', { name: 'Заголовок' })
     await userEvent.clear(title)
@@ -27,20 +27,21 @@ describe('T-CP-005 FR-CP-005 форма материала', () => {
     await screen.findByRole('heading', { name: 'Октябрь 2026' })
     await userEvent.click(screen.getByRole('button', { name: 'Материал' }))
     const form = screen.getByRole('complementary', { name: 'Новый материал' })
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Рубрика' }), 'Тезис дня')
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Рубрика' }), 'Тезисы')
+    expect(within(form).getByRole('combobox', { name: 'Формат' })).toHaveDisplayValue('Тезис дня')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Заголовок' }), 'ИИ не заменит вас')
     const date = within(form).getByLabelText('Дата')
     await userEvent.clear(date)
     await userEvent.type(date, '2026-10-29')
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
     await userEvent.click(screen.getByRole('button', { name: 'Открыть день 2026-10-29' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Тезис дня: ИИ не заменит вас/ })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Тезисы · Тезис дня: ИИ не заменит вас/ })).toBeInTheDocument())
     expect(day('2026-10-29')).toBeInTheDocument()
   })
 
   it('без площадки не сохраняет и говорит почему', async () => {
     renderApp()
-    await userEvent.click(await screen.findByRole('button', { name: /FULL: Демо: Демо \/ Стратегия/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /Демо · FULL: Демо \/ Стратегия/ }))
     const form = screen.getByRole('complementary', { name: 'Материал' })
     await userEvent.click(within(form).getByRole('button', { name: 'YouTube' }))
     await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))

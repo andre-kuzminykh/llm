@@ -39,10 +39,10 @@ export function MonthView() {
 }
 
 function MonthDay({ date, inMonth }: { date: ISODate; inMonth: boolean }) {
-  const { plan, byDate, filters, rubrics, channels, violByDate, openDay, openDayId, dropOn } = usePlan()
+  const { plan, byDate, filters, rules, channels, violByDate, openDay, openDayId, dropOn } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const items = (byDate.get(date) ?? []).filter((it) => visible(it, filters))
-  const fulls = items.filter((it) => rubrics.get(it.rubricId)?.full && !it.derive)
+  const fulls = items.filter((it) => rules.get(it.ruleId)?.full && !it.derive)
   const slots = items.filter((it) => isSlot(it) && !it.derive).length
   const counts = new Map<string, number>()
   for (const it of items) counts.set(it.channelId, (counts.get(it.channelId) ?? 0) + 1)

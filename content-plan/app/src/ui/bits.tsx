@@ -71,10 +71,10 @@ export function Platforms({ list }: { list: string[] }) {
 
 /** Карточка материала: тянется на другой день, по нажатию открывает форму. */
 export function ItemCard({ item, compact = false, showRubric = true }: { item: Item; compact?: boolean; showRubric?: boolean }) {
-  const { channels, rubrics, badIds, openItem } = usePlan()
+  const { channels, labelOf, badIds, openItem } = usePlan()
   const [dragging, setDragging] = useState(false)
   const color = channels.get(item.channelId)?.color
-  const rubric = rubrics.get(item.rubricId)
+  const label = labelOf(item)
   const slot = isSlot(item)
   const cls = ['cp-card', slot && 'cp-card--slot', badIds.has(item.id) && 'cp-card--bad', item.format === 'FULL' && 'cp-card--full', dragging && 'cp-card--dragging']
     .filter(Boolean)
@@ -95,12 +95,12 @@ export function ItemCard({ item, compact = false, showRubric = true }: { item: I
         e.stopPropagation()
         openItem(item.id)
       }}
-      aria-label={`${rubric?.name ?? ''}: ${item.title}${slot ? ' — нужна тема' : ''}`}
+      aria-label={`${label}: ${item.title}${slot ? ' — нужна тема' : ''}`}
     >
       {showRubric && (
         <span className="cp-card__rub">
           <StatusDot status={item.status} />
-          {rubric?.name ?? item.rubricId}
+          {label}
         </span>
       )}
       <span className="cp-card__title">{item.title}</span>

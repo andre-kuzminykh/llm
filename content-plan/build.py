@@ -55,7 +55,28 @@ TEXT_FIXES = [('агенство', 'агентство'), ('Агенство', '
 PH = '…'  # материал не задан — слот под тему
 
 
-# ---------------------------------------------------------------- рубрики
+# ---------------------------------------------------------------- рубрики и форматы
+
+# Рубрика — о чём материал (Демо, Академия, Тезисы…). Формат — как он выходит: FULL, тизер,
+# анонс, пост, урок, письмо. Правило ниже — это рубрика × формат × канал с днями недели.
+CATS = {
+    'demo': ('Демо', 'Демо продуктов и агентов; по воскресеньям — спецпроекты: железо, XR, игры'),
+    'tech': ('Технологии', 'Разбор технологии'),
+    'cases': ('Кейсы', 'Кейсы внедрения и создания продуктов'),
+    'dev': ('Разработка', 'Как строим продукты экосистемы'),
+    'thoughts': ('Мысли', 'Эссе о будущем ИИ, бизнеса и общества'),
+    'research': ('Исследования', 'Лаборатория: исследование дня и итоги месяца'),
+    'news': ('Новости', 'Лента и подборки новостей ИИ, итоги недели'),
+    'academy': ('Академия', 'Курсы: урок дня, видео модуля, обучающие шортсы'),
+    'thesis': ('Тезисы', 'Короткие видео-мнения'),
+    'razbor': ('Разборы', 'ИИ-трансформация отрасли: разбор и призыв'),
+    'life': ('Лайфстайл', 'Лайфстайл-видео с цитатой'),
+    'hacks': ('Лайфхаки', 'Практический совет дня'),
+    'updates': ('Обновления', 'Что нового в продукте'),
+    'launch': ('Анонсы', 'Запуск нового канала'),
+}
+SPREAD = 'С каждым FULL'  # форматы, которые выходят вместе с FULL любой рубрики
+
 
 def _days(*cells):
     return list(cells)
@@ -64,160 +85,142 @@ def _days(*cells):
 ALL7 = _days(*['●'] * 7)
 NO_SAT = _days('●', '●', '●', '●', '●', '', '●')
 
-# id, бренд, канал/раздел, рубрика, что это, формат, площадки, Пн..Вс, частота, старт, материалы,
-# подпись в типовой неделе, подсказки по дням для типовой недели
-RUBRICS = {}
+RUBRICS = {}  # правила: id → рубрика, формат, канал, площадки, дни
 
 
-def rubric(rid, brand, channel, name, what, fmt, platforms, days, freq, start, source,
-           tmpl=None, hint=None):
-    RUBRICS[rid] = dict(brand=brand, channel=channel, name=name, what=what, fmt=fmt,
-                        platforms=platforms, days=days, freq=freq, start=start, source=source,
-                        tmpl=tmpl or name, hint=hint or {})
+def rubric(rid, cat, fmt_name, brand, channel, what, fmt, platforms, days, freq, start, source,
+           hint=None):
+    name = f'{CATS[cat][0]} · {fmt_name}' if cat else fmt_name
+    RUBRICS[rid] = dict(cat=cat, fmt_name=fmt_name, brand=brand, channel=channel, name=name, what=what,
+                        fmt=fmt, platforms=platforms, days=days, freq=freq, start=start, source=source,
+                        tmpl=name, hint=hint or {})
+
+
+def cat_name(cat):
+    return CATS[cat][0] if cat else SPREAD
 
 
 S0 = '25.10.2026'
-# Neuronium
-rubric('neu_all', 'Neuronium', 'Telegram «Neuronium»', 'Все новости',
-       'Автоматическая лента всех новостей ИИ', 'Пост', 'Telegram', ALL7, 'ежедневно', S0,
-       'лента Neuronium (авто)')
-rubric('neu_top', 'Neuronium', 'YouTube «Neuronium»', 'Избранные новости',
-       'Видео-подборка главных новостей дня', 'Видео', 'YouTube', ALL7, 'ежедневно', S0,
-       'лента Neuronium')
-rubric('neu_x', 'Neuronium', 'Telegram «Neuronium»', 'Кросс-пост о продукте',
-       'Пост в день выхода FULL-видео Dataist про Neuronium', 'Пост', 'Telegram',
-       _days(*['по FULL'] * 5, '', 'по FULL'), 'по графику FULL', S0, 'FULL Dataist',
-       tmpl='Кросс-пост о продукте', hint={d: ' (по графику)' for d in range(7)})
-# Dataist — Лаборатория
-rubric('lab_day', 'Dataist', 'Dataist Lab', 'Исследование дня',
+LAN0 = LANDAO_START.strftime('%d.%m.%Y')
+ANT0 = ANTROPOLIS_START.strftime('%d.%m.%Y')
+# Демо
+rubric('f_demo', 'demo', 'FULL', 'Dataist', 'YouTube Dataist',
+       'Пн — демо продуктов и агентов; Вс — спецпроекты (робот, EEG, очки, дроны, Антрополис, гуманоид)',
+       'FULL', 'YouTube', _days('●', '', '', '', '', '', 'спецпроекты'),
+       'еженедельно; спецпроекты — по готовности', S0, 'исходный план',
+       hint={SUN: ' (спецпроекты, по готовности)'})
+rubric('ait', 'demo', 'Анонс от Andre AIT', 'Andre AIT', 'LinkedIn / Mail',
+       'Демо недели и спецпроекты от лица Andre AIT', 'Пост / письмо', 'LinkedIn, Mail',
+       _days('●', '', '', '', '', '', 'спецпроекты'), 'в дни FULL «Демо»', S0, 'FULL «Демо»',
+       hint={SUN: ' (если спецпроект)'})
+# Технологии, Кейсы, Разработка, Мысли
+rubric('f_tech', 'tech', 'FULL', 'Dataist', 'YouTube Dataist', 'Разбор технологии', 'FULL', 'YouTube',
+       _days('', 'чередуется', '', '', '', '', ''), 'через неделю (с Кейсами)', S0, 'исходный план',
+       hint={TUE: ' (чередуется с Кейсами)'})
+rubric('f_case', 'cases', 'FULL', 'Dataist', 'YouTube Dataist', 'Кейсы внедрения и создания продуктов',
+       'FULL', 'YouTube', _days('', 'чередуется', '', '', '', '', ''), 'через неделю (с Технологиями)',
+       S0, 'исходный план', hint={TUE: ' (чередуется с Технологиями)'})
+rubric('f_dev', 'dev', 'FULL', 'Dataist', 'YouTube Dataist', 'Как строим продукты экосистемы', 'FULL',
+       'YouTube', _days('', '', 'через нед.', '', '', '', ''), 'через неделю', S0, 'исходный план',
+       hint={WED: ' (через неделю)'})
+rubric('ant_diary', 'dev', 'Дневник разработки', 'Antropolis', 'Antropolis', 'Еженедельный девлог игры',
+       'Пост + Shorts', 'Telegram, YouTube, TikTok', _days('', '', '', '●', '', '', ''), 'еженедельно',
+       ANT0, 'команда Antropolis')
+rubric('f_think', 'thoughts', 'FULL', 'Dataist', 'YouTube Dataist', 'Эссе о будущем ИИ, бизнеса и общества',
+       'FULL', 'YouTube', _days('', '', '', 'через нед.', '', '', ''),
+       'через неделю (кроме чт с Исследованиями)', S0, 'исходный план',
+       hint={THU: ' (остальные чт, через неделю)'})
+# Исследования
+rubric('lab_day', 'research', 'Исследование дня', 'Dataist', 'Dataist Lab',
        'Разбор свежего исследования ИИ: пост в Лаборатории, X, Threads, LinkedIn и строка в письме',
        'Пост', 'Web (Лаборатория), Telegram, X, Threads, LinkedIn, Mail',
        _days('●', '●', '●', '●', '●', 'Web, TG, X', '●'), 'ежедневно', S0, 'Лаборатория (авто)')
-rubric('lab_day_v', 'Dataist', 'Shorts', 'Исследование дня (видео)',
-       'Короткое видео по исследованию дня', 'Shorts', 'YouTube, Instagram, TikTok', ALL7,
-       'ежедневно', S0, 'Лаборатория (авто)', tmpl='Исследование дня')
-rubric('lab_month', 'Dataist', 'Dataist Lab', 'Исследование месяца (пост)',
-       'Итоги месяца в Лаборатории — в день выхода FULL «Исследования»', 'Пост',
-       'Web (Лаборатория), Telegram', _days('', '', '', '2-й чт', '', '', ''), 'ежемесячно', S0,
-       'FULL «Исследования»', tmpl='Исследования месяца', hint={THU: ' (2-й чт)'})
-# Dataist — Академия
-rubric('aca_lesson', 'Dataist', 'Dataist Academy', 'Урок дня',
+rubric('lab_day_v', 'research', 'Исследование дня (шортс)', 'Dataist', 'Shorts',
+       'Короткое видео по исследованию дня', 'Shorts', 'YouTube, Instagram, TikTok', ALL7, 'ежедневно',
+       S0, 'Лаборатория (авто)')
+rubric('f_res', 'research', 'FULL', 'Dataist', 'YouTube Dataist',
+       'Итоги прошлого месяца — 2-й четверг; итоги года — последний четверг декабря', 'FULL', 'YouTube',
+       _days('', '', '', '2-й чт', '', '', ''), 'ежемесячно', S0, 'исходный план + по правилу',
+       hint={THU: ' (2-й чт месяца)'})
+rubric('lab_month', 'research', 'Итоги месяца в Лаборатории', 'Dataist', 'Dataist Lab',
+       'Пост в Лаборатории в день FULL «Исследования»', 'Пост', 'Web (Лаборатория), Telegram',
+       _days('', '', '', '2-й чт', '', '', ''), 'ежемесячно', S0, 'FULL «Исследования»',
+       hint={THU: ' (2-й чт)'})
+# Новости
+rubric('neu_all', 'news', 'Все новости', 'Neuronium', 'Telegram «Neuronium»',
+       'Автоматическая лента всех новостей ИИ', 'Пост', 'Telegram', ALL7, 'ежедневно', S0,
+       'лента Neuronium (авто)')
+rubric('neu_top', 'news', 'Избранные новости', 'Neuronium', 'YouTube «Neuronium»',
+       'Видео-подборка главных новостей дня', 'Видео', 'YouTube', ALL7, 'ежедневно', S0, 'лента Neuronium')
+rubric('ml_news', 'news', 'Избранные новости в письме', 'Dataist', 'Рассылка Dataist',
+       'Подборка новостей Neuronium в письме Dataist', 'Строка письма', 'Mail', NO_SAT,
+       'ежедневно, кроме субботы', S0, 'лента Neuronium')
+rubric('f_news', 'news', 'FULL', 'Dataist', 'YouTube Dataist', 'Новости недели — итоги недели в ИИ',
+       'FULL', 'YouTube', _days('', '', '', '', '●', '', ''), 'еженедельно', S0, 'по правилу (нумерация)')
+rubric('ml_week', 'news', 'Недельный дайджест', 'Dataist', 'Рассылка Dataist', 'Письмо с итогами недели',
+       'Письмо', 'Mail', _days('', '', '', '', '●', '', ''), 'еженедельно', S0, 'Новости недели')
+# Академия
+rubric('aca_lesson', 'academy', 'Урок дня', 'Dataist', 'Dataist Academy',
        'Очередной урок курса; в день старта модуля — пометка «старт модуля»', 'Урок',
        'Web (Академия), Telegram, X', ALL7, 'ежедневно', S0,
        'курсы по порядку: Автоматизация → Разработка → Инжениринг → Менеджмент → AI CEO → CAIO '
        '→ AI CTO → AI Founder → Data Engineer → Data Analyst → Data Scientist → ML Engineer → Dataist')
-rubric('aca_mail', 'Dataist', 'Рассылка Dataist', 'Старт модуля / курса',
-       'Строка в письме в день старта модуля (старт в субботу — в воскресном письме)',
-       'Строка письма', 'Mail', _days(*['по курсу'] * 5, '', 'по курсу'),
-       'раз в 11 дней (короткие курсы — раз в 9)', S0, 'расписание Академии',
-       hint={d: ' (по графику курса)' for d in range(7)})
-# Dataist — FULL
-rubric('f_demo', 'Dataist', 'YouTube Dataist', 'FULL: Демо', 'Демо продуктов и агентов', 'FULL',
-       'YouTube', _days('●', '', '', '', '', '', ''), 'еженедельно', S0, 'исходный план')
-rubric('f_tech', 'Dataist', 'YouTube Dataist', 'FULL: Технологии', 'Разбор технологии', 'FULL',
-       'YouTube', _days('', 'чередуется', '', '', '', '', ''), 'через неделю (с Кейсами)', S0,
-       'исходный план', hint={TUE: ' (чередуется с Кейсами)'})
-rubric('f_case', 'Dataist', 'YouTube Dataist', 'FULL: Кейсы', 'Кейсы внедрения и создания продуктов',
-       'FULL', 'YouTube', _days('', 'чередуется', '', '', '', '', ''),
-       'через неделю (с Технологиями)', S0, 'исходный план',
-       hint={TUE: ' (чередуется с Технологиями)'})
-rubric('f_dev', 'Dataist', 'YouTube Dataist', 'FULL: Разработка', 'Как строим продукты экосистемы',
-       'FULL', 'YouTube', _days('', '', 'через нед.', '', '', '', ''), 'через неделю', S0,
-       'исходный план', hint={WED: ' (через неделю)'})
-rubric('f_res', 'Dataist', 'YouTube Dataist', 'FULL: Исследования',
-       'Исследования за прошлый месяц — 2-й четверг; годовой выпуск — последний четверг декабря',
-       'FULL', 'YouTube', _days('', '', '', '2-й чт', '', '', ''), 'ежемесячно', S0,
-       'исходный план + по правилу', hint={THU: ' (2-й чт месяца)'})
-rubric('f_think', 'Dataist', 'YouTube Dataist', 'FULL: Мысли', 'Эссе о будущем ИИ, бизнеса и общества',
-       'FULL', 'YouTube', _days('', '', '', 'через нед.', '', '', ''),
-       'через неделю (кроме чт с Исследованиями)', S0, 'исходный план',
-       hint={THU: ' (остальные чт, через неделю)'})
-rubric('f_news', 'Dataist', 'YouTube Dataist', 'FULL: Новости недели', 'Итоги недели в ИИ', 'FULL',
-       'YouTube', _days('', '', '', '', '●', '', ''), 'еженедельно', S0, 'по правилу (нумерация)')
-rubric('f_aca', 'Dataist', 'YouTube Dataist', 'FULL: Академия', 'Полное видео модуля курса', 'FULL',
-       'YouTube', _days('', '', '', '', '', '', '●'),
-       'ближайшее свободное вс после старта модуля', S0,
-       'исходный план (Автоматизация 1–8), дальше — модули курсов',
-       hint={SUN: ' (после старта модуля)'})
-rubric('f_spec', 'Dataist', 'YouTube Dataist', 'FULL: Демо-спецпроект',
-       'Железо, XR, игры: робот, EEG, очки, дроны, Антрополис, гуманоид', 'FULL', 'YouTube',
-       _days('', '', '', '', '', '', 'по готовности'), 'по готовности', S0, 'исходный план',
-       hint={SUN: ' (по готовности)'})
-rubric('sh_teaser', 'Dataist', 'Shorts', 'Тизер FULL', 'Вертикальный тизер FULL-видео дня', 'Shorts',
-       'YouTube, Instagram, TikTok', _days('●', '●', '●', 'Мысли', '●', '', 'спецпроект'),
-       'в дни FULL, кроме Академии и Исследований', S0, 'FULL дня')
-rubric('office', 'Dataist', 'Dataist Office', 'Анонс FULL дня',
-       'Текстовая версия / анонс FULL-видео дня (кроме Академии)', 'Пост', 'Web (Кабинет), Telegram',
-       _days('●', '●', '●', '●', '●', '', 'спецпроект'), 'в дни FULL', S0, 'FULL дня',
-       tmpl='Анонс FULL', hint={SUN: ' (если спецпроект)', WED: ' (если Разработка)',
-                                THU: ' (если FULL)'})
-rubric('an_full', 'Dataist', 'X / LinkedIn / Mail', 'Анонс FULL',
-       'X — все FULL, кроме Академии; LinkedIn и письмо Dataist — только Вт–Чт',
-       'Пост / строка письма', 'X, LinkedIn, Mail', _days('X', '●', '●', '●', 'X', '', 'X'),
-       'в дни FULL', S0, 'FULL дня',
-       hint={SUN: ' (если спецпроект)', WED: ' (если Разработка)', THU: ' (если FULL)'})
-# Dataist — Shorts
-rubric('sh_thesis', 'Dataist', 'Shorts', 'Тезис дня', 'Короткое видео-мнение (хук дня)', 'Shorts',
-       'YouTube, Instagram, TikTok', NO_SAT, 'ежедневно, кроме субботы', S0, 'исходный план')
-rubric('sh_razbor', 'Dataist', 'Shorts', 'Разборы: отрасль', 'Разбор ИИ-трансформации отрасли',
-       'Shorts', 'YouTube, Instagram, TikTok', NO_SAT, 'ежедневно, кроме субботы', S0,
-       'исходный план', tmpl='Разборы')
-rubric('th_call', 'Dataist', 'Threads', 'Призыв: отрасль',
-       'Призыв к компаниям отрасли из разбора дня', 'Пост', 'Threads', NO_SAT,
-       'в дни Разборов', S0, 'Разборы дня', tmpl='Призыв')
-rubric('sh_life', 'Dataist', 'Shorts', 'Лайфстайл', 'Лайфстайл-видео с цитатой', 'Shorts',
-       'YouTube, Instagram, TikTok', ALL7, 'ежедневно (в субботу — главный контент)', S0,
-       'исходный план')
-rubric('sh_edu', 'Dataist', 'Shorts', 'Обучение 1–4', 'Четыре обучающих шортса', 'Shorts',
+rubric('f_aca', 'academy', 'FULL', 'Dataist', 'YouTube Dataist', 'Полное видео модуля курса', 'FULL',
+       'YouTube', _days('', '', '', '', '', '', '●'), 'ближайшее свободное вс после старта модуля', S0,
+       'исходный план (Автоматизация 1–8), дальше — модули курсов', hint={SUN: ' (после старта модуля)'})
+rubric('sh_edu', 'academy', 'Обучение 1–4', 'Dataist', 'Shorts', 'Четыре обучающих шортса', 'Shorts',
        'YouTube, Instagram, TikTok', NO_SAT, 'ежедневно, кроме субботы', S0, 'Академия')
-# Dataist — текст и рассылка
-rubric('tx_hack', 'Dataist', 'Threads / LinkedIn / Mail', 'Лайфхак дня', 'Практический совет дня',
+rubric('aca_mail', 'academy', 'Старт модуля в письме', 'Dataist', 'Рассылка Dataist',
+       'Строка в письме в день старта модуля (старт в субботу — в воскресном письме)', 'Строка письма',
+       'Mail', _days(*['по курсу'] * 5, '', 'по курсу'), 'раз в 11 дней (короткие курсы — раз в 9)', S0,
+       'расписание Академии', hint={d: ' (по графику курса)' for d in range(7)})
+# Тезисы, Разборы, Лайфстайл, Лайфхаки
+rubric('sh_thesis', 'thesis', 'Тезис дня', 'Dataist', 'Shorts', 'Короткое видео-мнение (хук дня)', 'Shorts',
+       'YouTube, Instagram, TikTok', NO_SAT, 'ежедневно, кроме субботы', S0, 'исходный план')
+rubric('sh_razbor', 'razbor', 'Разбор отрасли', 'Dataist', 'Shorts', 'Разбор ИИ-трансформации отрасли',
+       'Shorts', 'YouTube, Instagram, TikTok', NO_SAT, 'ежедневно, кроме субботы', S0, 'исходный план')
+rubric('th_call', 'razbor', 'Призыв', 'Dataist', 'Threads', 'Призыв к компаниям отрасли из разбора дня',
+       'Пост', 'Threads', NO_SAT, 'в дни Разборов', S0, 'Разборы дня')
+rubric('sh_life', 'life', 'Шортс', 'Dataist', 'Shorts', 'Лайфстайл-видео с цитатой', 'Shorts',
+       'YouTube, Instagram, TikTok', ALL7, 'ежедневно (в субботу — главный контент)', S0, 'исходный план')
+rubric('tx_hack', 'hacks', 'Лайфхак дня', 'Dataist', 'Threads / LinkedIn / Mail', 'Практический совет дня',
        'Пост / строка письма', 'Threads, LinkedIn, Mail', NO_SAT, 'ежедневно, кроме субботы', S0,
        'по правилу')
-rubric('ml_news', 'Dataist', 'Рассылка Dataist', 'Избранные новости',
-       'Подборка новостей Neuronium в письме Dataist', 'Строка письма', 'Mail', NO_SAT,
-       'ежедневно, кроме субботы', S0, 'лента Neuronium')
-rubric('ml_week', 'Dataist', 'Рассылка Dataist', 'Недельный дайджест', 'Письмо с итогами недели',
-       'Письмо', 'Mail', _days('', '', '', '', '●', '', ''), 'еженедельно', S0, 'Новости недели')
-# Andre AIT
-rubric('ait', 'Andre AIT', 'LinkedIn / Mail', 'Анонс демо',
-       'Демо недели и спецпроекты от лица Andre AIT', 'Пост / письмо', 'LinkedIn, Mail',
-       _days('●', '', '', '', '', '', 'спецпроект'), 'еженедельно + спецпроекты', S0,
-       'FULL «Демо»', hint={SUN: ' (если спецпроект)'})
-# Landao
-rubric('lan_launch', 'Landao', 'Landao', 'Запуск канала', 'Первый пост канала в день анонса Landao',
-       'Пост', 'Telegram', _days('02.11', '', '', '', '', '', ''), 'разово',
-       LANDAO_START.strftime('%d.%m.%Y'), '—')
-rubric('lan_upd', 'Landao', 'Landao', 'Обновления Landao', 'Что нового в продукте за неделю',
-       'Пост + Shorts', 'Telegram, Instagram, TikTok', _days('', '', '●', '', '', '', ''),
-       'еженедельно', LANDAO_START.strftime('%d.%m.%Y'), 'команда Landao')
-rubric('lan_x', 'Landao', 'Landao', 'Кросс-пост демо',
-       'Демо / кейсы Landao в день выхода FULL у Dataist', 'Пост + Shorts',
-       'Telegram, Instagram, TikTok', _days('по FULL', 'по FULL', '', '', '', '', ''),
-       'по графику FULL', LANDAO_START.strftime('%d.%m.%Y'), 'FULL Dataist',
-       hint={d: ' (по графику)' for d in range(7)})
-# Antropolis
-rubric('ant_launch', 'Antropolis', 'Antropolis', 'Запуск канала',
+# Обновления и анонсы новых каналов
+rubric('lan_upd', 'updates', 'Пост + шортс', 'Landao', 'Landao', 'Что нового в Landao за неделю',
+       'Пост + Shorts', 'Telegram, Instagram, TikTok', _days('', '', '●', '', '', '', ''), 'еженедельно',
+       LAN0, 'команда Landao')
+rubric('lan_launch', 'launch', 'Запуск Landao', 'Landao', 'Landao', 'Первый пост канала в день анонса Landao',
+       'Пост', 'Telegram', _days('02.11', '', '', '', '', '', ''), 'разово', LAN0, '—')
+rubric('ant_launch', 'launch', 'Запуск Antropolis', 'Antropolis', 'Antropolis',
        'Первый пост канала + строка в письме Dataist', 'Пост', 'Telegram, Mail',
-       _days('', '01.12', '', '', '', '', ''), 'разово', ANTROPOLIS_START.strftime('%d.%m.%Y'), '—')
-rubric('ant_diary', 'Antropolis', 'Antropolis', 'Дневник разработки', 'Еженедельный девлог игры',
-       'Пост + Shorts', 'Telegram, YouTube, TikTok', _days('', '', '', '●', '', '', ''),
-       'еженедельно', ANTROPOLIS_START.strftime('%d.%m.%Y'), 'команда Antropolis')
-rubric('ant_x', 'Antropolis', 'Antropolis', 'Кросс-пост демо',
-       'Демо / кейсы Antropolis в день выхода FULL у Dataist', 'Пост + Shorts',
-       'Telegram, YouTube, TikTok', _days('', 'по FULL', '', '', '', '', 'по FULL'),
-       'по графику FULL', ANTROPOLIS_START.strftime('%d.%m.%Y'), 'FULL Dataist',
-       hint={d: ' (по графику)' for d in range(7)})
+       _days('', '01.12', '', '', '', '', ''), 'разово', ANT0, '—')
+# С каждым FULL — тизер, анонсы, кросс-посты; рубрика — та же, что у FULL
+rubric('sh_teaser', None, 'Тизер FULL', 'Dataist', 'Shorts', 'Вертикальный тизер FULL-видео дня', 'Shorts',
+       'YouTube, Instagram, TikTok', _days('●', '●', '●', 'Мысли', '●', '', 'спецпроекты'),
+       'в дни FULL, кроме Академии и Исследований', S0, 'FULL дня')
+rubric('office', None, 'Анонс в Кабинете', 'Dataist', 'Dataist Office',
+       'Текстовая версия / анонс FULL-видео дня (кроме Академии)', 'Пост', 'Web (Кабинет), Telegram',
+       _days('●', '●', '●', '●', '●', '', 'спецпроекты'), 'в дни FULL', S0, 'FULL дня',
+       hint={SUN: ' (если спецпроект)', WED: ' (если Разработка)', THU: ' (если FULL)'})
+rubric('an_full', None, 'Анонс в X / LinkedIn / письме', 'Dataist', 'X / LinkedIn / Mail',
+       'X — все FULL, кроме Академии; LinkedIn и письмо Dataist — только Вт–Чт', 'Пост / строка письма',
+       'X, LinkedIn, Mail', _days('X', '●', '●', '●', 'X', '', 'X'), 'в дни FULL', S0, 'FULL дня',
+       hint={SUN: ' (если спецпроект)', WED: ' (если Разработка)', THU: ' (если FULL)'})
+rubric('neu_x', None, 'Кросс-пост в Neuronium', 'Neuronium', 'Telegram «Neuronium»',
+       'В день FULL Dataist про Neuronium', 'Пост', 'Telegram', _days(*['по FULL'] * 5, '', 'по FULL'),
+       'по графику FULL', S0, 'FULL Dataist', hint={d: ' (по графику)' for d in range(7)})
+rubric('lan_x', None, 'Кросс-пост в Landao', 'Landao', 'Landao', 'В день FULL Dataist про Landao',
+       'Пост + Shorts', 'Telegram, Instagram, TikTok', _days('по FULL', 'по FULL', '', '', '', '', ''),
+       'по графику FULL', LAN0, 'FULL Dataist', hint={d: ' (по графику)' for d in range(7)})
+rubric('ant_x', None, 'Кросс-пост в Antropolis', 'Antropolis', 'Antropolis', 'В день FULL Dataist про Антрополис',
+       'Пост + Shorts', 'Telegram, YouTube, TikTok', _days('', 'по FULL', '', '', '', '', 'по FULL'),
+       'по графику FULL', ANT0, 'FULL Dataist', hint={d: ' (по графику)' for d in range(7)})
 
 ONE_OFF = {'lan_launch', 'ant_launch'}
-# Порядок строк в таблице рубрик: сначала сетка FULL, потом всё, что от неё и вокруг неё
-RUBRIC_ORDER = ['f_demo', 'f_tech', 'f_case', 'f_dev', 'f_res', 'f_think', 'f_news', 'f_aca', 'f_spec',
-                'sh_teaser', 'office', 'an_full', 'ait',
-                'lab_day', 'lab_day_v', 'lab_month', 'aca_lesson', 'aca_mail',
-                'sh_thesis', 'sh_razbor', 'th_call', 'sh_life', 'sh_edu', 'tx_hack', 'ml_news', 'ml_week',
-                'neu_all', 'neu_top', 'neu_x',
-                'lan_launch', 'lan_upd', 'lan_x', 'ant_launch', 'ant_diary', 'ant_x']
-assert sorted(RUBRIC_ORDER) == sorted(RUBRICS)
+# Порядок строк в таблице правил: по рубрикам, в конце — что выходит с каждым FULL
+RUBRIC_ORDER = sorted(RUBRICS, key=lambda rid: (list(CATS).index(RUBRICS[rid]['cat'])
+                                                if RUBRICS[rid]['cat'] else len(CATS)))
 
 
 # ---------------------------------------------------------------- модель
@@ -236,16 +239,17 @@ class Unit:
     orig: date | None = None
     group: str | None = None   # материалы, которые двигаются вместе (FULL и всё, что из него)
     derive: str | None = None  # шаблон текста от главного материала группы: {title}, {topic}
+    cat: str | None = None     # рубрика, если правило общее и группы с FULL нет
 
 
 UNITS: list[Unit] = []
 
 
 def add(day, brand, section, rid, fmt, text, platforms, source, rank, orig=None, group=None,
-        derive=None):
+        derive=None, cat=None):
     if START <= day <= END:
         UNITS.append(Unit(day, brand, section, rid, fmt, text, tuple(platforms), source, rank,
-                          orig if orig and orig != day else None, group, derive))
+                          orig if orig and orig != day else None, group, derive, cat))
 
 
 def fix(s):
@@ -476,7 +480,7 @@ def full_units(d, item):
     cat, topic, title, source, orig = item
     rid = {'Демо': 'f_demo', 'Технологии': 'f_tech', 'Кейсы': 'f_case', 'Разработка': 'f_dev',
            'Мысли': 'f_think', 'Исследования': 'f_res', 'Новости': 'f_news', 'Академия': 'f_aca',
-           'Спецпроект': 'f_spec'}[cat]
+           'Спецпроект': 'f_demo'}[cat]
     g = f'full-{d.isoformat()}'
     add(d, 'Dataist', None, rid, 'FULL', title, ['YouTube'], source, 0, orig, g)
     if cat == 'Академия':
@@ -606,7 +610,7 @@ def build():
 
     # Разовые вещи старта из исходной сетки
     add(START, 'Dataist', 'Office', 'office', 'Пост', 'Анонс / Автоматизация 3_8',
-        ['Web', 'Telegram'], 'исходный план', 30)
+        ['Web', 'Telegram'], 'исходный план', 30, cat='academy')
 
     # Landao
     add(LANDAO_START, 'Landao', None, 'lan_launch', 'Пост', 'Анонс / Landao — запуск канала',
@@ -694,13 +698,22 @@ def channel_of(u):
     return u.brand
 
 
+def cat_of(u, heads={}):
+    """Рубрика материала: своя у правила, а у тизера, анонсов и кросс-постов — та же, что у FULL."""
+    if not heads:
+        for x in UNITS:
+            if x.group and RUBRICS[x.rubric]['cat'] and x.fmt == 'FULL':
+                heads[x.group] = RUBRICS[x.rubric]['cat']
+    return RUBRICS[u.rubric]['cat'] or u.cat or heads.get(u.group)
+
+
 def tables():
-    rubrics = [['№', 'Бренд', 'Канал / раздел', 'Рубрика', 'Что это', 'Формат', 'Площадки', *WD,
-                'Частота', 'Старт', 'Откуда материалы']]
+    rubrics = [['№', 'Рубрика', 'Формат', 'Канал', 'Где выходит', 'Площадки', *WD, 'Частота', 'Что это',
+                'Старт', 'Откуда материалы']]
     for i, rid in enumerate(RUBRIC_ORDER, 1):
         r = RUBRICS[rid]
-        rubrics.append([i, r['brand'], r['channel'], r['name'], r['what'], r['fmt'], r['platforms'],
-                        *r['days'], r['freq'], r['start'], r['source']])
+        rubrics.append([i, cat_name(r['cat']), r['fmt_name'], r['brand'], r['channel'], r['platforms'],
+                        *r['days'], r['freq'], r['what'], r['start'], r['source']])
 
     # Типовая неделя: всё, что встречается в этот день недели, с подсказками частоты
     week = {}
@@ -725,12 +738,12 @@ def tables():
                     lines.append((f"• {r['tmpl']}{r['hint'].get(wd, '')}", style))
             week_lines[(wd, p)] = lines
 
-    plan = [['Дата', 'День', 'Бренд', 'Канал / раздел', 'Рубрика', 'Формат', 'Материал', 'Площадки',
+    plan = [['Дата', 'День', 'Канал', 'Раздел', 'Рубрика', 'Формат', 'Материал', 'Площадки',
              'Источник', 'Дата в исходнике']]
     for u in UNITS:
         plan.append([u.day.isoformat(), WD[u.day.weekday()], u.brand, channel_of(u),
-                     RUBRICS[u.rubric]['name'], u.fmt, u.text, ', '.join(u.platforms), u.source,
-                     u.orig.isoformat() if u.orig else ''])
+                     cat_name(cat_of(u)), RUBRICS[u.rubric]['fmt_name'], u.text, ', '.join(u.platforms),
+                     u.source, u.orig.isoformat() if u.orig else ''])
 
     by_day = {}
     for u in UNITS:
@@ -774,6 +787,7 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
     }
     for b, c in BRAND_COLORS.items():
         C['brand:' + b] = wb.add_format({**cell, 'bold': True, 'font_color': c})
+    C['rubric'] = wb.add_format({**cell, 'bold': True})
 
     def rich(ws, r, c, lines, fmt):
         frags = []
@@ -801,7 +815,7 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
 
     # Правила
     ws = wb.add_worksheet('Правила')
-    widths = [4, 11, 20, 24, 44, 14, 28, 11, 11, 11, 11, 11, 11, 11, 24, 11, 32]
+    widths = [4, 14, 24, 11, 20, 28, 11, 11, 11, 11, 11, 11, 11, 24, 44, 11, 32]
     for i, w in enumerate(widths):
         ws.set_column(i, i, w)
     ws.write_row(0, 0, rubrics[0], C['head'])
@@ -809,13 +823,15 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
     for r, row in enumerate(rubrics[1:], 1):
         for c, v in enumerate(row):
             if c == 1:
+                ws.write(r, c, v, C['rubric'])
+            elif c == 3:
                 ws.write(r, c, v, C['brand:' + v])
-            elif 7 <= c <= 13:
-                ws.write(r, c, v, C['center_sat'] if c == 12 else C['center'])
+            elif 6 <= c <= 12:
+                ws.write(r, c, v, C['center_sat'] if c == 11 else C['center'])
             else:
                 ws.write(r, c, v, C['cell'])
         ws.set_row(r, height([[(str(v), '')] for v in row], widths))
-    ws.freeze_panes(1, 4)
+    ws.freeze_panes(1, 3)
 
     # Неделя
     ws = wb.add_worksheet('Неделя')
@@ -879,8 +895,8 @@ SECTION_IDS = {'Lab': 'lab', 'Academy': 'academy', 'Office': 'office'}
 # Как из темы собирается заголовок — для банка тем в приложении
 PATTERNS = {'f_demo': 'Демо / {topic}', 'f_tech': 'Технологии / {topic}', 'f_case': 'Кейсы / {topic}',
             'f_dev': 'Разработка / {topic}', 'f_res': 'Исследования / {topic}',
-            'f_think': 'Мысли / {topic}', 'f_aca': 'Академия / {topic}', 'f_spec': 'Демо / {topic}',
-            'sh_thesis': '{topic}', 'sh_razbor': 'Разборы: {topic}', 'sh_life': 'Лайфстайл: {topic}'}
+            'f_think': 'Мысли / {topic}', 'f_aca': 'Академия / {topic}', 'sh_thesis': '{topic}',
+            'sh_razbor': 'Разборы: {topic}', 'sh_life': 'Лайфстайл: {topic}'}
 
 
 def write_seed():
@@ -901,26 +917,27 @@ def write_seed():
     for c in channels:
         c['color'] = BRAND_COLORS[c['name']]
         c['start'] = c['start'].isoformat()
-    rubrics = []
+    rubrics = [dict(id=cid, name=name, what=what) for cid, (name, what) in CATS.items()]
+    rules = []
     for rid in RUBRIC_ORDER:
         r = RUBRICS[rid]
         names = [re.sub(r'\s*\(.*?\)', '', t).strip() for t in r['platforms'].split(',')]
-        rubric = dict(id=rid, channelId=CHANNEL_IDS[r['brand']], channel=r['channel'], name=r['name'],
-                      what=r['what'], format=r['fmt'], platforms=[p for p in PLATFORMS if p in names],
-                      days=[bool(c) for c in r['days']],
-                      dayNotes=['' if c == '●' else c for c in r['days']], freq=r['freq'],
-                      source=r['source'], full=r['fmt'] == 'FULL', limit=1)
+        rule = dict(id=rid, rubricId=r['cat'], name=r['fmt_name'], channelId=CHANNEL_IDS[r['brand']],
+                    channel=r['channel'], what=r['what'], format=r['fmt'],
+                    platforms=[p for p in PLATFORMS if p in names], days=[bool(c) for c in r['days']],
+                    dayNotes=['' if c == '●' else c for c in r['days']], freq=r['freq'],
+                    source=r['source'], full=r['fmt'] == 'FULL', limit=1)
         if rid in PATTERNS:
-            rubric['pattern'] = PATTERNS[rid]
+            rule['pattern'] = PATTERNS[rid]
         section = next((u.section for u in UNITS if u.rubric == rid and u.brand == r['brand']), None)
         if section:
-            rubric['sectionId'] = SECTION_IDS[section]
-        rubrics.append(rubric)
+            rule['sectionId'] = SECTION_IDS[section]
+        rules.append(rule)
     items = []
     for n, u in enumerate(UNITS, 1):
-        it = dict(id=f'i{n}', date=u.day.isoformat(), channelId=CHANNEL_IDS[u.brand], rubricId=u.rubric,
-                  title=u.text, format=u.fmt, platforms=list(u.platforms), status='planned',
-                  source=u.source, rank=u.rank)
+        it = dict(id=f'i{n}', date=u.day.isoformat(), channelId=CHANNEL_IDS[u.brand], ruleId=u.rubric,
+                  rubricId=cat_of(u), title=u.text, format=u.fmt, platforms=list(u.platforms),
+                  status='planned', source=u.source, rank=u.rank)
         if u.section:
             it['sectionId'] = SECTION_IDS[u.section]
         if u.group:
@@ -930,8 +947,8 @@ def write_seed():
         if u.orig:
             it['origDate'] = u.orig.isoformat()
         items.append(it)
-    seed = dict(version=1, start=START.isoformat(), end=END.isoformat(), platforms=PLATFORMS,
-                channels=channels, rubrics=rubrics, items=items)
+    seed = dict(version=2, start=START.isoformat(), end=END.isoformat(), platforms=PLATFORMS,
+                channels=channels, rubrics=rubrics, rules=rules, items=items)
     APP_SEED.parent.mkdir(parents=True, exist_ok=True)
     APP_SEED.write_text(json.dumps(seed, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
 

@@ -5,6 +5,11 @@ describe('T-CP-009 FR-CP-009 фильтры', () => {
   const p = smallPlan()
   const ids = (f = NO_FILTERS) => p.items.filter((it) => visible(it, f)).map((it) => it.id)
 
+  it('скрытая рубрика — вместе с её тизером и анонсами', () => {
+    const shown = ids({ ...NO_FILTERS, hiddenRubrics: ['demo'] })
+    expect(shown).not.toContain('teaser')
+    expect(shown).toContain('thesis')
+  })
   it('скрытый канал', () => {
     expect(ids({ ...NO_FILTERS, hiddenChannels: ['andre'] })).not.toContain('ait')
   })

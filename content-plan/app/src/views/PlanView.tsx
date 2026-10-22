@@ -74,7 +74,7 @@ export function PlanView() {
 }
 
 function PlanRow({ item }: { item: Item }) {
-  const { channels, rubrics, openItem, dispatch } = usePlan()
+  const { channels, labelOf, openItem, dispatch } = usePlan()
   const c = channels.get(item.channelId)
   const section = c?.sections.find((s) => s.id === item.sectionId)
   return (
@@ -83,7 +83,7 @@ function PlanRow({ item }: { item: Item }) {
         <ChannelDot color={c?.color ?? '#999'} />
         {section?.name ?? c?.name}
       </span>
-      <span className="cp-muted">{rubrics.get(item.rubricId)?.name}</span>
+      <span className="cp-muted">{labelOf(item)}</span>
       <button type="button" className={`cp-link${isSlot(item) ? ' cp-slot-text' : ''}`} onClick={() => openItem(item.id)}>
         {item.title}
       </button>

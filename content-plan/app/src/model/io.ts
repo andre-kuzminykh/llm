@@ -4,27 +4,60 @@ import type { ISODate, Item, Plan } from './types'
 
 export const exportJSON = (plan: Plan) => JSON.stringify(plan)
 
-export function parsePlan(text: string): Plan {
+/** Разбирает выгрузку. План первой версии (рубрика и формат были одним) нужно перевести migrateV1. */
+export function parsePlan(text: string): Plan | PlanV1 {
   let data: unknown
   try {
     data = JSON.parse(text)
   } catch {
     throw new Error('Это не JSON')
   }
-  const p = data as Partial<Plan>
-  const ok =
+  const p = data as Omit<Partial<Plan>, 'version'> & { version?: number }
+  const common =
     p &&
-    p.version === 1 &&
     typeof p.start === 'string' &&
     typeof p.end === 'string' &&
     Array.isArray(p.platforms) &&
     Array.isArray(p.channels) &&
     Array.isArray(p.rubrics) &&
-    Array.isArray(p.items) &&
-    p.items.every((it: Partial<Item>) => typeof it.id === 'string' && typeof it.rubricId === 'string' && typeof it.title === 'string')
-  if (!ok) throw new Error('Файл не похож на выгрузку контент-плана (нужен version 1, каналы, рубрики и материалы)')
-  return p as Plan
+    Array.isArray(p.items)
+  const v2 =
+    common &&
+    p.version === 2 &&
+    Array.isArray(p.rules) &&
+    p.items!.every((it: Partial<Item>) => typeof it.id === 'string' && typeof it.ruleId === 'string' && typeof it.title === 'string')
+  const v1 =
+    common &&
+    p.version === 1 &&
+    (p.items as { id?: unknown; rubricId?: unknown; title?: unknown }[]).every((it) => typeof it.id === 'string' && typeof it.rubricId === 'string' && typeof it.title === 'string')
+  if (!v2 && !v1) throw new Error('Файл не похож на выгрузку контент-плана (нужны каналы, рубрики, правила и материалы)')
+  return p as Plan | PlanV1
 }
+
+export interface PlanV1 {
+  version: 1
+  channels: Plan['channels']
+  items: (Omit<Item, 'ruleId' | 'rubricId'> & { rubricId: string })[]
+}
+
+/** Первая версия хранила формат вместо рубрики (rubricId = «f_demo», «sh_teaser»…). Рубрики и правила
+ *  берём из нового исходного плана, материалы и каналы — из старого; рубрику тизеров и анонсов — от их FULL. */
+export function migrateV1(old: PlanV1, seed: Plan): Plan {
+  const rules = new Map(seed.rules.map((r) => [r.id, r]))
+  const ruleId = (id: string) => (id === 'f_spec' ? 'f_demo' : id)
+  const headRubric = new Map<string, string>()
+  for (const it of old.items) {
+    const r = rules.get(ruleId(it.rubricId))
+    if (it.group && r?.full && r.rubricId) headRubric.set(it.group, r.rubricId)
+  }
+  const items = old.items.map(({ rubricId, ...it }) => {
+    const id = ruleId(rubricId)
+    return { ...it, ruleId: id, rubricId: rules.get(id)?.rubricId ?? (it.group ? headRubric.get(it.group) : undefined) ?? null }
+  })
+  return { ...seed, channels: old.channels, items }
+}
+
+export const isV1 = (p: Plan | PlanV1): p is PlanV1 => p.version === 1
 
 /** Порядок заголовков в ячейке: канал, его разделы в Telegram, его разделы на сайте. */
 export function headerOrder(plan: Plan) {

@@ -1,7 +1,7 @@
 // Все изменения плана — чистые функции Plan → Plan; reducer добавляет к ним историю
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
 import { addDays, daysBetween, weekday } from './dates'
-import { isSlot, PLACEHOLDER, type Channel, type ISODate, type Item, type Plan, type Rubric } from './types'
+import { isSlot, PLACEHOLDER, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
 export const newId = (prefix = 'n') => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`
@@ -14,26 +14,24 @@ export const topicOf = (title: string) => {
   return m ? m[1] : title
 }
 
-export const titleFromTopic = (rubric: Rubric | undefined, topic: string) =>
-  rubric?.pattern ? rubric.pattern.replace('{topic}', topic) : topic
+export const titleFromTopic = (rule: Rule | undefined, topic: string) =>
+  rule?.pattern ? rule.pattern.replace('{topic}', topic) : topic
 
-export const slotTitle = (rubric: Rubric) =>
-  rubric.pattern ? titleFromTopic(rubric, PLACEHOLDER) : `${rubric.name}: ${PLACEHOLDER}`
+export const slotTitle = (rule: Rule, rubric?: Rubric) =>
+  rule.pattern ? titleFromTopic(rule, PLACEHOLDER) : `${rubric?.name ?? rule.name}: ${PLACEHOLDER}`
 
 const derived = (template: string, head: Item) =>
   template.replace('{title}', head.title).replace('{topic}', topicOf(head.title))
 
-/** Главный материал группы — тот, от которого собираются остальные. */
-export const headOf = (items: Item[], group: string) => {
-  const members = items.filter((it) => it.group === group)
-  return members.find((it) => !it.derive && members.some((m) => m.derive)) ?? members.find((it) => !it.derive)
-}
+const ruleOf = (plan: Plan, id: string) => plan.rules.find((r) => r.id === id)
+const rubricOf = (plan: Plan, id: string | null) => plan.rubrics.find((r) => r.id === id)
 
-const rubricOf = (plan: Plan, id: string) => plan.rubrics.find((r) => r.id === id)
-
+/** Производные члены группы берут у главного заголовок (по шаблону) и рубрику. */
 const rederive = (items: Item[], head: Item) =>
   items.map((it) =>
-    it.group === head.group && it.derive && it.id !== head.id ? { ...it, title: derived(it.derive, head) } : it,
+    it.group === head.group && it.date === head.date && it.derive && it.id !== head.id
+      ? { ...it, title: derived(it.derive, head), rubricId: head.rubricId }
+      : it,
   )
 
 // ── материалы ────────────────────────────────────────────────────────────────
@@ -53,7 +51,7 @@ export function updateItem(plan: Plan, id: string, patch: Partial<Item>): Plan {
     return head
   })
   if (!head) return plan
-  if (head.group && !head.derive && 'title' in patch) items = rederive(items, head)
+  if (head.group && !head.derive && ('title' in patch || 'rubricId' in patch)) items = rederive(items, head)
   return { ...plan, items }
 }
 
@@ -63,14 +61,14 @@ export function editItem(plan: Plan, id: string, patch: Partial<Item>, date?: IS
   return date ? moveItem(next, id, date, withGroup) : next
 }
 
-/** Ближайший материал рубрики с группой — образец для новой группы. */
-function templateGroup(plan: Plan, rubricId: string, date: ISODate): Item[] {
+/** Ближайший материал того же правила с группой — образец для новой группы. */
+function templateGroup(plan: Plan, ruleId: string, date: ISODate): Item[] {
   const size = new Map<string, number>()
   for (const it of plan.items) if (it.group) size.set(it.group, (size.get(it.group) ?? 0) + 1)
   let best: Item | undefined
   let bestGap = Infinity
   for (const it of plan.items) {
-    if (it.rubricId !== rubricId || !it.group || !it.date || it.derive) continue
+    if (it.ruleId !== ruleId || !it.group || !it.date || it.derive) continue
     // ближе по дате, тот же день недели, и группа, в которой есть что копировать
     const gap = Math.abs(daysBetween(it.date, date)) + (weekday(it.date) === weekday(date) ? 0 : 0.5) +
       (size.get(it.group)! > 1 ? 0 : 10000)
@@ -84,12 +82,12 @@ function templateGroup(plan: Plan, rubricId: string, date: ISODate): Item[] {
 
 /** Новый материал; with family — копии сопутствующих публикаций по образцу ближайшего. */
 export function createItem(plan: Plan, item: Item, withFamily = true): Plan {
-  const family = withFamily && item.date ? templateGroup(plan, item.rubricId, item.date) : []
+  const family = withFamily && item.date ? templateGroup(plan, item.ruleId, item.date) : []
   if (family.length < 2) return { ...plan, items: [...plan.items, { ...item, group: undefined }] }
   const group = newId('g')
   const head = { ...item, group }
   const copies = family
-    .filter((x) => x.rubricId !== item.rubricId || x.derive)
+    .filter((x) => x.ruleId !== item.ruleId || x.derive)
     .map((x) => ({ ...x, id: newId(), date: item.date, group, status: item.status, source: item.source, origDate: undefined, note: undefined }))
   return { ...plan, items: rederive([...plan.items, head, ...copies], head) }
 }
@@ -112,25 +110,25 @@ export function removeItem(plan: Plan, id: string, withGroup = true): Plan {
 
 // ── банк тем ─────────────────────────────────────────────────────────────────
 
-export const bankOf = (plan: Plan, rubricId: string) =>
-  plan.items.filter((x) => x.date === null && x.rubricId === rubricId)
+export const bankOf = (plan: Plan, ruleId: string) => plan.items.filter((x) => x.date === null && x.ruleId === ruleId)
 
-export function bankAdd(plan: Plan, rubricId: string, topics: string[]): Plan {
-  const rubric = rubricOf(plan, rubricId)
-  if (!rubric) return plan
-  const sample = plan.items.find((x) => x.rubricId === rubricId && x.date && !x.derive)
+export function bankAdd(plan: Plan, ruleId: string, topics: string[]): Plan {
+  const rule = ruleOf(plan, ruleId)
+  if (!rule) return plan
+  const sample = plan.items.find((x) => x.ruleId === ruleId && x.date && !x.derive)
   const add = topics
     .map((t) => t.trim())
     .filter(Boolean)
     .map<Item>((title) => ({
       id: newId('b'),
       date: null,
-      channelId: rubric.channelId,
-      sectionId: rubric.sectionId,
-      rubricId,
+      channelId: rule.channelId,
+      sectionId: rule.sectionId,
+      ruleId,
+      rubricId: rule.rubricId,
       title,
-      format: rubric.format,
-      platforms: sample?.platforms ?? rubric.platforms,
+      format: rule.format,
+      platforms: sample?.platforms ?? rule.platforms,
       status: 'planned',
       source: 'банк тем',
       rank: sample?.rank ?? 50,
@@ -138,7 +136,7 @@ export function bankAdd(plan: Plan, rubricId: string, topics: string[]): Plan {
   return add.length ? { ...plan, items: [...plan.items, ...add] } : plan
 }
 
-/** Переставить тему в банке на место другой темы той же рубрики. */
+/** Переставить тему в банке на место другой темы того же правила. */
 export function bankReorder(plan: Plan, id: string, beforeId: string | null): Plan {
   const it = plan.items.find((x) => x.id === id)
   if (!it || id === beforeId) return plan
@@ -148,60 +146,60 @@ export function bankReorder(plan: Plan, id: string, beforeId: string | null): Pl
   return { ...plan, items: rest }
 }
 
-const slotsOf = (plan: Plan, rubricId: string, from: ISODate) =>
+const slotsOf = (plan: Plan, ruleId: string, from: ISODate) =>
   plan.items
-    .filter((x) => x.rubricId === rubricId && x.date && x.date >= from && !x.derive && isSlot(x))
+    .filter((x) => x.ruleId === ruleId && x.date && x.date >= from && !x.derive && isSlot(x))
     .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0))
 
-/** Тема из банка → слот этой рубрики в этот день, а если слота нет — новый материал. */
+/** Тема из банка → слот этого правила в этот день, а если слота нет — новый материал. */
 export function assignTopic(plan: Plan, bankId: string, date: ISODate): Plan {
   const topic = plan.items.find((x) => x.id === bankId && x.date === null)
   if (!topic) return plan
-  const rubric = rubricOf(plan, topic.rubricId)
-  const title = titleFromTopic(rubric, topic.title)
+  const title = titleFromTopic(ruleOf(plan, topic.ruleId), topic.title)
   const without = { ...plan, items: plan.items.filter((x) => x.id !== bankId) }
-  const slot = slotsOf(without, topic.rubricId, date).find((x) => x.date === date)
+  const slot = slotsOf(without, topic.ruleId, date).find((x) => x.date === date)
   if (slot) return updateItem(without, slot.id, { title, source: 'банк тем' })
   return createItem(without, { ...topic, id: newId(), date, title }, true)
 }
 
 /** Что встанет куда при «Разложить по слотам»: пары тема → слот, по порядку. */
-export function planFill(plan: Plan, rubricId: string, from: ISODate) {
-  const bank = bankOf(plan, rubricId)
-  const slots = slotsOf(plan, rubricId, from)
+export function planFill(plan: Plan, ruleId: string, from: ISODate) {
+  const bank = bankOf(plan, ruleId)
+  const slots = slotsOf(plan, ruleId, from)
   const n = Math.min(bank.length, slots.length)
   return { pairs: bank.slice(0, n).map((b, i) => ({ bank: b, slot: slots[i] })), left: bank.length - n, freeSlots: slots.length }
 }
 
-export function fillSlots(plan: Plan, rubricId: string, from: ISODate): Plan {
-  const rubric = rubricOf(plan, rubricId)
+export function fillSlots(plan: Plan, ruleId: string, from: ISODate): Plan {
+  const rule = ruleOf(plan, ruleId)
   let next = plan
-  for (const { bank, slot } of planFill(plan, rubricId, from).pairs) {
-    next = updateItem(next, slot.id, { title: titleFromTopic(rubric, bank.title), source: 'банк тем' })
+  for (const { bank, slot } of planFill(plan, ruleId, from).pairs) {
+    next = updateItem(next, slot.id, { title: titleFromTopic(rule, bank.title), source: 'банк тем' })
     next = { ...next, items: next.items.filter((x) => x.id !== bank.id) }
   }
   return next
 }
 
-/** Слоты рубрики на её дни недели в периоде, где материала этой рубрики ещё нет. */
-export function createSlots(plan: Plan, rubricId: string, from: ISODate, to: ISODate): Plan {
-  const rubric = rubricOf(plan, rubricId)
-  const channel = plan.channels.find((c) => c.id === rubric?.channelId)
-  if (!rubric || !channel) return plan
-  const taken = new Set(plan.items.filter((x) => x.rubricId === rubricId && !x.derive && x.date).map((x) => x.date))
-  const sample = plan.items.find((x) => x.rubricId === rubricId && x.date && !x.derive)
+/** Слоты правила на его дни недели в периоде, где материала этого правила ещё нет. */
+export function createSlots(plan: Plan, ruleId: string, from: ISODate, to: ISODate): Plan {
+  const rule = ruleOf(plan, ruleId)
+  const channel = plan.channels.find((c) => c.id === rule?.channelId)
+  if (!rule || !channel) return plan
+  const taken = new Set(plan.items.filter((x) => x.ruleId === ruleId && !x.derive && x.date).map((x) => x.date))
+  const sample = plan.items.find((x) => x.ruleId === ruleId && x.date && !x.derive)
   let next = plan
   for (let d = from; d <= to; d = addDays(d, 1)) {
-    if (!rubric.days[weekday(d)] || taken.has(d) || d < channel.start) continue
+    if (!rule.days[weekday(d)] || taken.has(d) || d < channel.start) continue
     next = createItem(next, {
       id: newId(),
       date: d,
-      channelId: rubric.channelId,
-      sectionId: rubric.sectionId,
-      rubricId,
-      title: slotTitle(rubric),
-      format: rubric.format,
-      platforms: sample?.platforms ?? rubric.platforms,
+      channelId: rule.channelId,
+      sectionId: rule.sectionId,
+      ruleId,
+      rubricId: rule.rubricId,
+      title: slotTitle(rule, rubricOf(plan, rule.rubricId)),
+      format: rule.format,
+      platforms: sample?.platforms ?? rule.platforms,
       status: 'planned',
       source: 'нужна тема',
       rank: sample?.rank ?? 50,
@@ -210,33 +208,42 @@ export function createSlots(plan: Plan, rubricId: string, from: ISODate, to: ISO
   return next
 }
 
-// ── сетка и каналы ───────────────────────────────────────────────────────────
+// ── рубрики, правила, каналы ─────────────────────────────────────────────────
 
-export const updateRubric = (plan: Plan, id: string, patch: Partial<Rubric>): Plan => ({
+export const updateRule = (plan: Plan, id: string, patch: Partial<Rule>): Plan => ({
   ...plan,
-  rubrics: plan.rubrics.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+  rules: plan.rules.map((r) => (r.id === id ? { ...r, ...patch } : r)),
 })
 
-export const addRubric = (plan: Plan, channelId: string, name: string): Plan => {
+export const addRule = (plan: Plan, rubricId: string | null, channelId: string, name: string): Plan => {
   const channel = plan.channels.find((c) => c.id === channelId)
   if (!channel || !name.trim()) return plan
-  const rubric: Rubric = {
+  const rule: Rule = {
     id: newId('r'),
+    rubricId,
+    name: name.trim(),
     channelId,
     channel: channel.name,
-    name: name.trim(),
     what: '',
     format: 'Пост',
     platforms: channel.platforms.slice(0, 1),
     days: [true, true, true, true, true, false, true],
     dayNotes: ['', '', '', '', '', '', ''],
     freq: '',
-    source: 'новая рубрика',
+    source: 'новый формат',
     full: false,
     limit: 1,
   }
-  return { ...plan, rubrics: [...plan.rubrics, rubric] }
+  return { ...plan, rules: [...plan.rules, rule] }
 }
+
+export const updateRubric = (plan: Plan, id: string, patch: Partial<Rubric>): Plan => ({
+  ...plan,
+  rubrics: plan.rubrics.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+})
+
+export const addRubric = (plan: Plan, name: string, what = ''): Plan =>
+  name.trim() ? { ...plan, rubrics: [...plan.rubrics, { id: newId('k'), name: name.trim(), what }] } : plan
 
 export const updateChannel = (plan: Plan, id: string, patch: Partial<Channel>): Plan => ({
   ...plan,
@@ -260,13 +267,15 @@ export type Action =
   | { type: 'create'; item: Item; withFamily?: boolean }
   | { type: 'duplicate'; id: string }
   | { type: 'remove'; id: string; withGroup?: boolean }
-  | { type: 'bankAdd'; rubricId: string; topics: string[] }
+  | { type: 'bankAdd'; ruleId: string; topics: string[] }
   | { type: 'bankReorder'; id: string; beforeId: string | null }
   | { type: 'assign'; bankId: string; date: ISODate }
-  | { type: 'fillSlots'; rubricId: string; from: ISODate }
-  | { type: 'createSlots'; rubricId: string; from: ISODate; to: ISODate }
+  | { type: 'fillSlots'; ruleId: string; from: ISODate }
+  | { type: 'createSlots'; ruleId: string; from: ISODate; to: ISODate }
+  | { type: 'rule'; id: string; patch: Partial<Rule> }
+  | { type: 'addRule'; rubricId: string | null; channelId: string; name: string }
   | { type: 'rubric'; id: string; patch: Partial<Rubric> }
-  | { type: 'addRubric'; channelId: string; name: string }
+  | { type: 'addRubric'; name: string; what?: string }
   | { type: 'channel'; id: string; patch: Partial<Channel> }
   | { type: 'addChannel'; name: string; start: ISODate }
   | { type: 'undo' }
@@ -290,13 +299,15 @@ function apply(plan: Plan, a: Action): Plan {
     case 'create': return createItem(plan, a.item, a.withFamily ?? true)
     case 'duplicate': return duplicateItem(plan, a.id)
     case 'remove': return removeItem(plan, a.id, a.withGroup ?? true)
-    case 'bankAdd': return bankAdd(plan, a.rubricId, a.topics)
+    case 'bankAdd': return bankAdd(plan, a.ruleId, a.topics)
     case 'bankReorder': return bankReorder(plan, a.id, a.beforeId)
     case 'assign': return assignTopic(plan, a.bankId, a.date)
-    case 'fillSlots': return fillSlots(plan, a.rubricId, a.from)
-    case 'createSlots': return createSlots(plan, a.rubricId, a.from, a.to)
+    case 'fillSlots': return fillSlots(plan, a.ruleId, a.from)
+    case 'createSlots': return createSlots(plan, a.ruleId, a.from, a.to)
+    case 'rule': return updateRule(plan, a.id, a.patch)
+    case 'addRule': return addRule(plan, a.rubricId, a.channelId, a.name)
     case 'rubric': return updateRubric(plan, a.id, a.patch)
-    case 'addRubric': return addRubric(plan, a.channelId, a.name)
+    case 'addRubric': return addRubric(plan, a.name, a.what)
     case 'channel': return updateChannel(plan, a.id, a.patch)
     case 'addChannel': return addChannel(plan, a.name, a.start)
     default: return plan
