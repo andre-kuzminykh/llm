@@ -123,8 +123,9 @@ export function WeekView() {
     if (mode !== 'time') return 0
     const from = mondayOf(d)
     let first: number | null = null
-    for (let k = 0; k < 7; k++) for (const u of unitsOn(addDays(from, k))) first = Math.min(first ?? 24 * 60, toMin(u.time))
-    return Math.max(0, ((first ?? 8 * 60) / 60 - 0.5) * HOUR)
+    for (let k = 0; k < 7; k++) for (const u of unitsOn(addDays(from, k))) if (!u.stream) first = Math.min(first ?? 24 * 60, toMin(u.time))
+    // за полчаса до часа первого материала: подпись этого часа видна целиком
+    return Math.max(0, (Math.floor((first ?? 8 * 60) / 60) - 0.5) * HOUR)
   }
   const cross = useCallback((d: ISODate) => crossRef.current(d), [])
   const inf = useInfinite({ axis: 'x', step: 1, size: col, start: plan.start, end: plan.end, anchor: mondayOf(anchor), jump: weekJump, onFocus: setAnchor, overscan: 4, cross })
@@ -255,15 +256,31 @@ export function stackDay(units: Unit[], maxLanes: number) {
   return out
 }
 
+const STREAM_ROW = 26 // строка потока над шкалой
+
 function TimeGrid({ days, count, col }: { days: { date: ISODate; i: number }[]; count: number; col: number }) {
+  const { unitsOn } = usePlan()
   const width = GUT + count * col
+  // поток 24/7 (лента Neuronium) — как событие на весь день: строкой над шкалой часов
+  const streams = new Map(days.map(({ date }) => [date, unitsOn(date).filter((u) => u.stream)]))
+  const rows = Math.max(0, ...[...streams.values()].map((l) => l.length))
+  const head = HEAD + (rows ? rows * STREAM_ROW + 4 : 0)
   return (
-    <div className="cp-tg" role="grid" aria-label="Неделя по времени" style={{ width, height: HEAD + 24 * HOUR, '--cp-hour': `${HOUR}px` } as CSSProperties}>
-      <div className="cp-tg__head" style={{ width }} role="row">
-        <div className="cp-tg__corner" />
+    <div className="cp-tg" role="grid" aria-label="Неделя по времени" style={{ width, height: head + 24 * HOUR, '--cp-hour': `${HOUR}px` } as CSSProperties}>
+      <div className="cp-tg__head" style={{ width, height: head }} role="row">
+        <div className="cp-tg__corner">{rows > 0 && <span className="cp-tg__alllabel" title="Круглосуточно: приходит по вебхуку и выходит сразу">24/7</span>}</div>
         {days.map(({ date, i }) => (
           <div key={date} className={`cp-tg__day${weekday(date) === SAT ? ' cp-tg__day--rest' : ''}`} role="columnheader" style={{ left: GUT + i * col, width: col }}>
-            <DayHead date={date} />
+            <div className="cp-tg__dayhead">
+              <DayHead date={date} />
+            </div>
+            {rows > 0 && (
+              <div className="cp-tg__allday" aria-label={`Круглосуточно, ${date}`}>
+                {streams.get(date)!.map((u) => (
+                  <UnitCard key={u.key} unit={u} variant="line" />
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -288,7 +305,7 @@ function TimeColumn({ date, left, width }: { date: ISODate; left: number; width:
     return fromMin(Math.round((y / HOUR) * 4) * 15)
   }
   const drop = useDrop((d, e) => dropOn(date, d, at(e.clientY, e.currentTarget as HTMLElement, d.kind === 'item' ? grab.y : 0)))
-  const placed = stackDay(unitsOn(date), Math.max(1, Math.floor((width - 10) / 140)))
+  const placed = stackDay(unitsOn(date).filter((u) => !u.stream), Math.max(1, Math.floor((width - 10) / 140)))
   const now = date === today() ? new Date() : null
   return (
     <div

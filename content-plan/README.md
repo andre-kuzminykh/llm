@@ -74,7 +74,7 @@
 
 | Рубрика | Где | Дни |
 |---|---|---|
-| Все новости / Избранные новости | Neuronium: Telegram / YouTube | 7/7 |
+| Все новости / Избранные новости | Neuronium: Telegram / YouTube | 24/7: приходят по вебхуку и выходят сразу, без своего времени |
 | Исследование дня, текст | Dataist Lab (Web, Telegram), X, Threads, LinkedIn, письмо | 7/7 (в Сб только Web, TG, X) |
 | Исследование дня, видео | шортсы: YouTube, Instagram, TikTok | 7/7 |
 | Урок дня | Dataist Academy (Web, Telegram), X | 7/7; в день старта модуля — пометка и строка в письме |

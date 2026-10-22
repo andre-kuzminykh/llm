@@ -3,7 +3,7 @@
 // других каналов — свои карточки. Так же в одну карточку сходятся пост и шортс исследования дня.
 import { addDays, daysBetween } from './dates'
 import { AUTO_RULES } from './filters'
-import { isSlot, timeOf, typeOf, type ISODate, type Item, type Rule, type Status } from './types'
+import { isSlot, STREAM_TIME, timeOf, typeOf, type ISODate, type Item, type Rule, type Status } from './types'
 
 export interface Unit {
   key: string
@@ -12,7 +12,11 @@ export interface Unit {
   channelId: string
   date: ISODate | null
   time: string
+  stream: boolean // поток 24/7 по вебхуку: в дне — первым, на шкале времени — над часами
 }
+
+/** Время карточки для подписи: «12:00» или «24/7» у потока. */
+export const timeText = (u: Pick<Unit, 'time' | 'stream'>) => (u.stream ? STREAM_TIME : u.time)
 
 /** Карточки одного дня. Порядок: по времени, затем по каналам и рангу. */
 export function unitsOf(items: Item[], rules: Map<string, Rule>, channelOrder: string[] = []): Unit[] {
@@ -46,9 +50,11 @@ export function unitsOf(items: Item[], rules: Map<string, Rule>, channelOrder: s
   for (const [key, list] of byKey) {
     const sorted = [...list].sort((a, b) => Number(!!a.derive) - Number(!!b.derive) || a.rank - b.rank)
     const head = sorted[0]
-    out.push({ key, head, items: sorted, channelId: head.channelId, date: head.date, time: timeOf(head, rules.get(head.ruleId)) })
+    const rule = rules.get(head.ruleId)
+    out.push({ key, head, items: sorted, channelId: head.channelId, date: head.date, time: timeOf(head, rule), stream: !!rule?.stream })
   }
-  return out.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || order(a.channelId) - order(b.channelId) || a.head.rank - b.head.rank)
+  // поток — как событие на весь день: первым
+  return out.sort((a, b) => Number(b.stream) - Number(a.stream) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || order(a.channelId) - order(b.channelId) || a.head.rank - b.head.rank)
 }
 
 /** Площадки карточки в порядке плана и что на каждой выходит: YouTube → FULL, Тизер · Shorts. */

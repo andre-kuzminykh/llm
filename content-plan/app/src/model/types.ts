@@ -47,6 +47,7 @@ export interface Rule {
   time: string // во сколько выходит, если у материала не задано своё: «12:00»
   types: Record<string, string> // что выходит на площадке: YouTube → «FULL», Instagram → «Reels»
   bank?: boolean // темы к формату копятся в банке
+  stream?: boolean // поток: выходит по вебхуку круглосуточно, как только пришло (лента Neuronium); своего времени нет
 }
 
 export type Status = 'planned' | 'progress' | 'paused' | 'ready' | 'published'
@@ -134,4 +135,6 @@ export function typeOf(rule: Rule | undefined, platform: string) {
 }
 
 export const DEFAULT_TIME = '12:00'
+/** Как подписан поток вместо времени: «24/7». */
+export const STREAM_TIME = '24/7'
 export const timeOf = (it: Pick<Item, 'time'>, rule: Rule | undefined) => it.time ?? rule?.time ?? DEFAULT_TIME

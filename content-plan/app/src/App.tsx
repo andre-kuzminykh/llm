@@ -230,6 +230,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       return
     }
     const from = it.date
+    if (rules.get(it.ruleId)?.stream) time = undefined // у потока нет времени: на шкалу он встаёт только днём
     if (from === date && !time) return
     // FULL на день, где уже есть FULL: перенос сделан, а поменять местами — одной кнопкой
     const isFull = rules.get(it.ruleId)?.full && !it.derive

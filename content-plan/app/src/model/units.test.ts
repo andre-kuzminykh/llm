@@ -1,7 +1,7 @@
 import { byId, item, loadSeed, smallPlan } from '../test/fixtures'
 import { layoutDay } from '../views/WeekView'
 import { indexByDate } from './filters'
-import { dueOf, platformTypes, taskParts, unitsOf } from './units'
+import { dueOf, platformTypes, taskParts, timeText, unitsOf } from './units'
 
 const rulesOf = (p = smallPlan()) => new Map(p.rules.map((r) => [r.id, r]))
 
@@ -25,6 +25,16 @@ describe('T-CP-017 FR-CP-017 карточка — материал целико�
       ['Telegram', ['Анонс · Office']],
     ])
     expect(taskParts(full, rulesOf(p), p.platforms)).toHaveLength(5)
+  })
+  it('лента Neuronium — поток 24/7: без времени, в дне первой', () => {
+    const seed = loadSeed()
+    const units = unitsOf(indexByDate(seed).get('2026-10-27')!, rulesOf(seed), seed.channels.map((c) => c.id))
+    expect(units.slice(0, 2).map((u) => [u.head.ruleId, timeText(u)])).toEqual([
+      ['neu_all', '24/7'],
+      ['neu_top', '24/7'],
+    ])
+    expect(units.filter((u) => u.stream)).toHaveLength(2)
+    expect(timeText(units[2])).toMatch(/^\d\d:\d\d$/)
   })
   it('пост и шортс исследования дня — одна карточка', () => {
     const seed = loadSeed()

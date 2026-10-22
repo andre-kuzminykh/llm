@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import { addDays, dayTitle, shortDate, today } from '../model/dates'
 import { AUTO_RULES } from '../model/filters'
 import { shownTitle, titleIsFormat, isSlot, type ISODate, type Status } from '../model/types'
-import { daysLeft, dueOf, type Unit } from '../model/units'
+import { daysLeft, dueOf, timeText, type Unit } from '../model/units'
 import { mainChannelId, RubricChip, StatusFilter } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
@@ -86,7 +86,7 @@ function NowRow({ row, late }: { row: Row; late: boolean }) {
   const icon = head.status === 'paused' ? 'pause' : head.status === 'ready' ? 'check' : 'play'
   return (
     <div className={`cp-now__row${urgent ? ' cp-now__row--urgent' : ''}`} style={{ '--cp-c': c?.color } as CSSProperties}>
-      <span className="cp-now__time">{late ? shortDate(unit.date!) : unit.time}</span>
+      <span className="cp-now__time">{late ? shortDate(unit.date!) : timeText(unit)}</span>
       <div className="cp-now__main">
         <span className="cp-card__rub">
           {rubric && <RubricChip name={rubric.name} />}

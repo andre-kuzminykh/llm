@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { loadSeed, smallPlan } from '../test/fixtures'
-import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, type PlanV1, type PlanV2 } from './io'
+import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, upgradePlan, type PlanV1, type PlanV2 } from './io'
 
 describe('T-CP-013 FR-CP-013 выгрузка и загрузка', () => {
   it('CSV-календарь совпадает с out/4_calendar.csv генератора', () => {
@@ -60,5 +60,23 @@ describe('T-CP-013 FR-CP-013 выгрузка и загрузка', () => {
     expect(() => parsePlan(JSON.stringify({ hello: 1 }))).toThrow(/не похож/)
     expect(() => parsePlan(JSON.stringify({ ...smallPlan(), items: [{ id: 1 }] }))).toThrow(/не похож/)
     expect(() => parsePlan(JSON.stringify({ ...smallPlan(), rules: undefined }))).toThrow(/не похож/)
+  })
+})
+
+describe('T-CP-026 FR-CP-026 поток 24/7', () => {
+  it('план, сохранённый до потоков, узнаёт их из исходного плана; правки остаются', async () => {
+    const seed = loadSeed()
+    const old = JSON.parse(JSON.stringify(seed))
+    for (const r of old.rules) delete r.stream
+    const neu = old.rules.find((r: { id: string }) => r.id === 'neu_all')
+    neu.time = '08:00'
+    old.rules.find((r: { id: string }) => r.id === 'sh_thesis').name = 'Тезис'
+    const p = await upgradePlan(old, async () => seed)
+    const byId = new Map(p.rules.map((r) => [r.id, r]))
+    expect(byId.get('neu_all')).toMatchObject({ stream: true, time: seed.rules.find((r) => r.id === 'neu_all')!.time })
+    expect(byId.get('neu_top')!.stream).toBe(true)
+    expect(byId.get('sh_thesis')).toMatchObject({ stream: false, name: 'Тезис' })
+    // уже знает о потоках — исходный план не нужен
+    expect(await upgradePlan(p, async () => { throw new Error('не нужен') })).toBe(p)
   })
 })

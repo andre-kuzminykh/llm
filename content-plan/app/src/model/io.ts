@@ -138,7 +138,27 @@ export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
   if (isV1(p)) return migrateV1(p, await seed())
   if (isV2(p)) return migrateV2(p, await seed())
-  return p
+  return addStreams(p, seed)
+}
+
+/** План, сохранённый до потоков 24/7: какие форматы — поток, берётся из исходного плана; остальные правки не трогаются. */
+async function addStreams(p: Plan, seed: () => Promise<Plan>): Promise<Plan> {
+  if (p.rules.every((r) => 'stream' in r)) return p
+  let src: Plan
+  try {
+    src = await seed()
+  } catch {
+    return p // без исходного плана откроем как есть
+  }
+  const from = new Map(src.rules.map((r) => [r.id, r]))
+  return {
+    ...p,
+    rules: p.rules.map((r) => {
+      if ('stream' in r) return r
+      const s = from.get(r.id)
+      return s?.stream ? { ...r, stream: true, time: s.time, freq: s.freq } : { ...r, stream: false }
+    }),
+  }
 }
 
 /** Порядок заголовков в ячейке: канал, его разделы в Telegram, его разделы на сайте. */

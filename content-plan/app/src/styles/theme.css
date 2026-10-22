@@ -426,7 +426,18 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-tg { position: relative; }
 .cp-tg__head { position: sticky; top: 0; z-index: 4; height: 52px; background: var(--nr-canvas); border-bottom: 1px solid var(--nr-sep); }
 .cp-tg__corner { position: sticky; left: 0; z-index: 2; width: 56px; height: 100%; background: var(--nr-canvas); }
-.cp-tg__day { position: absolute; top: 0; height: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; padding: 4px 8px; border-left: 1px solid var(--nr-sep-soft); overflow: hidden; }
+.cp-tg__corner .cp-tg__alllabel { position: absolute; }
+.cp-tg__day { position: absolute; top: 0; height: 100%; display: flex; flex-direction: column; border-left: 1px solid var(--nr-sep-soft); overflow: hidden; }
+.cp-tg__dayhead { flex: none; height: 52px; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; padding: 4px 8px; }
+/* поток 24/7 — строкой над шкалой, как событие на весь день */
+.cp-tg__allday { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 4px; }
+.cp-tg__allday .cp-card { height: 24px; }
+.cp-tg__allday .cp-card__open { flex-direction: row; align-items: center; gap: 6px; padding: 0 22px 0 8px; white-space: nowrap; }
+.cp-tg__allday .cp-card__rub { flex: none; }
+.cp-tg__allday .cp-rub { display: none; }
+.cp-tg__allday .cp-card__title { -webkit-line-clamp: 1; }
+.cp-tg__alllabel { position: absolute; right: 8px; bottom: 9px; font-size: var(--nr-fs-xs); color: var(--nr-text-3); font-variant-numeric: tabular-nums; }
+.cp-task__stream { color: var(--nr-text-2); font-weight: var(--nr-fw-medium); white-space: nowrap; }
 .cp-tg__day--rest { background: var(--cp-rest); }
 .cp-tg__body {
   position: relative;

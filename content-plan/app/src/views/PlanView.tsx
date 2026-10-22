@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react'
 import { addDays, addMonths, dayTitle, monthKey, monthTitle, today } from '../model/dates'
 import { visible } from '../model/filters'
 import { isSlot, shownTitle, type ISODate } from '../model/types'
-import { unitsOf, type Unit } from '../model/units'
+import { timeText, unitsOf, type Unit } from '../model/units'
 import { IconButton, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { DateJump, TopBar } from '../ui/TopBar'
@@ -88,7 +88,7 @@ function PlanRow({ unit }: { unit: Unit }) {
   const section = c?.sections.find((s) => s.id === head.sectionId)
   return (
     <div className="cp-plan__row" style={{ '--cp-c': c?.color } as CSSProperties}>
-      <span className="cp-plan__time">{unit.time}</span>
+      <span className="cp-plan__time">{timeText(unit)}</span>
       <span className="cp-plan__ch">{section?.name ?? c?.name}</span>
       <span className="cp-plan__label">{labelOf(head)}</span>
       <button type="button" className={`cp-link cp-plan__title${isSlot(head) ? ' cp-slot-text' : ''}`} onClick={() => openItem(head.id)}>

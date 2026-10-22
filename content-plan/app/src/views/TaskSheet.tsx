@@ -34,7 +34,7 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
   const order = plan.channels.map((c) => c.id)
   const unit: Unit =
     (head.date ? unitsOf(byDate.get(head.date) ?? [], rules, order).find((u) => u.items.some((it) => it.id === id)) : undefined) ??
-    { key: head.id, head, items: [head], channelId: head.channelId, date: head.date, time: timeOf(head, rules.get(head.ruleId)) }
+    { key: head.id, head, items: [head], channelId: head.channelId, date: head.date, time: timeOf(head, rules.get(head.ruleId)), stream: !!rules.get(head.ruleId)?.stream }
   const rule = rules.get(head.ruleId)
   const rubric = rubrics.get(head.rubricId ?? '')
   const channel = channels.get(unit.channelId)
@@ -114,7 +114,11 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
                   toast(`Перенесено на ${shortDate(d)}${head.group ? ' вместе с группой' : ''}`, true)
                 }}
               />
-              <PickText type="time" label="Время выхода" value={unit.time} text={unit.time} onChange={(t) => t && head.date && dispatch({ type: 'move', id: head.id, date: head.date, time: t })} />
+              {unit.stream ? (
+                <span className="cp-task__stream" title="Приходит по вебхуку и выходит сразу">24/7, по вебхуку</span>
+              ) : (
+                <PickText type="time" label="Время выхода" value={unit.time} text={unit.time} onChange={(t) => t && head.date && dispatch({ type: 'move', id: head.id, date: head.date, time: t })} />
+              )}
               <span className="cp-task__sep" aria-hidden="true">·</span>
             </>
           )}

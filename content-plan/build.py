@@ -150,10 +150,11 @@ rubric('lab_month', 'research', 'Итоги месяца в Лаборатори
        hint={THU: ' (2-й чт)'})
 # Новости
 rubric('neu_all', 'news', 'Все новости', 'Neuronium', 'Telegram «Neuronium»',
-       'Автоматическая лента всех новостей ИИ', 'Пост', 'Telegram', ALL7, 'ежедневно', S0,
-       'лента Neuronium (авто)')
+       'Автоматическая лента всех новостей ИИ: приходят по вебхуку и выходят сразу', 'Пост', 'Telegram', ALL7,
+       'круглосуточно, по вебхуку', S0, 'лента Neuronium (авто)')
 rubric('neu_top', 'news', 'Избранные новости', 'Neuronium', 'YouTube «Neuronium»',
-       'Видео-подборка главных новостей дня', 'Видео', 'YouTube', ALL7, 'ежедневно', S0, 'лента Neuronium')
+       'Видео по главным новостям ИИ: приходят по вебхуку и выходят сразу', 'Видео', 'YouTube', ALL7,
+       'круглосуточно, по вебхуку', S0, 'лента Neuronium (авто)')
 rubric('ml_news', 'news', 'Избранные новости в письме', 'Dataist', 'Рассылка Dataist',
        'Подборка новостей Neuronium в письме Dataist', 'Строка письма', 'Mail', NO_SAT,
        'ежедневно, кроме субботы', S0, 'лента Neuronium')
@@ -235,8 +236,8 @@ META = {
                           'LinkedIn': 'Пост', 'Mail': 'Строка письма'}),
     'lab_day_v': ('09:00', SH),
     'lab_month': ('12:00', {'Web': 'Итоги · Лаборатория', 'Telegram': 'Итоги · Lab'}),
-    'neu_all': ('08:00', {'Telegram': 'Лента'}),
-    'neu_top': ('19:00', {'YouTube': 'Видео'}),
+    'neu_all': ('00:00', {'Telegram': 'Лента'}),  # поток 24/7: в ячейке и в дне — первым, как событие на весь день
+    'neu_top': ('00:00', {'YouTube': 'Видео'}),
     'ml_news': ('07:30', {'Mail': 'Строка письма'}),
     'ml_week': ('17:00', {'Mail': 'Письмо'}),
     'aca_lesson': ('10:00', {'Web': 'Урок · Академия', 'Telegram': 'Урок · Academy', 'X': 'Пост'}),
@@ -258,6 +259,8 @@ META = {
     'ant_x': ('12:30', {'Telegram': 'Кросс-пост', 'YouTube': 'Shorts', 'TikTok': 'Видео'}),
 }
 assert set(META) == set(RUBRICS), set(RUBRICS) ^ set(META)
+# Поток: новости Neuronium приходят по вебхуку и выходят круглосуточно, своего времени у них нет
+STREAM = {'neu_all', 'neu_top'}
 # Порядок строк в таблице правил: по рубрикам, в конце — что выходит с каждым FULL
 RUBRIC_ORDER = sorted(RUBRICS, key=lambda rid: (list(CATS).index(RUBRICS[rid]['cat'])
                                                 if RUBRICS[rid]['cat'] else len(CATS)))
@@ -987,7 +990,7 @@ def write_seed():
                     platforms=[p for p in PLATFORMS if p in names], days=[bool(c) for c in r['days']],
                     dayNotes=['' if c == '●' else c for c in r['days']], freq=r['freq'],
                     source=r['source'], full=r['fmt'] == 'FULL', limit=1, time=META[rid][0],
-                    types={p: META[rid][1][p] for p in PLATFORMS if p in META[rid][1]})
+                    types={p: META[rid][1][p] for p in PLATFORMS if p in META[rid][1]}, stream=rid in STREAM)
         if rid in BANK:
             rule['bank'] = True
         section = next((u.section for u in UNITS if u.rubric == rid and u.brand == r['brand']), None)

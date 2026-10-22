@@ -118,6 +118,17 @@ await page.keyboard.press('Control+z')
 const top = await page.locator('.cp-body').evaluate((el) => el.scrollTop)
 check(top > 9 * 64 && top < 12 * 64, 'шкала открыта за полчаса до первого материала недели', `шкала прокручена на ${top}px`)
 check(await page.getByRole('button', { name: /^Ещё 1 в это время/ }).count(), 'совпавшие по времени — одной карточкой с «+1»', 'нет «+N» у совпавших')
+// лента Neuronium — поток 24/7: строкой над шкалой, без времени
+await page.getByRole('button', { name: 'Фильтры' }).click()
+await page.getByRole('switch', { name: 'Ежедневные авто-публикации' }).click()
+const allday = page.getByLabel('Круглосуточно, 2026-11-10')
+check(
+  (await allday.getByRole('button', { name: /^Новости: Все новости, 24\/7/ }).count()) && !(await col.getByRole('button', { name: /Все новости/ }).count()),
+  'лента Neuronium — «24/7» над шкалой, не в часах',
+  'лента Neuronium стоит на шкале времени',
+)
+await page.getByRole('switch', { name: 'Ежедневные авто-публикации' }).click()
+await page.getByRole('button', { name: 'Закрыть фильтры' }).click()
 check(box && box.width > 120, 'неделя по ширине экрана', 'колонки дней узкие')
 await page.getByRole('radio', { name: 'Каналы' }).click()
 await page.getByRole('grid', { name: /Неделя по каналам/ }).waitFor()

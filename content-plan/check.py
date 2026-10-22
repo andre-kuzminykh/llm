@@ -231,6 +231,11 @@ check('Видео модуля — не раньше старта модуля �
 check('У каждого формата есть время выхода и что выходит на каждой его площадке',
       [f"{r['id']}: {p}" for r in SEED['rules'] for p in r['platforms'] if not r.get('types', {}).get(p)]
       + [r['id'] for r in SEED['rules'] if not re.fullmatch(r'\d\d:\d\d', r.get('time', ''))])
+STREAMS = [r for r in SEED['rules'] if r.get('stream')]
+check('Лента Neuronium — поток 24/7 по вебхуку: без своего времени, каждый день',
+      [] if sorted(r['id'] for r in STREAMS) == ['neu_all', 'neu_top'] else [f"потоки: {[r['id'] for r in STREAMS]}"]
+      + [r['id'] for r in STREAMS if not all(r['days']) or 'вебхук' not in r['freq']]
+      + [r['id'] for r in SEED['rules'] if 'stream' not in r])
 PREFIX = re.compile(r'^(Тизер|Призыв|Анонс|Разборы|Лайфстайл|Тезис|Демо|Технологии|Кейсы|Разработка|Мысли|Исследования|Академия)\s*[/:]')
 check('Название — только тема: без рубрики и формата в начале',
       [f"{it['date']}: {it['title']}" for it in ITEMS if PREFIX.match(it['title'])][:5])

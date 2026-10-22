@@ -1,7 +1,7 @@
 // Мелкие общие части: карточка материала, площадки, статусы, переключатели, перетаскивание.
 import { useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
 import { isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
-import { platformTypes, type Unit } from '../model/units'
+import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { Icon } from './Icon'
 
@@ -180,13 +180,13 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
           e.stopPropagation()
           openItem(head.id)
         }}
-        aria-label={`${label}: ${title}${showTime ? `, ${unit.time}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}`}
-        title={variant === 'full' ? undefined : `${label} · ${unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
+        aria-label={`${label}: ${title}${showTime ? `, ${timeText(unit)}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}`}
+        title={variant === 'full' ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
       >
         {line ? (
           <>
             <span className="cp-card__rub">
-              {showTime && <span className="cp-card__time">{unit.time}</span>}
+              {showTime && <span className="cp-card__time">{timeText(unit)}</span>}
               {kind ? <span className="cp-card__kind">{kind}</span> : rubric && <RubricChip name={rubric.name} />}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
             </span>
@@ -198,7 +198,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
               {rubric && <RubricChip name={rubric.name} />}
               {format && variant !== 'mini' && <span className="cp-card__fmt">{format}</span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
-              {showTime && <span className="cp-card__time">{unit.time}</span>}
+              {showTime && <span className="cp-card__time" title={unit.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : undefined}>{timeText(unit)}</span>}
             </span>
             <span className="cp-card__title">{title}</span>
           </>

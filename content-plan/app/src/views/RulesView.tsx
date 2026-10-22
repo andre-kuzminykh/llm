@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { addMonths, monthKey, SAT, shortDate, WEEKDAYS } from '../model/dates'
 import { weekTemplate, type TemplateLine } from '../model/rules'
 import { createSlots } from '../model/store'
-import { SPREAD, typeOf, type Channel, type Rubric, type Rule } from '../model/types'
-import { IconButton, PickText, PlatformIcon } from '../ui/bits'
+import { SPREAD, STREAM_TIME, typeOf, type Channel, type Rubric, type Rule } from '../model/types'
+import { IconButton, PickText, PlatformIcon, Switch } from '../ui/bits'
 import { Icon } from '../ui/Icon'
 import { usePlan } from '../ui/ctx'
 import { TopBar } from '../ui/TopBar'
@@ -165,7 +165,7 @@ function RubricRows({ rubric, rules, open, onToggle, onEdit, current }: { rubric
                 </span>
                 <span className="cp-rule-row__days">{daysText(r)}</span>
               </td>
-              <td className="cp-rule-row__time">{r.time}</td>
+              <td className="cp-rule-row__time" title={r.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : undefined}>{r.stream ? STREAM_TIME : r.time}</td>
               <td className="cp-muted cp-rule-row__plats">{r.platforms.map((p) => `${p} — ${typeOf(r, p)}`).join(' · ')}</td>
             </tr>
           )
@@ -256,13 +256,20 @@ function RuleSheet({ rule, onClose }: { rule: Rule; onClose: () => void }) {
         <div className="cp-field__row">
           <div className="cp-field">
             <span className="nr-label">Время</span>
-            <PickText type="time" label={`Время: ${label}`} value={rule.time} text={rule.time} onChange={(t) => t && set({ time: t })} />
+            {rule.stream ? (
+              <span className="cp-task__stream">{STREAM_TIME}, по вебхуку</span>
+            ) : (
+              <PickText type="time" label={`Время: ${label}`} value={rule.time} text={rule.time} onChange={(t) => t && set({ time: t })} />
+            )}
           </div>
           <label className="cp-field">
             <span className="nr-label">Лимит в день</span>
             <input className="nr-field nr-field--sm" type="number" min={1} max={20} aria-label="Лимит в день" value={rule.limit} onChange={(e) => set({ limit: Math.max(1, Number(e.target.value) || 1) })} />
           </label>
         </div>
+        <Switch checked={!!rule.stream} onChange={(v) => set({ stream: v })}>
+          Поток 24/7 — выходит по вебхуку, как только пришло; своего времени нет
+        </Switch>
         <label className="cp-field">
           <span className="nr-label">Частота — словами</span>
           <input className="nr-field nr-field--sm" aria-label={`Частота: ${label}`} placeholder="Частота" value={rule.freq} onChange={(e) => set({ freq: e.target.value })} />

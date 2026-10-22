@@ -183,7 +183,11 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           {date && (
             <>
               <span className="cp-task__sep" aria-hidden="true">·</span>
-              <PickText type="time" label="Время выхода" value={time || (rule ? timeOf({}, rule) : '')} text={time || (rule ? timeOf({}, rule) : '')} onChange={setTime} />
+              {rule?.stream ? (
+                <span className="cp-task__stream" title="Приходит по вебхуку и выходит сразу">24/7, по вебхуку</span>
+              ) : (
+                <PickText type="time" label="Время выхода" value={time || (rule ? timeOf({}, rule) : '')} text={time || (rule ? timeOf({}, rule) : '')} onChange={setTime} />
+              )}
             </>
           )}
         </div>
