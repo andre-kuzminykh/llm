@@ -1,30 +1,17 @@
 // Все изменения плана — чистые функции Plan → Plan; reducer добавляет к ним историю
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
-import { addDays, daysBetween, weekday } from './dates'
-import { isSlot, PLACEHOLDER, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
+import { addDays, daysBetween, fromMin, toMin, weekday } from './dates'
+import { isSlot, PLACEHOLDER, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
 export const newId = (prefix = 'n') => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`
 
 // ── заголовки ────────────────────────────────────────────────────────────────
 
-/** Тема заголовка: «Демо / Стратегия» → «Стратегия», «Разборы: HR» → «HR». */
-export const topicOf = (title: string) => {
-  const m = title.match(/^[^/:]+?(?: \/ |: )(.+)$/)
-  return m ? m[1] : title
-}
-
-export const titleFromTopic = (rule: Rule | undefined, topic: string) =>
-  rule?.pattern ? rule.pattern.replace('{topic}', topic) : topic
-
-export const slotTitle = (rule: Rule, rubric?: Rubric) =>
-  rule.pattern ? titleFromTopic(rule, PLACEHOLDER) : `${rubric?.name ?? rule.name}: ${PLACEHOLDER}`
-
-const derived = (template: string, head: Item) =>
-  template.replace('{title}', head.title).replace('{topic}', topicOf(head.title))
+// Название материала — тема; у тизера, анонсов и писем группы она та же, что у FULL.
+const derived = (template: string, head: Item) => template.replace('{title}', head.title).replace('{topic}', head.title)
 
 const ruleOf = (plan: Plan, id: string) => plan.rules.find((r) => r.id === id)
-const rubricOf = (plan: Plan, id: string | null) => plan.rubrics.find((r) => r.id === id)
 
 /** Производные члены группы берут у главного заголовок (по шаблону) и рубрику. */
 const rederive = (items: Item[], head: Item) =>
@@ -36,11 +23,32 @@ const rederive = (items: Item[], head: Item) =>
 
 // ── материалы ────────────────────────────────────────────────────────────────
 
-export function moveItem(plan: Plan, id: string, date: ISODate, withGroup = true): Plan {
+/** Перенос на дату; со временем — вся группа сдвигается на ту же разницу, порядок внутри неё сохраняется. */
+export function moveItem(plan: Plan, id: string, date: ISODate, withGroup = true, time?: string): Plan {
   const it = plan.items.find((x) => x.id === id)
-  if (!it || it.date === date) return plan
+  if (!it) return plan
+  const shift = time ? toMin(time) - toMin(timeOf(it, ruleOf(plan, it.ruleId))) : 0
+  if (it.date === date && !shift) return plan
   const together = withGroup && it.group && it.date ? (x: Item) => x.group === it.group && x.date === it.date : (x: Item) => x.id === id
-  return { ...plan, items: plan.items.map((x) => (together(x) ? { ...x, date } : x)) }
+  const at = (x: Item) => (shift ? { time: fromMin(toMin(timeOf(x, ruleOf(plan, x.ruleId))) + shift) } : {})
+  return fitRange({ ...plan, items: plan.items.map((x) => (together(x) ? { ...x, date, ...at(x) } : x)) })
+}
+
+/** Если материал встал раньше начала или позже конца плана — план продлевается до него. */
+export function fitRange(plan: Plan): Plan {
+  let { start, end } = plan
+  for (const it of plan.items) {
+    if (!it.date) continue
+    if (it.date < start) start = it.date
+    if (it.date > end) end = it.date
+  }
+  return start === plan.start && end === plan.end ? plan : { ...plan, start, end }
+}
+
+/** Одна правка нескольких материалов — например, статус всей карточки. */
+export function updateMany(plan: Plan, ids: string[], patch: Partial<Item>): Plan {
+  const set = new Set(ids)
+  return { ...plan, items: plan.items.map((x) => (set.has(x.id) ? { ...x, ...patch } : x)) }
 }
 
 export function updateItem(plan: Plan, id: string, patch: Partial<Item>): Plan {
@@ -58,7 +66,7 @@ export function updateItem(plan: Plan, id: string, patch: Partial<Item>): Plan {
 /** Правка из формы: поля, затем дата (с группой или без) — одним шагом истории. */
 export function editItem(plan: Plan, id: string, patch: Partial<Item>, date?: ISODate, withGroup = true): Plan {
   const next = updateItem(plan, id, patch)
-  return date ? moveItem(next, id, date, withGroup) : next
+  return date ? moveItem(next, id, date, withGroup) : fitRange(next)
 }
 
 /** Ближайший материал того же правила с группой — образец для новой группы. */
@@ -83,13 +91,13 @@ function templateGroup(plan: Plan, ruleId: string, date: ISODate): Item[] {
 /** Новый материал; with family — копии сопутствующих публикаций по образцу ближайшего. */
 export function createItem(plan: Plan, item: Item, withFamily = true): Plan {
   const family = withFamily && item.date ? templateGroup(plan, item.ruleId, item.date) : []
-  if (family.length < 2) return { ...plan, items: [...plan.items, { ...item, group: undefined }] }
+  if (family.length < 2) return fitRange({ ...plan, items: [...plan.items, { ...item, group: undefined }] })
   const group = newId('g')
   const head = { ...item, group }
   const copies = family
     .filter((x) => x.ruleId !== item.ruleId || x.derive)
-    .map((x) => ({ ...x, id: newId(), date: item.date, group, status: item.status, source: item.source, origDate: undefined, note: undefined }))
-  return { ...plan, items: rederive([...plan.items, head, ...copies], head) }
+    .map((x) => ({ ...x, id: newId(), date: item.date, group, status: item.status, source: item.source, origDate: undefined, note: undefined, owner: undefined, due: undefined, done: undefined, offGrid: item.offGrid }))
+  return fitRange({ ...plan, items: rederive([...plan.items, head, ...copies], head) })
 }
 
 export function duplicateItem(plan: Plan, id: string): Plan {
@@ -155,11 +163,23 @@ const slotsOf = (plan: Plan, ruleId: string, from: ISODate) =>
 export function assignTopic(plan: Plan, bankId: string, date: ISODate): Plan {
   const topic = plan.items.find((x) => x.id === bankId && x.date === null)
   if (!topic) return plan
-  const title = titleFromTopic(ruleOf(plan, topic.ruleId), topic.title)
+  const title = topic.title
   const without = { ...plan, items: plan.items.filter((x) => x.id !== bankId) }
   const slot = slotsOf(without, topic.ruleId, date).find((x) => x.date === date)
   if (slot) return updateItem(without, slot.id, { title, source: 'банк тем' })
   return createItem(without, { ...topic, id: newId(), date, title }, true)
+}
+
+/** Вернуть тему в банк: материал снова становится слотом «…», тема — в начало банка своего формата. */
+export function unassignTopic(plan: Plan, id: string): Plan {
+  const it = plan.items.find((x) => x.id === id)
+  if (!it || !it.date || isSlot(it) || it.derive) return plan
+  const back: Item = { ...it, id: newId('b'), date: null, group: undefined, derive: undefined, origDate: undefined, time: undefined, source: 'банк тем', status: 'planned', done: undefined }
+  const next = updateItem(plan, id, { title: PLACEHOLDER, source: 'нужна тема' })
+  const first = next.items.findIndex((x) => x.date === null && x.ruleId === it.ruleId)
+  const items = [...next.items]
+  items.splice(first < 0 ? items.length : first, 0, back)
+  return { ...next, items }
 }
 
 /** Что встанет куда при «Разложить по слотам»: пары тема → слот, по порядку. */
@@ -171,10 +191,9 @@ export function planFill(plan: Plan, ruleId: string, from: ISODate) {
 }
 
 export function fillSlots(plan: Plan, ruleId: string, from: ISODate): Plan {
-  const rule = ruleOf(plan, ruleId)
   let next = plan
   for (const { bank, slot } of planFill(plan, ruleId, from).pairs) {
-    next = updateItem(next, slot.id, { title: titleFromTopic(rule, bank.title), source: 'банк тем' })
+    next = updateItem(next, slot.id, { title: bank.title, source: 'банк тем' })
     next = { ...next, items: next.items.filter((x) => x.id !== bank.id) }
   }
   return next
@@ -197,7 +216,7 @@ export function createSlots(plan: Plan, ruleId: string, from: ISODate, to: ISODa
       sectionId: rule.sectionId,
       ruleId,
       rubricId: rule.rubricId,
-      title: slotTitle(rule, rubricOf(plan, rule.rubricId)),
+      title: PLACEHOLDER,
       format: rule.format,
       platforms: sample?.platforms ?? rule.platforms,
       status: 'planned',
@@ -233,6 +252,8 @@ export const addRule = (plan: Plan, rubricId: string | null, channelId: string, 
     source: 'новый формат',
     full: false,
     limit: 1,
+    time: '12:00',
+    types: {},
   }
   return { ...plan, rules: [...plan.rules, rule] }
 }
@@ -261,8 +282,10 @@ export const addChannel = (plan: Plan, name: string, start: ISODate): Plan => {
 export type Action =
   | { type: 'init'; plan: Plan }
   | { type: 'replace'; plan: Plan }
-  | { type: 'move'; id: string; date: ISODate; withGroup?: boolean }
+  | { type: 'move'; id: string; date: ISODate; withGroup?: boolean; time?: string }
   | { type: 'update'; id: string; patch: Partial<Item> }
+  | { type: 'updateMany'; ids: string[]; patch: Partial<Item> }
+  | { type: 'unassign'; id: string }
   | { type: 'edit'; id: string; patch: Partial<Item>; date?: ISODate; withGroup?: boolean }
   | { type: 'create'; item: Item; withFamily?: boolean }
   | { type: 'duplicate'; id: string }
@@ -293,8 +316,10 @@ export const initialState: State = { plan: null, past: [], future: [] }
 function apply(plan: Plan, a: Action): Plan {
   switch (a.type) {
     case 'replace': return a.plan
-    case 'move': return moveItem(plan, a.id, a.date, a.withGroup ?? true)
+    case 'move': return moveItem(plan, a.id, a.date, a.withGroup ?? true, a.time)
     case 'update': return updateItem(plan, a.id, a.patch)
+    case 'updateMany': return updateMany(plan, a.ids, a.patch)
+    case 'unassign': return unassignTopic(plan, a.id)
     case 'edit': return editItem(plan, a.id, a.patch, a.date, a.withGroup ?? true)
     case 'create': return createItem(plan, a.item, a.withFamily ?? true)
     case 'duplicate': return duplicateItem(plan, a.id)

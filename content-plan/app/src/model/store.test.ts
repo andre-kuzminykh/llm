@@ -14,8 +14,9 @@ import {
   planFill,
   reducer,
   removeItem,
-  topicOf,
+  unassignTopic,
   updateItem,
+  updateMany,
   updateRule,
 } from './store'
 
@@ -37,46 +38,55 @@ describe('T-CP-003 FR-CP-003 перенос', () => {
     const plan = smallPlan()
     expect(moveItem(plan, 'demo', '2026-10-26')).toBe(plan)
   })
+  it('на другой час: группа сдвигается на ту же разницу', () => {
+    const p = moveItem(smallPlan(), 'demo', '2026-10-26', true, '15:00')
+    expect(byId(p, 'demo').time).toBe('15:00')
+    expect(byId(p, 'teaser').time).toBe('15:00')
+    expect(byId(p, 'ait').time).toBe('16:00') // у анонса Andre AIT своё время, на час позже FULL
+  })
+  it('после конца плана — план продлевается', () => {
+    const p = moveItem(smallPlan(), 'thesis', '2027-01-15')
+    expect(p.end).toBe('2027-01-15')
+  })
 })
 
 describe('T-CP-004 FR-CP-004 производные заголовки', () => {
-  it('тема из заголовка', () => {
-    expect(topicOf('Демо / Стратегия')).toBe('Стратегия')
-    expect(topicOf('Разборы: HR-агентство')).toBe('HR-агентство')
-    expect(topicOf('Новости недели 3')).toBe('Новости недели 3')
-  })
-  it('правка главного пересобирает тизер и анонсы', () => {
-    const p = updateItem(smallPlan(), 'demo', { title: 'Демо / Агент продаж' })
-    expect(byId(p, 'teaser').title).toBe('Тизер: Демо / Агент продаж')
-    expect(byId(p, 'office').title).toBe('Анонс / Агент продаж')
-    expect(byId(p, 'ait').title).toBe('Анонс / Агент продаж')
+  it('правка главного пересобирает тизер и анонсы: у группы одна тема', () => {
+    const p = updateItem(smallPlan(), 'demo', { title: 'Агент продаж' })
+    expect(byId(p, 'teaser').title).toBe('Агент продаж')
+    expect(byId(p, 'office').title).toBe('Агент продаж')
+    expect(byId(p, 'ait').title).toBe('Агент продаж')
   })
   it('правка производного не трогает главный', () => {
     const p = updateItem(smallPlan(), 'teaser', { title: 'Свой тизер' })
-    expect(byId(p, 'demo').title).toBe('Демо / Стратегия')
+    expect(byId(p, 'demo').title).toBe('Стратегия')
     expect(byId(p, 'teaser').title).toBe('Свой тизер')
   })
   it('статус не пересобирает заголовки', () => {
     const plan = updateItem(smallPlan(), 'teaser', { title: 'Свой тизер' })
     expect(byId(updateItem(plan, 'demo', { status: 'ready' }), 'teaser').title).toBe('Свой тизер')
   })
+  it('статус всей карточке одним шагом', () => {
+    const p = updateMany(smallPlan(), ['demo', 'teaser', 'office'], { status: 'progress' })
+    expect(['demo', 'teaser', 'office', 'ait'].map((id) => byId(p, id).status)).toEqual(['progress', 'progress', 'progress', 'planned'])
+  })
 })
 
 describe('T-CP-005 FR-CP-005 создать, дублировать, удалить', () => {
   it('правка из формы: заголовок и дата одним шагом, с группой', () => {
-    const p = editItem(smallPlan(), 'demo', { title: 'Демо / HR', status: 'ready' }, '2026-11-16')
-    expect(byId(p, 'demo')).toMatchObject({ title: 'Демо / HR', status: 'ready', date: '2026-11-16' })
-    expect(byId(p, 'teaser')).toMatchObject({ title: 'Тизер: Демо / HR', date: '2026-11-16' })
+    const p = editItem(smallPlan(), 'demo', { title: 'HR', status: 'ready' }, '2026-11-16')
+    expect(byId(p, 'demo')).toMatchObject({ title: 'HR', status: 'ready', date: '2026-11-16' })
+    expect(byId(p, 'teaser')).toMatchObject({ title: 'HR', date: '2026-11-16' })
   })
   it('новый материал с копией группы по образцу ближайшего', () => {
-    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', ruleId: 'f_demo', title: 'Демо / HR', format: 'FULL', platforms: ['YouTube'] }))
+    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', ruleId: 'f_demo', title: 'HR', format: 'FULL', platforms: ['YouTube'] }))
     const fresh = p.items.filter((x) => x.date === '2026-11-16')
     expect(fresh.map((x) => x.ruleId).sort()).toEqual(['f_demo', 'sh_teaser'])
-    expect(fresh.find((x) => x.ruleId === 'sh_teaser')!.title).toBe('Тизер: Демо / HR')
+    expect(fresh.find((x) => x.ruleId === 'sh_teaser')!.title).toBe('HR')
     expect(new Set(fresh.map((x) => x.group)).size).toBe(1)
   })
   it('без сопутствующих — один материал', () => {
-    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', ruleId: 'f_demo', title: 'Демо / HR' }), false)
+    const p = createItem(smallPlan(), item({ id: 'new', date: '2026-11-16', ruleId: 'f_demo', title: 'HR' }), false)
     expect(p.items.filter((x) => x.date === '2026-11-16')).toHaveLength(1)
   })
   it('дублирование группы — новая группа на тот же день', () => {
@@ -107,10 +117,17 @@ describe('T-CP-006 FR-CP-006 банк тем', () => {
     expect(pairs.map((x) => x.slot.id)).toEqual(['slot', 'slot2'])
     expect(left).toBe(1)
     const p = fillSlots(p0, 'f_demo', '2026-10-25')
-    expect(byId(p, 'slot').title).toBe('Демо / Агент продаж')
-    expect(byId(p, 'slot-teaser').title).toBe('Тизер: Демо / Агент продаж')
-    expect(byId(p, 'slot2').title).toBe('Демо / HR')
+    expect(byId(p, 'slot').title).toBe('Агент продаж')
+    expect(byId(p, 'slot-teaser').title).toBe('Агент продаж')
+    expect(byId(p, 'slot2').title).toBe('HR')
     expect(bankOf(p, 'f_demo').map((x) => x.title)).toEqual(['Лишняя'])
+  })
+  it('вернуть тему в банк: слот снова пустой, тема — первой в банке', () => {
+    const p0 = fillSlots(bankAdd(smallPlan(), 'f_demo', ['Агент продаж', 'HR', 'Лишняя']), 'f_demo', '2026-10-25')
+    const p = unassignTopic(p0, 'slot')
+    expect(byId(p, 'slot').title).toBe('…')
+    expect(byId(p, 'slot-teaser').title).toBe('…')
+    expect(bankOf(p, 'f_demo').map((x) => x.title)).toEqual(['Агент продаж', 'Лишняя'])
   })
   it('тема на день со слотом заполняет слот', () => {
     const p0 = bankAdd(smallPlan(), 'sh_thesis', ['ИИ не заменит вас'])
@@ -127,7 +144,7 @@ describe('T-CP-006 FR-CP-006 банк тем', () => {
     const p = createSlots(smallPlan(), 'f_demo', '2026-11-01', '2026-11-30')
     const mondays = p.items.filter((x) => x.ruleId === 'f_demo').map((x) => x.date)
     expect(mondays).toEqual(['2026-10-26', '2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30'])
-    expect(p.items.find((x) => x.date === '2026-11-16' && x.ruleId === 'f_demo')!.title).toBe('Демо / …')
+    expect(p.items.find((x) => x.date === '2026-11-16' && x.ruleId === 'f_demo')!.title).toBe('…')
   })
   it('слоты не раньше старта канала', () => {
     const p = createSlots(smallPlan(), 'lan_upd', '2026-10-26', '2026-11-03')
@@ -141,8 +158,8 @@ describe('T-CP-008 FR-CP-008 сетка', () => {
     expect(p.rules.find((r) => r.id === 'f_demo')!.days[6]).toBe(true)
   })
   it('у тизера и анонсов рубрика FULL; смена рубрики FULL переносится на них', () => {
-    const p = updateItem(smallPlan(), 'demo', { rubricId: 'tech', title: 'Технологии / Агенты' })
-    expect(byId(p, 'teaser')).toMatchObject({ rubricId: 'tech', title: 'Тизер: Технологии / Агенты' })
+    const p = updateItem(smallPlan(), 'demo', { rubricId: 'tech', title: 'Агенты' })
+    expect(byId(p, 'teaser')).toMatchObject({ rubricId: 'tech', title: 'Агенты' })
     expect(byId(p, 'office').rubricId).toBe('tech')
   })
   it('тема из банка получает рубрику формата', () => {

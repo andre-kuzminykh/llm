@@ -1,58 +1,112 @@
 import type { CSSProperties } from 'react'
-import { addMonths, clampDate, monthGrid, monthKey, monthTitle, SAT, today, WEEKDAYS, weekday } from '../model/dates'
-import { visible } from '../model/filters'
+import { addDays, addMonths, monthKey, monthTitle, SAT, shortDate, today, WEEKDAYS, weekday } from '../model/dates'
 import { isSlot, type ISODate } from '../model/types'
-import { ChannelDot, IconButton, ItemCard, useDrop } from '../ui/bits'
+import type { Unit } from '../model/units'
+import { ChannelDot, IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
-import { TopBar } from '../ui/TopBar'
+import { useInfinite } from '../ui/infinite'
+import { DateJump, TopBar } from '../ui/TopBar'
+import { AgendaView } from './AgendaView'
 
+const ROW = 156 // высота недели
+
+/** Первая неделя месяца — та, чей четверг уже в нём (как в ISO): к ней ведут стрелки месяцев. */
+const firstWeekOf = (month: string) => addDays(`${month}-01`, 3)
+
+/** Календарь: на телефоне — лента по дням, на большом экране — месяц, который листается неделями без конца. */
 export function MonthView() {
-  const { plan, anchor, setAnchor } = usePlan()
+  const { phone } = usePlan()
+  return phone ? <AgendaView /> : <MonthGrid />
+}
+
+function MonthGrid() {
+  const { plan, anchor, setAnchor, jump, jumpTo } = usePlan()
   const month = monthKey(anchor)
-  const prev = addMonths(month, -1)
-  const next = addMonths(month, 1)
+  const inf = useInfinite({
+    axis: 'y',
+    step: 7,
+    size: ROW,
+    start: plan.start,
+    end: plan.end,
+    anchor,
+    jump,
+    focusAt: 0.1,
+    // дата в фокусе — четверг верхней недели: по нему и месяц в заголовке (как в ISO), и неделя при переходе в «Неделю»
+    onFocus: (monday) => setAnchor(addDays(monday, 3)),
+  })
+  const rows: number[] = []
+  for (let i = inf.first; i <= inf.last; i++) rows.push(i)
   return (
     <>
-      <TopBar title={monthTitle(month)}>
+      <TopBar title={<DateJump label={monthTitle(month)} value={anchor} onPick={jumpTo} />}>
         <nav className="cp-top__nav" aria-label="Месяцы">
-          <IconButton icon="chev-left" label="Предыдущий месяц" onClick={() => setAnchor(`${prev}-01`)} disabled={prev < monthKey(plan.start)} />
-          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setAnchor(clampDate(today(), plan.start, plan.end))}>
+          <IconButton icon="chev-left" label="Предыдущий месяц" onClick={() => jumpTo(firstWeekOf(addMonths(month, -1)))} />
+          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => jumpTo(today())}>
             Сегодня
           </button>
-          <IconButton icon="chev-right" label="Следующий месяц" onClick={() => setAnchor(`${next}-01`)} disabled={next > monthKey(plan.end)} />
+          <IconButton icon="chev-right" label="Следующий месяц" onClick={() => jumpTo(firstWeekOf(addMonths(month, 1)))} />
         </nav>
       </TopBar>
-      <div className="cp-body nr-scroll">
-        <div className="cp-month" role="grid" aria-label={monthTitle(month)}>
-          {WEEKDAYS.map((w) => (
-            <div key={w} className="cp-month__wd nr-label" role="columnheader">
-              {w}
-            </div>
-          ))}
-          {monthGrid(month).flat().map((d) => (
-            <MonthDay key={d} date={d} inMonth={monthKey(d) === month} />
-          ))}
+      <div className="cp-body nr-scroll" ref={inf.ref} onScroll={inf.onScroll}>
+        <div className="cp-month" role="grid" aria-label={monthTitle(month)} style={{ height: inf.range.count * ROW + 36 }}>
+          <div className="cp-month__head" role="row">
+            {WEEKDAYS.map((w) => (
+              <div key={w} className="cp-month__wd nr-label" role="columnheader">
+                {w}
+              </div>
+            ))}
+          </div>
+          {rows.map((i) => {
+            const monday = inf.dateAt(i)
+            return (
+              <div key={monday} className="cp-month__week" role="row" style={{ top: 36 + i * ROW, height: ROW }}>
+                {Array.from({ length: 7 }, (_, k) => addDays(monday, k)).map((d) => (
+                  <MonthDay key={d} date={d} current={monthKey(d) === month} />
+                ))}
+              </div>
+            )
+          })}
         </div>
       </div>
     </>
   )
 }
 
-function MonthDay({ date, inMonth }: { date: ISODate; inMonth: boolean }) {
-  const { plan, byDate, filters, rules, channels, violByDate, openDay, openDayId, dropOn } = usePlan()
+/** Чего не хватает в день: рубрики слотов без темы. */
+export function missingOf(units: Unit[], rubricName: (id: string | null) => string) {
+  const names = [...new Set(units.filter((u) => isSlot(u.head)).map((u) => rubricName(u.head.rubricId)))]
+  return names
+}
+
+export function SlotsTag({ units }: { units: Unit[] }) {
+  const { rubrics } = usePlan()
+  const names = missingOf(units, (id) => rubrics.get(id ?? '')?.name ?? 'без рубрики')
+  const n = units.filter((u) => isSlot(u.head)).length
+  if (!n) return null
+  const text = names.length === 1 ? `без темы: ${names[0]}` : `${n} без темы`
+  return (
+    <span className="nr-tag nr-tag--warn" title={`Нужна тема: ${names.join(', ')}`}>
+      {text}
+    </span>
+  )
+}
+
+function MonthDay({ date, current }: { date: ISODate; current: boolean }) {
+  const { plan, unitsOn, rules, channels, violByDate, openDay, openDayId, dropOn } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
-  const items = (byDate.get(date) ?? []).filter((it) => visible(it, filters))
-  const fulls = items.filter((it) => rules.get(it.ruleId)?.full && !it.derive)
-  const slots = items.filter((it) => isSlot(it) && !it.derive).length
+  const units = unitsOn(date)
+  const fulls = units.filter((u) => rules.get(u.head.ruleId)?.full && !u.head.derive)
   const counts = new Map<string, number>()
-  for (const it of items) counts.set(it.channelId, (counts.get(it.channelId) ?? 0) + 1)
+  for (const u of units) counts.set(u.channelId, (counts.get(u.channelId) ?? 0) + 1)
   const viol = violByDate.get(date)?.length ?? 0
   const inPlan = date >= plan.start && date <= plan.end
   const day = Number(date.slice(8))
   const cls = [
     'cp-day',
     weekday(date) === SAT && 'cp-day--rest',
-    (!inMonth || !inPlan) && 'cp-day--out',
+    !current && 'cp-day--other',
+    !inPlan && 'cp-day--out',
+    Number(date.slice(5, 7)) % 2 === 0 && 'cp-day--even',
     date === today() && 'cp-day--today',
     drop.over && 'cp-day--drop',
     openDayId === date && 'cp-day--open',
@@ -60,31 +114,31 @@ function MonthDay({ date, inMonth }: { date: ISODate; inMonth: boolean }) {
     .filter(Boolean)
     .join(' ')
   return (
-    <div role="gridcell" className={cls} {...drop.props} onClick={() => inPlan && openDay(date)} data-date={date}>
+    <div role="gridcell" className={cls} {...drop.props} onClick={() => openDay(date)} data-date={date}>
       <div className="cp-day__head">
         <button
           type="button"
           className="cp-day__num"
           onClick={(e) => {
             e.stopPropagation()
-            if (inPlan) openDay(date)
+            openDay(date)
           }}
           aria-label={`Открыть день ${date}`}
         >
-          {day}
+          {day === 1 ? shortDate(date) : day}
         </button>
         {weekday(date) === SAT && inPlan && <span className="nr-tag nr-tag--rest">отдых</span>}
-        {slots > 0 && <span className="nr-tag nr-tag--warn" title="Слотов без темы">{slots} без темы</span>}
+        <SlotsTag units={units} />
         {viol > 0 && <span className="cp-viol" title={`Нарушений: ${viol}`} aria-label={`Нарушений: ${viol}`} role="img" />}
       </div>
-      {fulls.map((it) => (
-        <ItemCard key={it.id} item={it} compact />
+      {fulls.map((u) => (
+        <UnitCard key={u.key} unit={u} variant="mini" showTime={false} />
       ))}
-      {fulls.map((it) => (
-        <span key={`m-${it.id}`} className="cp-day__mark" style={{ '--cp-c': channels.get(it.channelId)?.color } as CSSProperties} aria-hidden="true" />
+      {fulls.map((u) => (
+        <span key={`m-${u.key}`} className="cp-day__mark" style={{ '--cp-c': channels.get(u.channelId)?.color } as CSSProperties} aria-hidden="true" />
       ))}
-      {items.length > 0 && (
-        <div className="cp-day__counts" aria-label="Публикаций по каналам">
+      {units.length > 0 && (
+        <div className="cp-day__counts" aria-label="Материалов по каналам">
           {[...counts].map(([cid, n]) => {
             const c = channels.get(cid)
             return (

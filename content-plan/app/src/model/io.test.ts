@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { loadSeed, smallPlan } from '../test/fixtures'
-import { calendarCSV, exportJSON, migrateV1, parsePlan, type PlanV1 } from './io'
+import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, type PlanV1, type PlanV2 } from './io'
 
 describe('T-CP-013 FR-CP-013 выгрузка и загрузка', () => {
   it('CSV-календарь совпадает с out/4_calendar.csv генератора', () => {
@@ -24,8 +24,34 @@ describe('T-CP-013 FR-CP-013 выгрузка и загрузка', () => {
       ].map(({ ruleId: _r, ...it }) => ({ ...it, rubricId: it.rubricId as string })),
     }
     const p = migrateV1(parsePlan(JSON.stringify({ ...old, start: seed.start, end: seed.end, platforms: seed.platforms, rubrics: [] })) as PlanV1, seed)
-    expect(p.version).toBe(2)
-    expect(p.items.map((x) => [x.ruleId, x.rubricId])).toEqual([['f_demo', 'demo'], ['sh_teaser', 'demo'], ['sh_thesis', 'thesis']])
+    expect(p.version).toBe(3)
+    expect(p.items.map((x) => [x.ruleId, x.rubricId, x.title])).toEqual([['f_demo', 'demo', 'Робот'], ['sh_teaser', 'demo', 'Робот'], ['sh_thesis', 'thesis', 'Тезис']])
+  })
+  it('план второй версии: названия — только тема, правки и правила сохраняются', () => {
+    const seed = loadSeed()
+    const v3 = smallPlan()
+    const old = {
+      ...v3,
+      version: 2,
+      rules: v3.rules.map(({ time: _t, types: _ty, bank, ...r }) => ({ ...r, ...(bank ? { pattern: '{topic}' } : {}) })),
+      items: v3.items.map((it) => ({ ...it, title: it.id === 'demo' ? 'Демо / Стратегия' : it.id === 'teaser' ? 'Тизер: Демо / Стратегия' : it.id === 'office' ? 'Анонс / Стратегия' : it.title, derive: it.derive && 'Тизер: {title}', status: it.id === 'demo' ? 'ready' : it.status })),
+    } as unknown as PlanV2
+    const p = migrateV2(parsePlan(JSON.stringify(old)) as PlanV2, seed)
+    expect(p.version).toBe(3)
+    expect(p.items.filter((x) => x.group === 'full-2026-10-26').map((x) => x.title)).toEqual(['Стратегия', 'Стратегия', 'Стратегия', 'Стратегия'])
+    expect(p.items.find((x) => x.id === 'demo')!.status).toBe('ready')
+    expect(p.rules.find((r) => r.id === 'f_demo')).toMatchObject({ time: '12:00', types: { YouTube: 'FULL' }, bank: true })
+  })
+  it('названия второй версии', () => {
+    expect(cleanTitle('Тизер: Демо / Стратегия')).toBe('Стратегия')
+    expect(cleanTitle('Лайфстайл: Офис — Мысль')).toBe('Офис — Мысль')
+    expect(cleanTitle('Исследования / Сентябрь 2026')).toBe('Итоги сентября 2026')
+    expect(cleanTitle('Новости недели 3')).toBe('Итоги недели №3')
+    expect(cleanTitle('Тезис: …')).toBe('…')
+    expect(cleanTitle('Автоматизация 3_8', true)).toBe('Автоматизация, модуль 3, урок 8')
+    expect(cleanTitle('Автоматизация 4 — старт модуля', true)).toBe('Автоматизация, модуль 4 — старт')
+    expect(cleanTitle('Академия: новый курс «Разработка»', true)).toBe('Новый курс «Разработка»')
+    expect(cleanTitle('Топ 5 ошибок')).toBe('Топ 5 ошибок')
   })
   it('не JSON', () => {
     expect(() => parsePlan('{oops')).toThrow('Это не JSON')

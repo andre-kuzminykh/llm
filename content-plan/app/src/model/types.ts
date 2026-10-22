@@ -2,7 +2,8 @@
 // и в выгрузке JSON — поэтому поля плоские и сериализуемые.
 //
 // Рубрика — о чём материал: Демо, Академия, Тезисы… Правило — как рубрика выходит:
-// формат (FULL, тизер, анонс, урок, письмо), канал, площадки и дни недели.
+// формат (FULL, тизер, анонс, урок, письмо), канал, площадки, дни недели и время.
+// Название материала — только тема («Стратегия»): рубрика и формат стоят рядом метками.
 
 export type ISODate = string // 'YYYY-MM-DD'
 
@@ -43,7 +44,9 @@ export interface Rule {
   source: string
   full: boolean
   limit: number // сколько материалов правила в день на канал (группа — один)
-  pattern?: string // заголовок из темы: «Демо / {topic}»
+  time: string // во сколько выходит, если у материала не задано своё: «12:00»
+  types: Record<string, string> // что выходит на площадке: YouTube → «FULL», Instagram → «Reels»
+  bank?: boolean // темы к формату копятся в банке
 }
 
 export type Status = 'planned' | 'progress' | 'paused' | 'ready' | 'published'
@@ -55,20 +58,25 @@ export interface Item {
   sectionId?: string
   ruleId: string
   rubricId: string | null
-  title: string
+  title: string // тема: «Стратегия»; «…» — слот, тема ещё не задана
   format: string
   platforms: string[]
   status: Status
   source: string
   rank: number
   group?: string
-  derive?: string // шаблон заголовка от главного материала группы
+  derive?: string // шаблон заголовка от главного материала группы: «{title}»
   origDate?: ISODate
   note?: string
+  time?: string // своё время публикации; без него — время формата
+  offGrid?: boolean // разовый, вне сетки: проверка его не трогает
+  owner?: string // кто делает
+  due?: ISODate // подготовить к; без него — за несколько дней до выхода (leadOf)
+  done?: string[] // готовые части задачи: «id материала|площадка»
 }
 
 export interface Plan {
-  version: 2
+  version: 3
   start: ISODate
   end: ISODate
   platforms: string[]
@@ -89,8 +97,10 @@ export const STATUSES: { id: Status; label: string; icon?: string }[] = [
 export const statusOf = (id: Status) => STATUSES.find((s) => s.id === id) ?? STATUSES[0]
 
 export const PLACEHOLDER = '…'
+export const SLOT_TEXT = 'Нужна тема'
 export const SPREAD = 'С каждым FULL'
-export const isSlot = (it: Pick<Item, 'title'>) => it.title.includes(PLACEHOLDER)
+export const isSlot = (it: Pick<Item, 'title'>) => it.title.trim() === PLACEHOLDER
+export const shownTitle = (it: Pick<Item, 'title'>) => (isSlot(it) ? SLOT_TEXT : it.title)
 
 /** Подпись материала: «Демо · FULL», «Демо · Тизер FULL»; формат, совпадающий с рубрикой, не повторяется. */
 export function labelOf(rubric: Rubric | undefined, rule: Rule | undefined) {
@@ -100,3 +110,28 @@ export function labelOf(rubric: Rubric | undefined, rule: Rule | undefined) {
   if (!f || f === r) return r
   return `${r} · ${f}`
 }
+
+/** Тема — это и есть название формата («Все новости», «Лайфхак дня»): повторять её не нужно. */
+export const titleIsFormat = (title: string, rule: Rule | undefined) => !!rule && (title === rule.name || rule.name.startsWith(`${title} `))
+
+/** Строка CSV-календаря: «Демо · FULL: Стратегия»; для авто-рубрик — только подпись. */
+export function lineOf(rubric: Rubric | undefined, rule: Rule | undefined, title: string) {
+  const label = labelOf(rubric, rule)
+  return titleIsFormat(title, rule) ? label : `${label}: ${title}`
+}
+
+const DEFAULT_TYPES: Record<string, string> = {
+  Web: 'Статья', YouTube: 'Видео', Instagram: 'Reels', TikTok: 'Видео', Threads: 'Пост', X: 'Пост', Telegram: 'Пост', LinkedIn: 'Пост', Mail: 'Письмо',
+}
+
+/** Что выходит на площадке в этом формате: «FULL» на YouTube, «Reels» в Instagram. */
+export function typeOf(rule: Rule | undefined, platform: string) {
+  const own = rule?.types?.[platform]
+  if (own) return own
+  if (platform === 'YouTube' && rule?.full) return 'FULL'
+  if (platform === 'YouTube' && rule?.format === 'Shorts') return 'Shorts'
+  return DEFAULT_TYPES[platform] ?? platform
+}
+
+export const DEFAULT_TIME = '12:00'
+export const timeOf = (it: Pick<Item, 'time'>, rule: Rule | undefined) => it.time ?? rule?.time ?? DEFAULT_TIME

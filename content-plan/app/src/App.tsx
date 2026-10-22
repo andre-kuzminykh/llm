@@ -1,28 +1,37 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { clampDate, monthKey, shortDate, today } from './model/dates'
-import { indexByDate, NO_FILTERS, type Filters } from './model/filters'
-import { calendarCSV, download, exportJSON, isV1, migrateV1, parsePlan, type PlanV1 } from './model/io'
+import { shortDate, today } from './model/dates'
+import { indexByDate, NO_FILTERS, visible, type Filters } from './model/filters'
+import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, type AnyPlan } from './model/io'
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer } from './model/store'
 import { labelOf, type ISODate, type Item, type Plan } from './model/types'
+import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
-import { PlanCtx, usePlan, type Ctx, type Drag, type View } from './ui/ctx'
+import { PlanCtx, usePlan, type Ctx, type Drag, type ToastOpts, type View } from './ui/ctx'
 import { Icon } from './ui/Icon'
 import { Sidebar } from './ui/Sidebar'
-import { useTheme, type ThemePref } from './ui/theme'
+import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { BankView } from './views/BankView'
 import { ChecksView } from './views/ChecksView'
 import { DayPanel } from './views/DayPanel'
 import { ItemEditor } from './views/ItemEditor'
 import { MonthView } from './views/MonthView'
+import { NowView } from './views/NowView'
 import { PlanView } from './views/PlanView'
 import { RulesView } from './views/RulesView'
+import { TaskSheet } from './views/TaskSheet'
 import { WeekView } from './views/WeekView'
 
-type Sheet = { kind: 'day'; date: ISODate } | { kind: 'item'; id: string; back?: ISODate } | { kind: 'new'; draft: Partial<Item>; back?: ISODate } | null
+type Sheet =
+  | { kind: 'day'; date: ISODate }
+  | { kind: 'item'; id: string; back?: ISODate }
+  | { kind: 'new'; draft: Partial<Item>; back?: ISODate }
+  | { kind: 'task'; id: string; back?: ISODate }
+  | null
 
 const NAV: { id: View; label: string; icon: string }[] = [
+  { id: 'now', label: 'Сейчас', icon: 'now' },
   { id: 'month', label: 'Календарь', icon: 'calendar' },
   { id: 'week', label: 'Неделя', icon: 'week' },
   { id: 'plan', label: 'План', icon: 'list' },
@@ -51,14 +60,12 @@ async function fetchSeed(url: string): Promise<Plan> {
   const r = await fetch(url)
   if (!r.ok) throw new Error(`Не загрузился исходный план (${r.status})`)
   const p = parsePlan(await r.text())
-  if (isV1(p)) throw new Error('Исходный план старого формата — перезапустите ../build.py')
+  if (isV1(p) || p.version !== 3) throw new Error('Исходный план старого формата — перезапустите ../build.py')
   return p
 }
 
-/** План из хранилища или файла; старый формат переводится на рубрики и форматы нового исходного плана. */
-async function upgrade(p: Plan | PlanV1, seedUrl: string): Promise<Plan> {
-  return isV1(p) ? migrateV1(p, await fetchSeed(seedUrl)) : p
-}
+/** План из хранилища или файла; старые версии переводятся по новому исходному плану. */
+const upgrade = (p: AnyPlan, seedUrl: string) => upgradePlan(p, () => fetchSeed(seedUrl))
 
 export interface AppProps {
   storage?: () => Promise<PlanStorage>
@@ -77,7 +84,7 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
       try {
         const st = await storageFactory()
         storage.current = st
-        const stored = (await st.load().catch(() => null)) as Plan | PlanV1 | null
+        const stored = (await st.load().catch(() => null)) as AnyPlan | null
         const plan = stored ? await upgrade(stored, seedUrl) : await fetchSeed(seedUrl)
         if (!alive) return
         dispatch({ type: 'init', plan })
@@ -143,22 +150,28 @@ interface WorkspaceProps {
 
 function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: WorkspaceProps) {
   const [view, setViewState] = useState<View>(() => readLS<View>('cp:view', 'month'))
-  const [anchor, setAnchorState] = useState<ISODate>(() => clampDate(readLS('cp:anchor', today()), plan.start, plan.end))
+  // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
+  const [anchor, setAnchorState] = useState<ISODate>(() => readLS('cp:anchor', today()))
+  const [jump, setJump] = useState({ date: anchor, n: 0 })
   const [filters, setFiltersState] = useState<Filters>(() => ({ ...NO_FILTERS, hideAuto: true, ...readLS<Partial<Filters>>('cp:filters', {}) }))
   const [sheet, setSheet] = useState<Sheet>(null)
-  const [toastState, setToast] = useState<{ msg: string; undo: boolean; n: number } | null>(null)
+  const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)
   const [sideOpen, setSideOpen] = useState(false)
   const [menu, setMenu] = useState(false)
   const theme = useTheme()
+  const phone = useMedia('(max-width: 600px)')
 
   const setView = (v: View) => {
     setViewState(v)
     writeLS('cp:view', v)
   }
-  const setAnchor = (d: ISODate) => {
-    const c = clampDate(d, plan.start, plan.end)
-    setAnchorState(c)
-    writeLS('cp:anchor', c)
+  const setAnchor = useCallback((d: ISODate) => {
+    setAnchorState(d)
+    writeLS('cp:anchor', d)
+  }, [])
+  const jumpTo = (d: ISODate) => {
+    setAnchor(d)
+    setJump((j) => ({ date: d, n: j.n + 1 }))
   }
   const setFilters = (f: Filters) => {
     setFiltersState(f)
@@ -176,30 +189,47 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   const channels = useMemo(() => new Map(plan.channels.map((c) => [c.id, c])), [plan.channels])
   const rubrics = useMemo(() => new Map(plan.rubrics.map((r) => [r.id, r])), [plan.rubrics])
   const rules = useMemo(() => new Map(plan.rules.map((r) => [r.id, r])), [plan.rules])
+  const unitCache = useMemo(() => new Map<ISODate, Unit[]>(), [plan, filters]) // eslint-disable-line react-hooks/exhaustive-deps
+  const channelOrder = useMemo(() => plan.channels.map((c) => c.id), [plan.channels])
+  const unitsOn = (date: ISODate) => {
+    let u = unitCache.get(date)
+    if (!u) {
+      u = unitsOf((byDate.get(date) ?? []).filter((it) => visible(it, filters)), rules, channelOrder)
+      unitCache.set(date, u)
+    }
+    return u
+  }
 
-  const toast = useCallback((msg: string, undo = false) => setToast((t) => ({ msg, undo, n: (t?.n ?? 0) + 1 })), [])
+  const toast = useCallback((msg: string, opts?: boolean | ToastOpts) => {
+    const o = typeof opts === 'boolean' ? { undo: opts } : opts ?? {}
+    setToast((t) => ({ msg, ...o, n: (t?.n ?? 0) + 1 }))
+  }, [])
   useEffect(() => {
     if (!toastState) return
-    const t = setTimeout(() => setToast(null), 5000)
+    const t = setTimeout(() => setToast(null), toastState.actions?.length ? 9000 : 5000)
     return () => clearTimeout(t)
   }, [toastState])
 
-  const dropOn = (date: ISODate, d: Drag) => {
-    if (date < plan.start || date > plan.end) return
-    if (d.kind === 'item') {
-      const it = plan.items.find((x) => x.id === d.id)
-      if (!it || it.date === date) return
-      if (it.date === null) {
-        dispatch({ type: 'assign', bankId: it.id, date })
-        toast(`Тема поставлена на ${shortDate(date)}`, true)
-        return
-      }
-      dispatch({ type: 'move', id: d.id, date })
-      toast(`Перенесено на ${shortDate(date)}${it.group ? ' вместе с группой' : ''}`, true)
-    } else {
-      dispatch({ type: 'assign', bankId: d.id, date })
+  const dropOn = (date: ISODate, d: Drag, time?: string) => {
+    const it = plan.items.find((x) => x.id === d.id)
+    if (!it) return
+    if (d.kind === 'bank' || it.date === null) {
+      dispatch({ type: 'assign', bankId: it.id, date })
       toast(`Тема поставлена на ${shortDate(date)}`, true)
+      return
     }
+    const from = it.date
+    if (from === date && !time) return
+    // FULL на день, где уже есть FULL: перенос сделан, а поменять местами — одной кнопкой
+    const isFull = rules.get(it.ruleId)?.full && !it.derive
+    const other = isFull && from !== date
+      ? (byDate.get(date) ?? []).find((x) => x.id !== it.id && rules.get(x.ruleId)?.full && !x.derive && (!x.group || x.group !== it.group))
+      : undefined
+    dispatch({ type: 'move', id: d.id, date, time })
+    toast(`Перенесено на ${shortDate(date)}${time ? `, ${time}` : ''}${it.group ? ' вместе с группой' : ''}${other ? `. Здесь уже стоит FULL «${other.title}»` : ''}`, {
+      undo: true,
+      actions: other ? [{ label: 'Поменять местами', run: () => dispatch({ type: 'move', id: other.id, date: from }) }] : undefined,
+    })
   }
 
   useEffect(() => {
@@ -231,6 +261,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     canUndo,
     canRedo,
     byDate,
+    unitsOn,
     violations,
     violByDate,
     badIds,
@@ -242,27 +273,31 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     setFilters,
     anchor,
     setAnchor,
-    openItem: (id) => setSheet((s) => ({ kind: 'item', id, back: s?.kind === 'day' ? s.date : undefined })),
+    jump,
+    jumpTo,
+    openItem: (id) => setSheet((s) => ({ kind: 'item', id, back: s?.kind === 'day' ? s.date : s && 'back' in s ? s.back : undefined })),
     openNew: (draft) => setSheet((s) => ({ kind: 'new', draft, back: s?.kind === 'day' ? s.date : undefined })),
-    openDay: (date) => {
-      setSheet({ kind: 'day', date })
-      if (view === 'month' && monthKey(date) !== monthKey(anchor)) setAnchor(date)
-      if (view === 'week') setAnchor(date)
-    },
+    openTask: (id) => setSheet((s) => ({ kind: 'task', id, back: s?.kind === 'day' ? s.date : s && 'back' in s ? s.back : undefined })),
+    openDay: (date) => setSheet({ kind: 'day', date }),
     openDayId,
     goto: (v, date) => {
       setView(v)
-      if (date) setAnchor(date)
+      if (date) jumpTo(date)
     },
     dropOn,
+    setStatus: (unit, status) => {
+      dispatch({ type: 'updateMany', ids: unit.items.map((x) => x.id), patch: { status } })
+      if (status === 'progress') ctx.openTask(unit.head.id)
+    },
     toast,
     toggleSide: () => setSideOpen((o) => !o),
     saved,
+    phone,
   }
 
   const closeSheet = () => setSheet(null)
   const back = sheet && sheet.kind !== 'day' && sheet.back ? () => setSheet({ kind: 'day', date: sheet.back! }) : undefined
-  const withSide = view === 'month' || view === 'week' || view === 'plan'
+  const withSide = view === 'month' || view === 'week' || view === 'plan' || view === 'now'
 
   return (
     <PlanCtx.Provider value={ctx}>
@@ -284,8 +319,9 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           {menu && <DataMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} />}
         </nav>
         {withSide && sideOpen && <div className="cp-scrim cp-only-phone" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {withSide && <Sidebar open={sideOpen} withBank={view !== 'plan'} onClose={() => setSideOpen(false)} />}
+        {withSide && <Sidebar open={sideOpen} withBank={view === 'month' || view === 'week'} onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
+          {view === 'now' && <NowView />}
           {view === 'month' && <MonthView />}
           {view === 'week' && <WeekView />}
           {view === 'plan' && <PlanView />}
@@ -294,11 +330,25 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           {view === 'checks' && <ChecksView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
-          {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
+          {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
+          {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
         </main>
         {toastState && (
           <div className="cp-toast nr-glass" role="status" key={toastState.n}>
-            {toastState.msg}
+            <span className="cp-toast__msg">{toastState.msg}</span>
+            {toastState.actions?.map((a) => (
+              <button
+                key={a.label}
+                type="button"
+                className="nr-btn nr-btn--secondary nr-btn--sm"
+                onClick={() => {
+                  a.run()
+                  setToast(null)
+                }}
+              >
+                {a.label}
+              </button>
+            ))}
             {toastState.undo && (
               <button
                 type="button"

@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { addMonths, monthKey, SAT, WEEKDAYS } from '../model/dates'
 import { weekTemplate, type TemplateLine } from '../model/rules'
 import { createSlots } from '../model/store'
-import { SPREAD, type Channel, type Rubric, type Rule } from '../model/types'
-import { ChannelDot, IconButton } from '../ui/bits'
+import { SPREAD, typeOf, type Channel, type Rubric, type Rule } from '../model/types'
+import { ChannelDot, IconButton, PlatformIcon } from '../ui/bits'
+import { Icon } from '../ui/Icon'
 import { usePlan } from '../ui/ctx'
 import { TopBar } from '../ui/TopBar'
 
@@ -18,12 +19,11 @@ export function RulesView() {
           <section aria-labelledby="rules-h">
             <h2 className="cp-section-title" id="rules-h">Рубрики и форматы</h2>
             <p className="cp-hint" style={{ marginBottom: 10 }}>
-              Рубрика — о чём материал, формат — как он выходит: FULL, тизер, анонс, урок, письмо. У каждого формата свои дни, площадки
-              и лимит в день; по ним считается «Проверка». «Слоты» создают пустые места под темы.
+              Рубрика — о чём материал, формат — как он выходит: FULL, тизер, анонс, урок, письмо. У каждого формата свои дни, время,
+              площадки и что на каждой выходит (YouTube — FULL, Instagram — Reels), лимит в день; по ним считается «Проверка».
+              «Слоты» создают пустые места под темы. Нажмите на рубрику, чтобы раскрыть её форматы.
             </p>
-            <div style={{ overflowX: 'auto' }} className="nr-scroll">
-              <RuleTable />
-            </div>
+            <RuleTable />
           </section>
           <section aria-labelledby="week-h">
             <h2 className="cp-section-title" id="week-h">Типовая неделя</h2>
@@ -51,26 +51,40 @@ const COLS = 13
 function RuleTable() {
   const { plan, dispatch } = usePlan()
   const [name, setName] = useState('')
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const ids = [...plan.rubrics.map((r) => r.id), SPREAD]
+  const toggle = (id: string) => setOpen((o) => {
+    const n = new Set(o)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    return n
+  })
   return (
-    <table className="cp-table" style={{ minWidth: 1180 }}>
+    <div className="cp-table-wrap nr-scroll">
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setOpen(open.size === ids.length ? new Set() : new Set(ids))}>
+          {open.size === ids.length ? 'Свернуть все' : 'Развернуть все'}
+        </button>
+      </div>
+    <table className="cp-table">
       <thead>
         <tr>
           <th>Формат</th>
           <th>Канал</th>
-          <th>Площадки</th>
+          <th>Площадки · что выходит</th>
           {WEEKDAYS.map((w, i) => (
             <th key={w} className={`cp-daycell${i === SAT ? ' cp-daycell--rest' : ''}`}>{w}</th>
           ))}
+          <th>Время</th>
           <th>Лимит</th>
-          <th>Частота</th>
           <th />
         </tr>
       </thead>
       <tbody>
         {plan.rubrics.map((r) => (
-          <RubricRows key={r.id} rubric={r} rules={plan.rules.filter((x) => x.rubricId === r.id)} />
+          <RubricRows key={r.id} rubric={r} rules={plan.rules.filter((x) => x.rubricId === r.id)} open={open.has(r.id)} onToggle={() => toggle(r.id)} />
         ))}
-        <RubricRows rubric={null} rules={plan.rules.filter((x) => x.rubricId === null)} />
+        <RubricRows rubric={null} rules={plan.rules.filter((x) => x.rubricId === null)} open={open.has(SPREAD)} onToggle={() => toggle(SPREAD)} />
         <tr>
           <td colSpan={COLS}>
             <form
@@ -88,40 +102,45 @@ function RuleTable() {
         </tr>
       </tbody>
     </table>
+    </div>
   )
 }
 
 /** Рубрика и её форматы; rubric = null — форматы, которые выходят с FULL любой рубрики. */
-function RubricRows({ rubric, rules }: { rubric: Rubric | null; rules: Rule[] }) {
+function RubricRows({ rubric, rules, open, onToggle }: { rubric: Rubric | null; rules: Rule[]; open: boolean; onToggle: () => void }) {
   const { plan, dispatch } = usePlan()
   const [name, setName] = useState('')
   const [channelId, setChannelId] = useState(plan.channels.find((c) => c.id === 'dataist')?.id ?? plan.channels[0].id)
+  const summary = rules.map((r) => `${r.name} (${r.days.map((on, i) => (on ? WEEKDAYS[i] : '')).filter(Boolean).join(', ') || '—'})`).join(' · ')
   return (
     <>
       <tr className="cp-table__group">
         <td colSpan={COLS}>
-          {rubric ? (
-            <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button type="button" className="nr-btn nr-btn--ghost nr-btn--icon nr-btn--sm cp-fold" aria-expanded={open} aria-label={`${open ? 'Свернуть' : 'Раскрыть'}: ${rubric?.name ?? SPREAD}`} onClick={onToggle}>
+              <Icon name="chev-right" size={16} />
+            </button>
+            {rubric ? (
               <input
                 className="nr-field nr-field--sm"
-                style={{ maxWidth: 220, fontWeight: 700 }}
+                style={{ maxWidth: 200, fontWeight: 700 }}
                 aria-label="Название рубрики"
                 value={rubric.name}
                 onChange={(e) => dispatch({ type: 'rubric', id: rubric.id, patch: { name: e.target.value } })}
               />
-              <span className="cp-muted" style={{ fontWeight: 450 }}>{rubric.what}</span>
+            ) : (
+              <span>{SPREAD}</span>
+            )}
+            <span className="cp-muted" style={{ fontWeight: 450 }}>
+              {open ? (rubric ? rubric.what : 'рубрика у них та же, что у FULL') : summary || 'форматов нет'}
             </span>
-          ) : (
-            <span>
-              {SPREAD} <span className="cp-muted" style={{ fontWeight: 450 }}>— рубрика у них та же, что у FULL</span>
-            </span>
-          )}
+          </span>
         </td>
       </tr>
-      {rules.map((r) => (
+      {open && rules.map((r) => (
         <RuleRow key={r.id} rule={r} />
       ))}
-      <tr>
+      {open && <tr>
         <td colSpan={COLS}>
           <form
             style={{ display: 'flex', gap: 8 }}
@@ -140,7 +159,7 @@ function RubricRows({ rubric, rules }: { rubric: Rubric | null; rules: Rule[] })
             <button type="submit" className="nr-btn nr-btn--ghost nr-btn--sm" disabled={!name.trim()}>+ Формат</button>
           </form>
         </td>
-      </tr>
+      </tr>}
     </>
   )
 }
@@ -157,30 +176,46 @@ function RuleRow({ rule }: { rule: Rule }) {
   return (
     <>
       <tr>
-        <td style={{ minWidth: 210 }}>
+        <td style={{ minWidth: 190 }}>
           <input className="nr-field nr-field--sm" aria-label={`Формат: ${label}`} value={rule.name} onChange={(e) => set({ name: e.target.value })} />
           {rule.what && <div className="cp-muted" style={{ marginTop: 2 }}>{rule.what}</div>}
+          <input className="nr-field nr-field--sm cp-freq" aria-label={`Частота: ${label}`} placeholder="Частота" value={rule.freq} onChange={(e) => set({ freq: e.target.value })} />
         </td>
-        <td style={{ minWidth: 130 }}>
+        <td style={{ minWidth: 110 }}>
           <span className="cp-ch" style={{ color: channel?.color, fontWeight: 600 }}>
             <ChannelDot color={channel?.color ?? '#999'} />
             {rule.channel}
           </span>
         </td>
-        <td style={{ minWidth: 210 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {platforms.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className="nr-pill"
-                style={{ height: 24, fontSize: 11 }}
-                aria-pressed={rule.platforms.includes(p)}
-                onClick={() => set({ platforms: rule.platforms.includes(p) ? rule.platforms.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || rule.platforms.includes(x)) })}
-              >
-                {p}
-              </button>
-            ))}
+        <td style={{ minWidth: 250 }}>
+          <div className="cp-ptypes">
+            {platforms.map((p) => {
+              const on = rule.platforms.includes(p)
+              return (
+                <span key={p} className={`cp-ptype${on ? ' cp-ptype--on' : ''}`}>
+                  <button
+                    type="button"
+                    className="nr-pill"
+                    aria-pressed={on}
+                    aria-label={`${label}: ${p}`}
+                    title={p}
+                    onClick={() => set({ platforms: on ? rule.platforms.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || rule.platforms.includes(x)) })}
+                  >
+                    <PlatformIcon platform={p} size={13} />
+                    {p}
+                  </button>
+                  {on && (
+                    <input
+                      className="cp-ptype__in"
+                      aria-label={`Что выходит: ${label}, ${p}`}
+                      value={rule.types?.[p] ?? ''}
+                      placeholder={typeOf({ ...rule, types: {} }, p)}
+                      onChange={(e) => set({ types: { ...rule.types, [p]: e.target.value } })}
+                    />
+                  )}
+                </span>
+              )
+            })}
           </div>
         </td>
         {rule.days.map((on, i) => (
@@ -198,10 +233,10 @@ function RuleRow({ rule }: { rule: Rule }) {
           </td>
         ))}
         <td>
-          <input className="nr-field nr-field--sm" style={{ width: 56 }} type="number" min={1} max={20} aria-label="Лимит в день" value={rule.limit} onChange={(e) => set({ limit: Math.max(1, Number(e.target.value) || 1) })} />
+          <input className="nr-field nr-field--sm" style={{ width: 118 }} type="time" step={900} aria-label={`Время: ${label}`} value={rule.time} onChange={(e) => e.target.value && set({ time: e.target.value })} />
         </td>
-        <td style={{ minWidth: 160 }}>
-          <input className="nr-field nr-field--sm" aria-label="Частота" value={rule.freq} onChange={(e) => set({ freq: e.target.value })} />
+        <td>
+          <input className="nr-field nr-field--sm" style={{ width: 56 }} type="number" min={1} max={20} aria-label="Лимит в день" value={rule.limit} onChange={(e) => set({ limit: Math.max(1, Number(e.target.value) || 1) })} />
         </td>
         <td>
           <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" aria-expanded={slots} onClick={() => setSlots(!slots)}>Слоты…</button>
@@ -223,9 +258,9 @@ function RuleRow({ rule }: { rule: Rule }) {
               }}
             >
               <span className="cp-muted">Создать слоты «…» на дни формата, где его ещё нет: с</span>
-              <input className="nr-field nr-field--sm" style={{ width: 150 }} type="date" value={from} min={plan.start} max={plan.end} onChange={(e) => setFrom(e.target.value)} aria-label="С даты" />
+              <input className="nr-field nr-field--sm" style={{ width: 150 }} type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="С даты" />
               <span className="cp-muted">по</span>
-              <input className="nr-field nr-field--sm" style={{ width: 150 }} type="date" value={to} min={plan.start} max={plan.end} onChange={(e) => setTo(e.target.value)} aria-label="По дату" />
+              <input className="nr-field nr-field--sm" style={{ width: 150 }} type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="По дату" />
               <button type="submit" className="nr-btn nr-btn--primary nr-btn--sm">Создать</button>
             </form>
           </td>

@@ -71,3 +71,13 @@ export const shortDate = (d: ISODate) => {
 }
 
 export const clampDate = (d: ISODate, min: ISODate, max: ISODate) => (d < min ? min : d > max ? max : d)
+
+/** Время «ЧЧ:ММ» ↔ минуты от полуночи; за пределы суток не выходит. */
+export const toMin = (t: string) => {
+  const [h, m] = t.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+export const fromMin = (n: number) => {
+  const v = Math.min(Math.max(Math.round(n), 0), 23 * 60 + 59)
+  return `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`
+}

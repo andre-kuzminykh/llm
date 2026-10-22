@@ -1,5 +1,5 @@
 // Что показывать и в каком порядке.
-import { isSlot, type ISODate, type Item, type Plan } from './types'
+import { isSlot, type ISODate, type Item, type Plan, type Status } from './types'
 
 export interface Filters {
   hiddenChannels: string[]
@@ -7,9 +7,10 @@ export interface Filters {
   hiddenPlatforms: string[]
   onlySlots: boolean
   hideAuto: boolean // ежедневные авто-рубрики в неделе и в дне
+  statuses: Status[] // показывать только эти статусы; пусто — все
 }
 
-export const NO_FILTERS: Filters = { hiddenChannels: [], hiddenRubrics: [], hiddenPlatforms: [], onlySlots: false, hideAuto: false }
+export const NO_FILTERS: Filters = { hiddenChannels: [], hiddenRubrics: [], hiddenPlatforms: [], onlySlots: false, hideAuto: false, statuses: [] }
 
 /** Ежедневные форматы, которые выходят сами и почти не требуют внимания. */
 export const AUTO_RULES = new Set(['neu_all', 'neu_top', 'lab_day', 'lab_day_v', 'aca_lesson', 'sh_edu', 'tx_hack', 'ml_news'])
@@ -20,6 +21,7 @@ export function visible(it: Item, f: Filters) {
   if (f.hiddenPlatforms.length && !it.platforms.some((p) => !f.hiddenPlatforms.includes(p))) return false
   if (f.onlySlots && !isSlot(it)) return false
   if (f.hideAuto && AUTO_RULES.has(it.ruleId)) return false
+  if (f.statuses?.length && !f.statuses.includes(it.status)) return false
   return true
 }
 

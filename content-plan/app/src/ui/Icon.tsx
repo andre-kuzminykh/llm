@@ -71,6 +71,67 @@ const P: Record<string, ReactElement> = {
       <path d="M7.8 12.3l2.9 2.9 5.5-5.6" strokeWidth={2.25} style={{ stroke: 'var(--nr-surface, #fff)' }} />
     </>
   ),
+  now: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M10.2 8.9v6.2l5-3.1z" fill="currentColor" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M5 19.5c1.2-3.3 3.8-5 7-5s5.8 1.7 7 5" />
+    </>
+  ),
+  flag: <path d="M6 20.5v-16M6 4.5h10.5l-2 4 2 4H6" />,
+  swap: <path d="M7 4.5L3.5 8 7 11.5M3.5 8h13M17 12.5l3.5 3.5-3.5 3.5M20.5 16h-13" />,
+  // площадки: простые знаки, не логотипы
+  'p-Web': (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5s1.1-5.9 3.5-8.5z" />
+    </>
+  ),
+  'p-YouTube': (
+    <>
+      <rect x="2.75" y="5.5" width="18.5" height="13" rx="4" />
+      <path d="M10.2 9.3v5.4l4.6-2.7z" fill="currentColor" />
+    </>
+  ),
+  'p-Instagram': (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+      <circle cx="12" cy="12" r="3.8" />
+      <path d="M17 7h.01" />
+    </>
+  ),
+  'p-TikTok': <path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5M14 4c.4 2.6 2.2 4.2 5 4.4" />,
+  'p-Threads': (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M15.2 12v1.4a2.3 2.3 0 0 0 4.6 0V12a7.8 7.8 0 1 0-3.1 6.2" />
+    </>
+  ),
+  'p-X': <path d="M5 4.5h3.6l10.4 15h-3.6zM18.6 4.5l-5.7 6.5M5.4 19.5l5.7-6.5" />,
+  'p-Telegram': <path d="M20.5 4.5L3.5 11.3l6 2.2 2.2 6.1 3.3-4.7 4.4 3.5zM9.5 13.5l11-9" />,
+  'p-LinkedIn': (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
+      <path d="M8 10.5v6M8 7.6h.01M11.5 16.5v-6M11.5 13.2c0-1.7 1-2.7 2.4-2.7s2.1 1 2.1 2.7v3.3" />
+    </>
+  ),
+  'p-Mail': (
+    <>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" />
+      <path d="M4 7.5l8 5.8 8-5.8" />
+    </>
+  ),
   today: (
     <>
       <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />

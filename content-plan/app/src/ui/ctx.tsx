@@ -2,11 +2,21 @@ import { createContext, useContext } from 'react'
 import type { Filters } from '../model/filters'
 import type { Violation } from '../model/rules'
 import type { Action } from '../model/store'
-import type { Channel, ISODate, Item, Plan, Rubric, Rule } from '../model/types'
+import type { Channel, ISODate, Item, Plan, Rubric, Rule, Status } from '../model/types'
+import type { Unit } from '../model/units'
 
-export type View = 'month' | 'week' | 'plan' | 'bank' | 'rules' | 'checks'
+export type View = 'now' | 'month' | 'week' | 'plan' | 'bank' | 'rules' | 'checks'
 
 export type Drag = { kind: 'item' | 'bank'; id: string }
+
+export interface ToastAction {
+  label: string
+  run: () => void
+}
+export interface ToastOpts {
+  undo?: boolean
+  actions?: ToastAction[]
+}
 
 export interface Ctx {
   plan: Plan
@@ -14,6 +24,8 @@ export interface Ctx {
   canUndo: boolean
   canRedo: boolean
   byDate: Map<ISODate, Item[]>
+  /** Карточки дня с учётом фильтров. */
+  unitsOn: (date: ISODate) => Unit[]
   violations: Violation[]
   violByDate: Map<ISODate, Violation[]>
   badIds: Set<string>
@@ -25,15 +37,22 @@ export interface Ctx {
   setFilters: (f: Filters) => void
   anchor: ISODate
   setAnchor: (d: ISODate) => void
+  /** Переход к дате: вид прокручивает к ней. n растёт с каждым переходом. */
+  jump: { date: ISODate; n: number }
+  jumpTo: (d: ISODate) => void
   openItem: (id: string) => void
   openNew: (draft: Partial<Item>) => void
   openDay: (d: ISODate) => void
+  openTask: (id: string) => void
   openDayId: ISODate | null
   goto: (view: View, date?: ISODate) => void
-  dropOn: (date: ISODate, drag: Drag) => void
-  toast: (msg: string, undo?: boolean) => void
+  dropOn: (date: ISODate, drag: Drag, time?: string) => void
+  /** Статус всей карточке; ▶ ещё и открывает задачу. */
+  setStatus: (unit: Unit, status: Status) => void
+  toast: (msg: string, opts?: boolean | ToastOpts) => void
   toggleSide: () => void
   saved: 'idle' | 'saving' | 'saved' | 'memory' | 'error'
+  phone: boolean
 }
 
 export const PlanCtx = createContext<Ctx | null>(null)

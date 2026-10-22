@@ -1,7 +1,8 @@
 import { useId, useMemo, useState } from 'react'
-import { dayTitle } from '../model/dates'
-import { newId, slotTitle } from '../model/store'
-import { isSlot, type Item, type Rule, type Status } from '../model/types'
+import { dayTitle, WEEKDAYS, weekday } from '../model/dates'
+import { newId } from '../model/store'
+import { isSlot, PLACEHOLDER, timeOf, type Item, type Rule, type Status } from '../model/types'
+import { dueOf, leadOf } from '../model/units'
 import { IconButton, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
@@ -15,14 +16,15 @@ interface Props {
 
 /** Форма материала: новый или существующий. Сохранение — один шаг истории. */
 export function ItemEditor({ id, draft, onClose, onBack }: Props) {
-  const { plan, dispatch, rubrics, rules, channels, toast } = usePlan()
+  const { plan, dispatch, rubrics, rules, channels, toast, openItem, labelOf } = usePlan()
   const existing = id ? plan.items.find((x) => x.id === id) : undefined
   const base: Partial<Item> = existing ?? draft ?? {}
   const titleId = useId()
 
-  // форматы канала для рубрики: свои форматы рубрики и общие, которые выходят с любым FULL
+  // форматы канала для рубрики: свои форматы рубрики и общие, которые выходят с FULL, — если у рубрики есть FULL
+  const hasFull = (rb: string | null) => plan.rules.some((r) => r.rubricId === rb && r.full)
   const rulesFor = (cid: string, rb: string | null) =>
-    plan.rules.filter((r) => r.channelId === cid && (r.rubricId === rb || r.rubricId === null))
+    plan.rules.filter((r) => r.channelId === cid && (r.rubricId === rb || (r.rubricId === null && hasFull(rb))))
       .sort((x, y) => Number(x.rubricId === null) - Number(y.rubricId === null))
   const rubricsFor = (cid: string, keep?: string | null) =>
     plan.rubrics.filter((rb) => rb.id === keep || plan.rules.some((r) => r.channelId === cid && r.rubricId === rb.id))
@@ -32,7 +34,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const firstRule = base.ruleId ?? rulesFor(firstChannel, base.rubricId ?? rubricsFor(firstChannel)[0]?.id ?? null)[0]?.id ?? plan.rules[0].id
   const firstRubric = base.rubricId !== undefined ? base.rubricId : rules.get(firstRule)?.rubricId ?? null
 
-  const [title, setTitle] = useState(base.title ?? '')
+  const [title, setTitle] = useState(base.title && !isSlot(base as Item) ? base.title : '')
   const [date, setDate] = useState(base.date ?? '')
   const [channelId, setChannelId] = useState(firstChannel)
   const [rubricId, setRubricId] = useState<string | null>(firstRubric)
@@ -41,6 +43,10 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [platforms, setPlatforms] = useState<string[]>(base.platforms ?? rules.get(firstRule)?.platforms ?? [])
   const [status, setStatus] = useState<Status>(base.status ?? 'planned')
   const [note, setNote] = useState(base.note ?? '')
+  const [time, setTime] = useState(base.time ?? '')
+  const [owner, setOwner] = useState(base.owner ?? '')
+  const [due, setDue] = useState(base.due ?? '')
+  const [offGrid, setOffGrid] = useState<boolean | null>(base.offGrid ?? (existing ? false : null))
   const [withGroup, setWithGroup] = useState(true)
   const [withFamily, setWithFamily] = useState(true)
   const [error, setError] = useState('')
@@ -55,6 +61,9 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const isHead = !!existing && !existing.derive && members.some((m) => m.derive)
   const isBank = !!existing && existing.date === null
   const fromFull = !!existing?.derive // рубрика берётся у FULL группы
+  // разовый материал на «чужой» день — сразу вне сетки, чтобы проверка не ругалась; можно выключить
+  const offDay = !!date && !!rule && !rule.days[weekday(date)]
+  const isOffGrid = offGrid ?? offDay
 
   const takeRule = (r: Rule | undefined) => {
     setRuleId(r?.id ?? '')
@@ -78,11 +87,24 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const togglePlatform = (p: string) => setPlatforms((list) => (list.includes(p) ? list.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || list.includes(x))))
 
   const save = () => {
-    const t = title.trim() || (rule ? slotTitle(rule, rubric) : '')
-    if (!t) return setError('Нужен заголовок')
+    const t = title.trim() || PLACEHOLDER
     if (!platforms.length) return setError('Выберите хотя бы одну площадку')
     if (!rule) return setError('Выберите формат')
-    const patch: Partial<Item> = { title: t, channelId, sectionId, ruleId, rubricId, platforms, status, note: note || undefined, format: existing?.format ?? rule.format }
+    const patch: Partial<Item> = {
+      title: t,
+      channelId,
+      sectionId,
+      ruleId,
+      rubricId,
+      platforms,
+      status,
+      note: note || undefined,
+      format: existing?.format ?? rule.format,
+      time: time && time !== rule.time ? time : undefined,
+      owner: owner.trim() || undefined,
+      due: due || undefined,
+      offGrid: isOffGrid || undefined,
+    }
     if (existing && isBank && date) {
       dispatch({ type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } })
       dispatch({ type: 'assign', bankId: existing.id, date })
@@ -103,10 +125,15 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         format: rule.format,
         platforms,
         status,
-        source: date ? 'вручную' : 'банк тем',
+        source: t === PLACEHOLDER ? 'нужна тема' : date ? 'вручную' : 'банк тем',
         rank: sample?.rank ?? 50,
-        note: note || undefined,
+        note: patch.note,
+        time: patch.time,
+        owner: patch.owner,
+        due: patch.due,
+        offGrid: patch.offGrid,
       }
+      for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
       dispatch({ type: 'create', item, withFamily: withFamily && !!date })
       toast(date ? `Создано на ${date}` : 'Тема добавлена в банк', true)
     }
@@ -130,24 +157,24 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       </div>
       <div className="cp-sheet__body nr-scroll">
         <div className="cp-field">
-          <label className="nr-label" htmlFor={titleId}>Заголовок</label>
+          <label className="nr-label" htmlFor={titleId}>Тема</label>
           <textarea
             id={titleId}
             className="nr-field"
             rows={2}
             value={title}
             autoFocus={!existing}
-            placeholder={rule ? slotTitle(rule, rubric) : ''}
+            placeholder="Только тема, без рубрики: «Агент продаж»"
             onChange={(e) => setTitle(e.target.value)}
           />
-          {existing && isSlot(existing) && <span className="cp-hint">Тема не задана: впишите её вместо «…» или возьмите из банка тем.</span>}
-          {isHead && <span className="cp-hint">Тизер, анонсы и письма группы пересоберут заголовок из этого.</span>}
+          {existing && isSlot(existing) && <span className="cp-hint">Тема не задана: впишите её или возьмите из банка тем.</span>}
+          {isHead && <span className="cp-hint">У тизера, анонсов и писем группы тема поменяется вместе с этой.</span>}
         </div>
 
         <div className="cp-field__row">
           <label className="cp-field">
             <span className="nr-label">Дата</span>
-            <input className="nr-field" type="date" value={date} min={plan.start} max={plan.end} onChange={(e) => setDate(e.target.value)} />
+            <input className="nr-field" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
           <label className="cp-field">
             <span className="nr-label">Канал</span>
@@ -160,6 +187,19 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         </div>
         {!date && !existing && <span className="cp-hint">Без даты материал попадёт в банк тем.</span>}
         {date && <span className="cp-hint">{dayTitle(date)}</span>}
+        {date && (
+          <div className="cp-field__row">
+            <label className="cp-field">
+              <span className="nr-label">Время выхода</span>
+              <input className="nr-field" type="time" step={900} value={time || (rule ? timeOf({}, rule) : '')} onChange={(e) => setTime(e.target.value)} />
+            </label>
+            <label className="cp-field">
+              <span className="nr-label">Подготовить к</span>
+              <input className="nr-field" type="date" value={due || (existing ? dueOf({ ...existing, date }, rule) ?? '' : '')} onChange={(e) => setDue(e.target.value)} />
+            </label>
+          </div>
+        )}
+        {date && !due && <span className="cp-hint">Время — как у формата ({rule?.time ?? '—'}); готовить за {leadOf(rule)} дн. до выхода.</span>}
 
         <div className="cp-field__row">
           <label className="cp-field">
@@ -215,14 +255,33 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         </div>
 
         <label className="cp-field">
-          <span className="nr-label">Заметка</span>
-          <textarea className="nr-field" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Сценарий, ссылки, кто делает" />
+          <span className="nr-label">Кто делает</span>
+          <input className="nr-field" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Имя" />
         </label>
+
+        <label className="cp-field">
+          <span className="nr-label">Заметка</span>
+          <textarea className="nr-field" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Сценарий, ссылки, что учесть" />
+        </label>
+
+        {date && (
+          <div className="cp-field">
+            <Switch checked={isOffGrid} onChange={setOffGrid}>Вне сетки — разовый, проверка его не трогает</Switch>
+            {offDay && rule && <span className="cp-hint">По сетке «{labelOf({ rubricId, ruleId })}» не выходит в {WEEKDAYS[weekday(date)]}.</span>}
+          </div>
+        )}
 
         {members.length > 0 && (
           <div className="cp-field">
             <span className="nr-label">Группа · {members.length + 1}</span>
-            <p className="cp-hint">{members.map((m) => rules.get(m.ruleId)?.name ?? m.ruleId).join(' · ')}</p>
+            <div className="cp-members">
+              {members.map((m) => (
+                <button key={m.id} type="button" className="nr-pill" onClick={() => openItem(m.id)} title="Открыть этот материал">
+                  {rules.get(m.ruleId)?.name ?? m.ruleId}
+                  {m.channelId !== existing?.channelId && <span className="cp-muted">· {channels.get(m.channelId)?.name}</span>}
+                </button>
+              ))}
+            </div>
             <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
           </div>
         )}

@@ -1,50 +1,58 @@
-import { useState } from 'react'
-import { addDays, addMonths, clampDate, dayTitle, monthKey, monthTitle, today } from '../model/dates'
+import { useState, type CSSProperties } from 'react'
+import { addDays, addMonths, dayTitle, monthKey, monthTitle, today } from '../model/dates'
 import { visible } from '../model/filters'
-import { isSlot, type ISODate, type Item } from '../model/types'
-import { ChannelDot, IconButton, Platforms, StatusPicker } from '../ui/bits'
+import { isSlot, shownTitle, titleIsFormat, type ISODate } from '../model/types'
+import { platformTypes, unitsOf, type Unit } from '../model/units'
+import { ChannelDot, IconButton, PlatformIcon, RubricChip, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
-import { TopBar } from '../ui/TopBar'
+import { DateJump, TopBar } from '../ui/TopBar'
 
 const LIMIT = 300
 
-/** Контент-план списком: по дням месяца или поиском по всему плану. */
+/** Контент-план списком: по дням месяца или поиском по всему плану. Одна строка — одна карточка. */
 export function PlanView() {
-  const { plan, anchor, setAnchor, byDate, filters, violByDate } = usePlan()
+  const { plan, anchor, jumpTo, unitsOn, filters, violByDate, rules } = usePlan()
   const [query, setQuery] = useState('')
   const month = monthKey(anchor)
   const q = query.trim().toLowerCase()
 
-  let days: [ISODate, Item[]][] = []
+  let days: [ISODate, Unit[]][] = []
   let total = 0
   if (q) {
     const hits = plan.items.filter((it) => it.date && visible(it, filters) && it.title.toLowerCase().includes(q))
-    total = hits.length
-    const map = new Map<ISODate, Item[]>()
-    for (const it of hits.sort((a, b) => (a.date! < b.date! ? -1 : 1)).slice(0, LIMIT)) map.set(it.date!, [...(map.get(it.date!) ?? []), it])
-    days = [...map]
+    const byDay = new Map<ISODate, typeof hits>()
+    for (const it of hits) byDay.set(it.date!, [...(byDay.get(it.date!) ?? []), it])
+    const order = plan.channels.map((c) => c.id)
+    const all = [...byDay].sort(([a], [b]) => (a < b ? -1 : 1)).map(([d, list]) => [d, unitsOf(list, rules, order)] as [ISODate, Unit[]])
+    total = all.reduce((n, [, u]) => n + u.length, 0)
+    let n = 0
+    for (const [d, u] of all) {
+      if (n >= LIMIT) break
+      days.push([d, u])
+      n += u.length
+    }
   } else {
+    days = []
     for (let d = `${month}-01`; monthKey(d) === month; d = addDays(d, 1)) {
-      const list = (byDate.get(d) ?? []).filter((it) => visible(it, filters))
+      const list = unitsOn(d)
       if (list.length) days.push([d, list])
     }
   }
 
   return (
     <>
-      <TopBar title={q ? 'Поиск по плану' : `План · ${monthTitle(month)}`}>
+      <TopBar title={q ? 'Поиск по плану' : <DateJump label={`План · ${monthTitle(month)}`} value={anchor} onPick={jumpTo} />}>
         {!q && (
           <nav className="cp-top__nav" aria-label="Месяцы">
-            <IconButton icon="chev-left" label="Предыдущий месяц" onClick={() => setAnchor(`${addMonths(month, -1)}-01`)} disabled={addMonths(month, -1) < monthKey(plan.start)} />
-            <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setAnchor(clampDate(today(), plan.start, plan.end))}>
+            <IconButton icon="chev-left" label="Предыдущий месяц" onClick={() => jumpTo(`${addMonths(month, -1)}-01`)} />
+            <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => jumpTo(today())}>
               Сегодня
             </button>
-            <IconButton icon="chev-right" label="Следующий месяц" onClick={() => setAnchor(`${addMonths(month, 1)}-01`)} disabled={addMonths(month, 1) > monthKey(plan.end)} />
+            <IconButton icon="chev-right" label="Следующий месяц" onClick={() => jumpTo(`${addMonths(month, 1)}-01`)} />
           </nav>
         )}
         <input
-          className="nr-field nr-field--sm"
-          style={{ width: 240 }}
+          className="nr-field nr-field--sm cp-search"
           type="search"
           placeholder="Найти тему во всём плане"
           aria-label="Поиск по плану"
@@ -61,8 +69,8 @@ export function PlanView() {
                 {dayTitle(d)}
                 {(violByDate.get(d)?.length ?? 0) > 0 && <span className="nr-tag nr-tag--danger">нарушений: {violByDate.get(d)!.length}</span>}
               </div>
-              {list.map((it) => (
-                <PlanRow key={it.id} item={it} />
+              {list.map((u) => (
+                <PlanRow key={u.key} unit={u} />
               ))}
             </section>
           ))}
@@ -73,22 +81,35 @@ export function PlanView() {
   )
 }
 
-function PlanRow({ item }: { item: Item }) {
-  const { channels, labelOf, openItem, dispatch } = usePlan()
-  const c = channels.get(item.channelId)
-  const section = c?.sections.find((s) => s.id === item.sectionId)
+function PlanRow({ unit }: { unit: Unit }) {
+  const { plan, channels, rubrics, rules, labelOf, openItem, setStatus } = usePlan()
+  const { head } = unit
+  const c = channels.get(unit.channelId)
+  const section = c?.sections.find((s) => s.id === head.sectionId)
+  const rule = rules.get(head.ruleId)
+  const rubric = rubrics.get(head.rubricId ?? '')
+  const format = rule && rule.name !== rubric?.name && !titleIsFormat(head.title, rule) ? rule.name : ''
+  const plats = platformTypes(unit, rules, plan.platforms)
   return (
-    <div className="cp-plan__row">
+    <div className="cp-plan__row" style={{ '--cp-c': c?.color } as CSSProperties}>
+      <span className="cp-plan__time">{unit.time}</span>
       <span className="cp-ch">
         <ChannelDot color={c?.color ?? '#999'} />
         {section?.name ?? c?.name}
       </span>
-      <span className="cp-muted">{labelOf(item)}</span>
-      <button type="button" className={`cp-link${isSlot(item) ? ' cp-slot-text' : ''}`} onClick={() => openItem(item.id)}>
-        {item.title}
+      <span className="cp-plan__label">
+        {rubric && <RubricChip name={rubric.name} />}
+        {format && <span className="cp-muted">{format}</span>}
+      </span>
+      <button type="button" className={`cp-link${isSlot(head) ? ' cp-slot-text' : ''}`} onClick={() => openItem(head.id)}>
+        {shownTitle(head)}
       </button>
-      <Platforms list={item.platforms} />
-      <StatusPicker size="sm" label={`Статус: ${labelOf(item)}: ${item.title}`} value={item.status} onChange={(status) => dispatch({ type: 'update', id: item.id, patch: { status } })} />
+      <span className="cp-card__icons" aria-label={`Площадки: ${plats.map((p) => `${p.platform}: ${p.parts.map((x) => x.type).join(', ')}`).join('; ')}`}>
+        {plats.map(({ platform }) => (
+          <PlatformIcon key={platform} platform={platform} size={13} />
+        ))}
+      </span>
+      <StatusPicker size="sm" label={`Статус: ${labelOf(head)}: ${shownTitle(head)}`} value={head.status} onChange={(s) => setStatus(unit, s)} />
     </div>
   )
 }

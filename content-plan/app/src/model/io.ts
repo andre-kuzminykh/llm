@@ -1,11 +1,14 @@
 // Выгрузка и загрузка: JSON целиком и CSV-календарь в формате out/4_calendar.csv.
-import { addDays, WEEKDAYS, weekday } from './dates'
-import type { ISODate, Item, Plan } from './types'
+import { addDays, MONTHS, WEEKDAYS, weekday } from './dates'
+import { lineOf, PLACEHOLDER, timeOf, type ISODate, type Item, type Plan, type Rule } from './types'
 
 export const exportJSON = (plan: Plan) => JSON.stringify(plan)
 
-/** Разбирает выгрузку. План первой версии (рубрика и формат были одним) нужно перевести migrateV1. */
-export function parsePlan(text: string): Plan | PlanV1 {
+export type AnyPlan = Plan | PlanV2 | PlanV1
+
+/** Разбирает выгрузку. Старые версии переводятся upgradePlan: первая — рубрика и формат были одним,
+ *  вторая — рубрика стояла в названии («Демо / Стратегия»). */
+export function parsePlan(text: string): AnyPlan {
   let data: unknown
   try {
     data = JSON.parse(text)
@@ -23,7 +26,7 @@ export function parsePlan(text: string): Plan | PlanV1 {
     Array.isArray(p.items)
   const v2 =
     common &&
-    p.version === 2 &&
+    (p.version === 2 || p.version === 3) &&
     Array.isArray(p.rules) &&
     p.items!.every((it: Partial<Item>) => typeof it.id === 'string' && typeof it.ruleId === 'string' && typeof it.title === 'string')
   const v1 =
@@ -31,7 +34,12 @@ export function parsePlan(text: string): Plan | PlanV1 {
     p.version === 1 &&
     (p.items as { id?: unknown; rubricId?: unknown; title?: unknown }[]).every((it) => typeof it.id === 'string' && typeof it.rubricId === 'string' && typeof it.title === 'string')
   if (!v2 && !v1) throw new Error('Файл не похож на выгрузку контент-плана (нужны каналы, рубрики, правила и материалы)')
-  return p as Plan | PlanV1
+  return p as AnyPlan
+}
+
+export interface PlanV2 extends Omit<Plan, 'version' | 'rules'> {
+  version: 2
+  rules: (Omit<Rule, 'time' | 'types'> & { pattern?: string; time?: string; types?: Record<string, string> })[]
 }
 
 export interface PlanV1 {
@@ -43,6 +51,10 @@ export interface PlanV1 {
 /** Первая версия хранила формат вместо рубрики (rubricId = «f_demo», «sh_teaser»…). Рубрики и правила
  *  берём из нового исходного плана, материалы и каналы — из старого; рубрику тизеров и анонсов — от их FULL. */
 export function migrateV1(old: PlanV1, seed: Plan): Plan {
+  return migrateV2(migrateV1toV2(old, seed), seed)
+}
+
+function migrateV1toV2(old: PlanV1, seed: Plan): PlanV2 {
   const rules = new Map(seed.rules.map((r) => [r.id, r]))
   const ruleId = (id: string) => (id === 'f_spec' ? 'f_demo' : id)
   const headRubric = new Map<string, string>()
@@ -54,10 +66,80 @@ export function migrateV1(old: PlanV1, seed: Plan): Plan {
     const id = ruleId(rubricId)
     return { ...it, ruleId: id, rubricId: rules.get(id)?.rubricId ?? (it.group ? headRubric.get(it.group) : undefined) ?? null }
   })
-  return { ...seed, channels: old.channels, items }
+  return { ...seed, version: 2, channels: old.channels, items }
 }
 
-export const isV1 = (p: Plan | PlanV1): p is PlanV1 => p.version === 1
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+const PREFIX = /^(?:Тизер|Призыв|Анонс|Разборы|Лайфстайл|Тезис|Демо|Технологии|Кейсы|Разработка|Мысли|Исследования|Академия)\s*(?:\/|:)\s*/
+const RENAMED: Record<string, string> = {
+  'Обновления Landao': 'Что нового в Landao',
+  'Дневник разработки Antropolis': 'Antropolis',
+  'Новый канал: Antropolis': 'Новый канал Antropolis',
+}
+
+/** «Автоматизация 3_8» → «Автоматизация, модуль 3, урок 8» — как пишет генератор. */
+export function lessonTitle(name: string, kind?: 'module' | 'course') {
+  const m = name.match(/^(.+?) (\d+)(?:_(\d+))?$/)
+  if (!m) return kind === 'course' ? `${name} — старт курса` : name
+  const t = `${m[1]}, модуль ${m[2]}${m[3] ? `, урок ${m[3]}` : ''}`
+  return kind === 'module' ? `${t} — старт` : t
+}
+
+/** Название второй версии → тема: без рубрики и формата в начале; уроки Академии и итоги — словами. */
+export function cleanTitle(title: string, academy = false): string {
+  if (RENAMED[title]) return RENAMED[title]
+  let t = title
+  for (let i = 0; i < 3 && PREFIX.test(t); i++) t = t.replace(PREFIX, '')
+  if (t.trim() === PLACEHOLDER) return PLACEHOLDER
+  let m = t.match(/^Новости недели (\d+)$/)
+  if (m) return `Итоги недели №${m[1]}`
+  if ((m = t.match(/^(\S+) (\d{4})$/)) && MONTHS.includes(m[1])) return `Итоги ${MONTHS_GEN[MONTHS.indexOf(m[1])]} ${m[2]}`
+  if (!academy) return t
+  if ((m = t.match(/^новый курс (.+)$/))) return `Новый курс ${m[1]}`
+  if ((m = t.match(/^старт модуля (.+)$/))) return lessonTitle(m[1], 'module')
+  if ((m = t.match(/^(.+) — старт (модуля|курса)$/))) return lessonTitle(m[1], m[2] === 'курса' ? 'course' : 'module')
+  return lessonTitle(t)
+}
+
+/** Вторая версия → третья: названия — только тема; у правил появляются время и типы контента по площадкам
+ *  (из нового исходного плана, для своих форматов — по умолчанию). Правки материалов сохраняются. */
+export function migrateV2(old: PlanV2, seed: Plan): Plan {
+  const seedRules = new Map(seed.rules.map((r) => [r.id, r]))
+  const rules: Rule[] = old.rules.map(({ pattern, ...r }) => {
+    const s = seedRules.get(r.id)
+    return { ...r, time: r.time ?? s?.time ?? '12:00', types: r.types ?? s?.types ?? {}, bank: r.bank ?? (!!pattern || s?.bank) }
+  })
+  const clean = old.items.map((it) => ({ ...it, title: cleanTitle(it.title, it.rubricId === 'academy'), derive: it.derive ? '{title}' : undefined }))
+  const full = new Set(rules.filter((r) => r.full).map((r) => r.id))
+  const heads = new Map<string, Item>()
+  for (const it of clean) {
+    if (!it.group || it.derive || !it.date) continue
+    const k = `${it.group}|${it.date}`
+    if (!heads.has(k) || full.has(it.ruleId)) heads.set(k, it)
+  }
+  const items = clean.map((it) => {
+    if (!it.derive) return { ...it, derive: undefined }
+    const h = heads.get(`${it.group}|${it.date}`)
+    return h ? { ...it, title: h.title } : it
+  })
+  return { ...old, version: 3, rules, items: items.map(dropUndefined) }
+}
+
+const dropUndefined = (it: Item): Item => {
+  const out = { ...it }
+  for (const k of Object.keys(out) as (keyof Item)[]) if (out[k] === undefined) delete out[k]
+  return out
+}
+
+export const isV1 = (p: AnyPlan): p is PlanV1 => p.version === 1
+export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
+
+/** Любая версия → текущая. Для старых нужен новый исходный план: из него берутся новые поля правил. */
+export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
+  if (isV1(p)) return migrateV1(p, await seed())
+  if (isV2(p)) return migrateV2(p, await seed())
+  return p
+}
 
 /** Порядок заголовков в ячейке: канал, его разделы в Telegram, его разделы на сайте. */
 export function headerOrder(plan: Plan) {
@@ -74,6 +156,9 @@ export function headerOf(plan: Plan, it: Item, platform: string) {
 
 /** Строки ячейки календаря: заголовок канала, под ним материалы, между каналами пустая строка. */
 export function cellLines(plan: Plan, items: Item[], platform: string, order = headerOrder(plan)) {
+  const rules = new Map(plan.rules.map((r) => [r.id, r]))
+  const rubrics = new Map(plan.rubrics.map((r) => [r.id, r]))
+  const time = (it: Item) => timeOf(it, rules.get(it.ruleId))
   const groups = new Map<string, Item[]>()
   for (const it of items) {
     if (!it.platforms.includes(platform)) continue
@@ -84,8 +169,8 @@ export function cellLines(plan: Plan, items: Item[], platform: string, order = h
   for (const h of [...groups.keys()].sort((a, b) => order.indexOf(a) - order.indexOf(b))) {
     if (lines.length) lines.push({ text: '' })
     lines.push({ text: h, head: true })
-    for (const it of [...groups.get(h)!].sort((a, b) => a.rank - b.rank)) {
-      lines.push({ text: it.format === 'FULL' ? `• FULL: ${it.title}` : `• ${it.title}`, item: it })
+    for (const it of [...groups.get(h)!].sort((a, b) => (time(a) < time(b) ? -1 : time(a) > time(b) ? 1 : a.rank - b.rank))) {
+      lines.push({ text: `• ${lineOf(rubrics.get(it.rubricId ?? ''), rules.get(it.ruleId), it.title)}`, item: it })
     }
   }
   return lines

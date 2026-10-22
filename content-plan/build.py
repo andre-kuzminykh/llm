@@ -36,6 +36,8 @@ PLATFORMS = ['Web', 'YouTube', 'Instagram', 'TikTok', 'Threads', 'X', 'Telegram'
 SHORTS = ('YouTube', 'Instagram', 'TikTok')
 MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август',
           'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+              'сентября', 'октября', 'ноября', 'декабря']
 
 # Порядок заголовков внутри ячейки календаря
 HEADERS = ['Neuronium', 'Dataist', 'Dataist Lab', 'Dataist Academy', 'Dataist Office',
@@ -218,6 +220,44 @@ rubric('ant_x', None, 'Кросс-пост в Antropolis', 'Antropolis', 'Antrop
        'по графику FULL', ANT0, 'FULL Dataist', hint={d: ' (по графику)' for d in range(7)})
 
 ONE_OFF = {'lan_launch', 'ant_launch'}
+
+# Во сколько выходит формат и что именно выходит на каждой площадке. Время — по умолчанию,
+# у материала в приложении его можно поменять; совпадающие по времени стоят в календаре рядом.
+SH = {'YouTube': 'Shorts', 'Instagram': 'Reels', 'TikTok': 'Видео'}
+FULL_TYPES = {'YouTube': 'FULL'}
+META = {
+    'f_demo': ('12:00', FULL_TYPES), 'f_tech': ('12:00', FULL_TYPES), 'f_case': ('12:00', FULL_TYPES),
+    'f_dev': ('12:00', FULL_TYPES), 'f_think': ('12:00', FULL_TYPES), 'f_res': ('12:00', FULL_TYPES),
+    'f_news': ('12:00', FULL_TYPES), 'f_aca': ('12:00', FULL_TYPES),
+    'ait': ('13:00', {'LinkedIn': 'Пост', 'Mail': 'Письмо'}),
+    'ant_diary': ('15:00', {'Telegram': 'Пост', 'YouTube': 'Shorts', 'TikTok': 'Видео'}),
+    'lab_day': ('09:00', {'Web': 'Статья · Лаборатория', 'Telegram': 'Пост · Lab', 'X': 'Пост', 'Threads': 'Пост',
+                          'LinkedIn': 'Пост', 'Mail': 'Строка письма'}),
+    'lab_day_v': ('09:00', SH),
+    'lab_month': ('12:00', {'Web': 'Итоги · Лаборатория', 'Telegram': 'Итоги · Lab'}),
+    'neu_all': ('08:00', {'Telegram': 'Лента'}),
+    'neu_top': ('19:00', {'YouTube': 'Видео'}),
+    'ml_news': ('07:30', {'Mail': 'Строка письма'}),
+    'ml_week': ('17:00', {'Mail': 'Письмо'}),
+    'aca_lesson': ('10:00', {'Web': 'Урок · Академия', 'Telegram': 'Урок · Academy', 'X': 'Пост'}),
+    'sh_edu': ('16:00', SH),
+    'aca_mail': ('07:30', {'Mail': 'Строка письма'}),
+    'sh_thesis': ('11:00', SH),
+    'sh_razbor': ('14:00', SH),
+    'th_call': ('14:00', {'Threads': 'Призыв'}),
+    'sh_life': ('18:00', SH),
+    'tx_hack': ('15:00', {'Threads': 'Пост', 'LinkedIn': 'Пост', 'Mail': 'Строка письма'}),
+    'lan_upd': ('13:00', {'Telegram': 'Пост', 'Instagram': 'Reels', 'TikTok': 'Видео'}),
+    'lan_launch': ('10:00', {'Telegram': 'Пост'}),
+    'ant_launch': ('10:00', {'Telegram': 'Пост', 'Mail': 'Строка письма'}),
+    'sh_teaser': ('12:00', {'YouTube': 'Тизер · Shorts', 'Instagram': 'Тизер · Reels', 'TikTok': 'Тизер'}),
+    'office': ('12:00', {'Web': 'Анонс · Кабинет', 'Telegram': 'Анонс · Office'}),
+    'an_full': ('12:00', {'X': 'Анонс', 'LinkedIn': 'Анонс', 'Mail': 'Анонс в письме'}),
+    'neu_x': ('12:30', {'Telegram': 'Кросс-пост'}),
+    'lan_x': ('12:30', {'Telegram': 'Кросс-пост', 'Instagram': 'Reels', 'TikTok': 'Видео'}),
+    'ant_x': ('12:30', {'Telegram': 'Кросс-пост', 'YouTube': 'Shorts', 'TikTok': 'Видео'}),
+}
+assert set(META) == set(RUBRICS), set(RUBRICS) ^ set(META)
 # Порядок строк в таблице правил: по рубрикам, в конце — что выходит с каждым FULL
 RUBRIC_ORDER = sorted(RUBRICS, key=lambda rid: (list(CATS).index(RUBRICS[rid]['cat'])
                                                 if RUBRICS[rid]['cat'] else len(CATS)))
@@ -356,27 +396,37 @@ def academy(lessons):
 
 # ---------------------------------------------------------------- FULL
 
+def lesson_title(name, kind=None):
+    """«Автоматизация 3_8» → «Автоматизация, модуль 3, урок 8»; старт модуля и курса — с пометкой."""
+    m = re.fullmatch(r'(.+?) (\d+)(?:_(\d+))?', name)
+    if not m:
+        return f'{name} — старт курса' if kind == 'course' else name
+    course, module, lesson = m.groups()
+    t = f'{course}, модуль {module}' + (f', урок {lesson}' if lesson else '')
+    return t + (' — старт' if kind == 'module' else '')
+
+
 def classify(title):
-    """FULL-заголовок → (рубрика, тема, нормализованный заголовок)."""
+    """FULL-заголовок исходника → (рубрика, тема). Рубрика в тему не входит: она стоит меткой рядом."""
     m = re.fullmatch(r'(\S+?)\s*[/:]\s*(.+)', title)
     if title.startswith('Новости'):
-        return 'Новости', '', title
+        return 'Новости', ''
     if m:
         cat, topic = m.group(1), m.group(2).strip()
         if cat == 'Демо' and topic in SPECIAL_DEMOS:
-            return 'Спецпроект', topic, f'Демо / {topic}'
-        return cat, topic, f'{cat} / {topic}'
+            return 'Спецпроект', topic
+        return cat, topic
     m = re.fullmatch(r'Автоматизация (\d+)', title)
     if m:
-        return 'Академия', title, f'Академия / {title}'
+        return 'Академия', lesson_title(title)
     m = re.fullmatch(r'Исследования (\d{4})', title)
     if m:
-        return 'Исследования', title, f'Исследования / Итоги {m.group(1)} года'
+        return 'Исследования', f'Итоги {m.group(1)} года'
     raise ValueError(title)
 
 
 def schedule_full(full, starts):
-    slots = {}  # дата → (рубрика, тема, заголовок, источник, исходная дата)
+    slots = {}  # дата → (рубрика, тема, источник, исходная дата)
 
     def take(d, item):
         assert d not in slots, (d, item, slots[d])
@@ -390,13 +440,13 @@ def schedule_full(full, starts):
 
     # 1. Новости недели — каждую пятницу
     for n, d in enumerate((d for d in days_range() if d.weekday() == FRI), 1):
-        take(d, ('Новости', '', f'Новости недели {n}', 'правило', None))
+        take(d, ('Новости', f'Итоги недели №{n}', 'правило', None))
 
     # 2. Исследования месяца — 2-й четверг следующего месяца, год — последний четверг декабря
     items = [(d, classify(t)) for d, t in full]
     rest = []
     last_month = None
-    for d, (cat, topic, title) in items:
+    for d, (cat, topic) in items:
         if cat == 'Исследования' and topic in MONTHS:
             mi = MONTHS.index(topic) + 1
             year = d.year if mi < d.month else d.year - 1
@@ -404,15 +454,15 @@ def schedule_full(full, starts):
             t = nth_weekday(ny, nm, THU, 2)
             if t < START:
                 t = on_weekday(d, THU)
-            take(t, ('Исследования', topic, f'Исследования / {topic} {year}', 'исходный план', d))
+            take(t, ('Исследования', f'Итоги {MONTHS_GEN[mi - 1]} {year}', 'исходный план', d))
             last_month = (year, mi)
-        elif cat == 'Исследования' and title.startswith('Исследования / Итоги'):
+        elif cat == 'Исследования' and topic.startswith('Итоги'):
             take(last_weekday(d.year, 12, THU) if d.month == 12 else on_weekday(d, THU),
-                 (cat, topic, title, 'исходный план', d))
+                 (cat, topic, 'исходный план', d))
         elif cat == 'Спецпроект':
-            take(on_weekday(d, SUN), (cat, topic, title, 'исходный план', d))
+            take(on_weekday(d, SUN), (cat, topic, 'исходный план', d))
         else:
-            rest.append((d, cat, topic, title))
+            rest.append((d, cat, topic))
     y, m = last_month
     while True:
         y, m = (y + 1, 1) if m == 12 else (y, m + 1)
@@ -420,20 +470,20 @@ def schedule_full(full, starts):
         t = nth_weekday(ny, nm, THU, 2)
         if t > END:
             break
-        take(t, ('Исследования', MONTHS[m - 1], f'Исследования / {MONTHS[m - 1]} {y}', 'правило', None))
+        take(t, ('Исследования', f'Итоги {MONTHS_GEN[m - 1]} {y}', 'правило', None))
     for y in range(START.year + 1, END.year + 1):
         t = last_weekday(y, 12, THU)
         if t <= END and t not in slots:
-            take(t, ('Исследования', str(y), f'Исследования / Итоги {y} года', 'правило', None))
+            take(t, ('Исследования', f'Итоги {y} года', 'правило', None))
 
     # 3. Остальное — на свой день недели в той же неделе, при занятости — дальше;
     #    порядок внутри рубрики сохраняется
     prev = {}
-    for d, cat, topic, title in rest:
+    for d, cat, topic in rest:
         wd = FULL_DAY[cat]
         t = max(on_weekday(d, wd), prev.get(cat, START))
         t = first_free(t, wd)
-        take(t, (cat, topic, title, 'исходный план', d))
+        take(t, (cat, topic, 'исходный план', d))
         prev[cat] = t + timedelta(1)
 
     # 4. Академия: после Автоматизации 1–8 — по видео на каждый модуль/курс,
@@ -445,39 +495,41 @@ def schedule_full(full, starts):
         t = first_free(max(d, a), SUN)
         if t > END:
             break
-        take(t, ('Академия', name, f'Академия / {name}', 'правило', None))
+        take(t, ('Академия', lesson_title(name), 'правило', None))
         a = t + timedelta(1)
 
     # 5. После исходного плана — слоты по сетке
     def last_on(wd, cats):
         return max(d for d, it in slots.items()
-                   if d.weekday() == wd and it[0] in cats and it[3] == 'исходный план')
+                   if d.weekday() == wd and it[0] in cats and it[2] == 'исходный план')
 
     for d in days_range(last_on(MON, {'Демо'}) + timedelta(1)):
         if d.weekday() == MON and d not in slots:
-            take(d, ('Демо', PH, f'Демо / {PH}', 'нужна тема', None))
+            take(d, ('Демо', PH, 'нужна тема', None))
     lt = last_on(TUE, {'Технологии', 'Кейсы'})
     cat = 'Технологии' if slots[lt][0] == 'Кейсы' else 'Кейсы'
     for d in days_range(lt + timedelta(1)):
         if d.weekday() == TUE and d not in slots:
-            take(d, (cat, PH, f'{cat} / {PH}', 'нужна тема', None))
+            take(d, (cat, PH, 'нужна тема', None))
             cat = 'Технологии' if cat == 'Кейсы' else 'Кейсы'
     lw = last_on(WED, {'Разработка'})
     for d in days_range(lw + timedelta(14)):
         if d.weekday() == WED and (d - lw).days % 14 == 0 and d not in slots:
-            take(d, ('Разработка', PH, f'Разработка / {PH}', 'нужна тема', None))
+            take(d, ('Разработка', PH, 'нужна тема', None))
     lth = last_on(THU, {'Мысли', 'Исследования'})
     on = True
     for d in days_range(lth + timedelta(1)):
         if d.weekday() == THU and d not in slots:
             if on:
-                take(d, ('Мысли', PH, f'Мысли / {PH}', 'нужна тема', None))
+                take(d, ('Мысли', PH, 'нужна тема', None))
             on = not on
     return slots
 
 
 def full_units(d, item):
-    cat, topic, title, source, orig = item
+    """FULL и всё, что выходит вместе с ним. Тема у всей группы одна; чем материалы отличаются —
+    видно по формату и площадкам, а не по приставкам в названии."""
+    cat, title, source, orig = item
     rid = {'Демо': 'f_demo', 'Технологии': 'f_tech', 'Кейсы': 'f_case', 'Разработка': 'f_dev',
            'Мысли': 'f_think', 'Исследования': 'f_res', 'Новости': 'f_news', 'Академия': 'f_aca',
            'Спецпроект': 'f_demo'}[cat]
@@ -486,23 +538,16 @@ def full_units(d, item):
     if cat == 'Академия':
         return
     if cat != 'Исследования':
-        add(d, 'Dataist', None, 'sh_teaser', 'Shorts', f'Тизер: {title}', SHORTS, source, 60, orig, g,
-            'Тизер: {title}')
-    if cat in ('Демо', 'Спецпроект'):
-        office, office_t = f'Анонс / {topic}', 'Анонс / {topic}'
-    elif cat == 'Исследования':
-        office, office_t = f'Анонс / {title}', 'Анонс / {title}'
+        add(d, 'Dataist', None, 'sh_teaser', 'Shorts', title, SHORTS, source, 60, orig, g, '{title}')
+    if cat == 'Исследования':
         add(d, 'Dataist', 'Lab', 'lab_month', 'Пост', title, ['Web', 'Telegram'], source, 15, orig, g,
             '{title}')
-    else:
-        office, office_t = title, '{title}'
-    add(d, 'Dataist', 'Office', 'office', 'Пост', office, ['Web', 'Telegram'], source, 30, orig, g,
-        office_t)
+    add(d, 'Dataist', 'Office', 'office', 'Пост', title, ['Web', 'Telegram'], source, 30, orig, g, '{title}')
     xs = ['X'] + (['LinkedIn', 'Mail'] if d.weekday() in (TUE, WED, THU) else [])
     add(d, 'Dataist', None, 'an_full', 'Пост / строка письма', title, xs, source, 80, orig, g, '{title}')
     if cat in ('Демо', 'Спецпроект'):
-        add(d, 'Andre AIT', None, 'ait', 'Пост / письмо', f'Анонс / {topic}', ['LinkedIn', 'Mail'],
-            source, 0, orig, g, 'Анонс / {topic}')
+        add(d, 'Andre AIT', None, 'ait', 'Пост / письмо', title, ['LinkedIn', 'Mail'],
+            source, 0, orig, g, '{title}')
     if cat == 'Новости':
         add(d, 'Dataist', None, 'ml_week', 'Письмо', 'Недельный дайджест', ['Mail'], source, 85,
             group=g)
@@ -542,14 +587,12 @@ def build():
 
     # Академия
     for d, name, kind in sched:
-        mark = {'course': ' — старт курса', 'module': ' — старт модуля'}.get(kind, '')
-        add(d, 'Dataist', 'Academy', 'aca_lesson', 'Урок', name + mark, ['Web', 'Telegram', 'X'],
+        add(d, 'Dataist', 'Academy', 'aca_lesson', 'Урок', lesson_title(name, kind), ['Web', 'Telegram', 'X'],
             'исходный план', 20)
         if kind:
             md = d + timedelta(1) if d.weekday() == SAT else d
             course = re.sub(r' \d+$', '', name)
-            text = f'Академия: новый курс «{course}»' if kind == 'course' else \
-                f'Академия: старт модуля {name}'
+            text = f'Новый курс «{course}»' if kind == 'course' else lesson_title(name, kind)
             add(md, 'Dataist', 'Academy', 'aca_mail', 'Строка письма', text, ['Mail'],
                 'исходный план', 90, d)
 
@@ -574,26 +617,24 @@ def build():
     for d in days:
         if d > END:
             break
-        add(d, 'Dataist', None, 'sh_thesis', 'Shorts', f'Тезис: {PH}', SHORTS, 'нужна тема', 20)
+        add(d, 'Dataist', None, 'sh_thesis', 'Shorts', PH, SHORTS, 'нужна тема', 20)
 
     days = sequential(razbor[0][0])
     for orig, industry in razbor:
         d = next(days)
         g = f'raz-{d.isoformat()}'
-        add(d, 'Dataist', None, 'sh_razbor', 'Shorts', f'Разборы: {industry}', SHORTS,
-            'исходный план', 30, orig, g)
-        add(d, 'Dataist', None, 'th_call', 'Пост', f'Призыв: {industry}', ['Threads'],
-            'исходный план', 30, orig, g, 'Призыв: {topic}')
+        add(d, 'Dataist', None, 'sh_razbor', 'Shorts', industry, SHORTS, 'исходный план', 30, orig, g)
+        add(d, 'Dataist', None, 'th_call', 'Пост', industry, ['Threads'], 'исходный план', 30, orig, g,
+            '{title}')
     for d in days:
         if d > END:
             break
         g = f'raz-{d.isoformat()}'
-        add(d, 'Dataist', None, 'sh_razbor', 'Shorts', f'Разборы: {PH}', SHORTS, 'нужна тема', 30,
-            group=g)
-        add(d, 'Dataist', None, 'th_call', 'Пост', f'Призыв: {PH}', ['Threads'], 'нужна тема', 30,
-            group=g, derive='Призыв: {topic}')
+        add(d, 'Dataist', None, 'sh_razbor', 'Shorts', PH, SHORTS, 'нужна тема', 30, group=g)
+        add(d, 'Dataist', None, 'th_call', 'Пост', PH, ['Threads'], 'нужна тема', 30, group=g,
+            derive='{title}')
     for d, t in calls:
-        add(d, 'Dataist', None, 'th_call', 'Пост', t, ['Threads'], 'исходный план', 30)
+        add(d, 'Dataist', None, 'th_call', 'Пост', fix(t.split(':', 1)[1]), ['Threads'], 'исходный план', 30)
 
     # Лайфстайл — каждый день, по исходным датам
     by_day = {}
@@ -601,33 +642,33 @@ def build():
         m = re.fullmatch(r'Лайфстайл:\s*([^:]*?)\s*(?::\s*(.*))?', t)
         place, quote = (m.group(1), m.group(2)) if m else ('', '')
         if place and quote:
-            by_day[d] = (f'Лайфстайл: {place} — {quote}', 'исходный план')
+            by_day[d] = (f'{place} — {quote}', 'исходный план')
         elif place:
-            by_day[d] = (f'Лайфстайл: {place}', 'исходный план')
+            by_day[d] = (place, 'исходный план')
     for d in days_range():
-        text, src = by_day.get(d, (f'Лайфстайл: {PH}', 'нужна тема'))
+        text, src = by_day.get(d, (PH, 'нужна тема'))
         add(d, 'Dataist', None, 'sh_life', 'Shorts', text, SHORTS, src, 40)
 
     # Разовые вещи старта из исходной сетки
-    add(START, 'Dataist', 'Office', 'office', 'Пост', 'Анонс / Автоматизация 3_8',
+    add(START, 'Dataist', 'Office', 'office', 'Пост', lesson_title('Автоматизация 3_8'),
         ['Web', 'Telegram'], 'исходный план', 30, cat='academy')
 
     # Landao
-    add(LANDAO_START, 'Landao', None, 'lan_launch', 'Пост', 'Анонс / Landao — запуск канала',
+    add(LANDAO_START, 'Landao', None, 'lan_launch', 'Пост', 'Landao — запуск канала',
         ['Telegram'], 'правило', 0)
     for d in days_range(LANDAO_START):
         if d.weekday() == WED:
-            add(d, 'Landao', None, 'lan_upd', 'Пост + Shorts', 'Обновления Landao',
+            add(d, 'Landao', None, 'lan_upd', 'Пост + Shorts', 'Что нового в Landao',
                 ['Telegram', 'Instagram', 'TikTok'], 'правило', 20)
 
     # Antropolis
     add(ANTROPOLIS_START, 'Antropolis', None, 'ant_launch', 'Пост',
-        'Анонс / Antropolis — запуск канала', ['Telegram'], 'правило', 0)
-    add(ANTROPOLIS_START, 'Dataist', None, 'ant_launch', 'Строка письма', 'Новый канал: Antropolis',
+        'Antropolis — запуск канала', ['Telegram'], 'правило', 0)
+    add(ANTROPOLIS_START, 'Dataist', None, 'ant_launch', 'Строка письма', 'Новый канал Antropolis',
         ['Mail'], 'правило', 88)
     for d in days_range(ANTROPOLIS_START):
         if d.weekday() == THU:
-            add(d, 'Antropolis', None, 'ant_diary', 'Пост + Shorts', 'Дневник разработки Antropolis',
+            add(d, 'Antropolis', None, 'ant_diary', 'Пост + Shorts', 'Antropolis',
                 ['Telegram', 'YouTube', 'TikTok'], 'правило', 20)
 
     UNITS.sort(key=lambda u: (u.day, HEADERS.index(u.brand), u.rank))
@@ -669,6 +710,23 @@ def brand_of_header(h):
     return 'Dataist' if h in WEB_SECTIONS.values() or h.startswith('Dataist') else h
 
 
+def label_of(u):
+    """«Демо · FULL», «Демо · Тизер FULL»; формат, совпадающий с рубрикой, не повторяется."""
+    f = RUBRICS[u.rubric]['fmt_name']
+    c = cat_of(u)
+    if not c:
+        return f
+    r = CATS[c][0]
+    return r if f == r else f'{r} · {f}'
+
+
+def line_of(u):
+    """«Демо · FULL: Стратегия». Если тема — это название формата («Все новости»), она не повторяется."""
+    f = RUBRICS[u.rubric]['fmt_name']
+    same = u.text == f or f.startswith(u.text + ' ')
+    return label_of(u) if same else f'{label_of(u)}: {u.text}'
+
+
 def cell_lines(units, platform):
     """[(текст, стиль)], стиль: head:<бренд> / full / ph / text / blank."""
     groups = {}
@@ -680,11 +738,9 @@ def cell_lines(units, platform):
         if lines:
             lines.append(('', 'blank'))
         lines.append((h, 'head:' + brand_of_header(h)))
-        for u in sorted(groups[h], key=lambda u: u.rank):
-            if u.fmt == 'FULL':
-                lines.append((f'• FULL: {u.text}', 'ph' if u.source == 'нужна тема' else 'full'))
-            else:
-                lines.append((f'• {u.text}', 'ph' if u.source == 'нужна тема' else 'text'))
+        for u in sorted(groups[h], key=lambda u: (META[u.rubric][0], u.rank)):
+            style = 'ph' if u.source == 'нужна тема' else 'full' if u.fmt == 'FULL' else 'text'
+            lines.append((f'• {line_of(u)}', style))
     return lines
 
 
@@ -892,11 +948,8 @@ APP_SEED = ROOT / 'app' / 'public' / 'seed.json'
 CHANNEL_IDS = {'Neuronium': 'neuronium', 'Dataist': 'dataist', 'Andre AIT': 'andre',
                'Landao': 'landao', 'Antropolis': 'antropolis'}
 SECTION_IDS = {'Lab': 'lab', 'Academy': 'academy', 'Office': 'office'}
-# Как из темы собирается заголовок — для банка тем в приложении
-PATTERNS = {'f_demo': 'Демо / {topic}', 'f_tech': 'Технологии / {topic}', 'f_case': 'Кейсы / {topic}',
-            'f_dev': 'Разработка / {topic}', 'f_res': 'Исследования / {topic}',
-            'f_think': 'Мысли / {topic}', 'f_aca': 'Академия / {topic}', 'sh_thesis': '{topic}',
-            'sh_razbor': 'Разборы: {topic}', 'sh_life': 'Лайфстайл: {topic}'}
+# Форматы с банком тем в приложении: темы к ним придумывают заранее
+BANK = {'f_demo', 'f_tech', 'f_case', 'f_dev', 'f_res', 'f_think', 'f_aca', 'sh_thesis', 'sh_razbor', 'sh_life'}
 
 
 def write_seed():
@@ -926,9 +979,10 @@ def write_seed():
                     channel=r['channel'], what=r['what'], format=r['fmt'],
                     platforms=[p for p in PLATFORMS if p in names], days=[bool(c) for c in r['days']],
                     dayNotes=['' if c == '●' else c for c in r['days']], freq=r['freq'],
-                    source=r['source'], full=r['fmt'] == 'FULL', limit=1)
-        if rid in PATTERNS:
-            rule['pattern'] = PATTERNS[rid]
+                    source=r['source'], full=r['fmt'] == 'FULL', limit=1, time=META[rid][0],
+                    types={p: META[rid][1][p] for p in PLATFORMS if p in META[rid][1]})
+        if rid in BANK:
+            rule['bank'] = True
         section = next((u.section for u in UNITS if u.rubric == rid and u.brand == r['brand']), None)
         if section:
             rule['sectionId'] = SECTION_IDS[section]
@@ -947,7 +1001,7 @@ def write_seed():
         if u.orig:
             it['origDate'] = u.orig.isoformat()
         items.append(it)
-    seed = dict(version=2, start=START.isoformat(), end=END.isoformat(), platforms=PLATFORMS,
+    seed = dict(version=3, start=START.isoformat(), end=END.isoformat(), platforms=PLATFORMS,
                 channels=channels, rubrics=rubrics, rules=rules, items=items)
     APP_SEED.parent.mkdir(parents=True, exist_ok=True)
     APP_SEED.write_text(json.dumps(seed, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')

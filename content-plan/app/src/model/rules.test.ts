@@ -12,9 +12,15 @@ describe('T-CP-007 FR-CP-007 проверка правил', () => {
   it('маленький план — без нарушений', () => {
     expect(check()).toEqual([])
   })
-  it('два FULL в день', () => {
+  it('два FULL в день — одно нарушение, без отдельных «сверх лимита» для тизеров', () => {
     const v = check(moveItem(smallPlan(), 'slot', '2026-10-26'))
-    expect(v.map((x) => x.kind)).toContain('full')
+    expect(v.map((x) => x.kind)).toEqual(['full'])
+    expect(v[0].itemIds).toEqual(expect.arrayContaining(['demo', 'teaser', 'slot', 'slot-teaser']))
+  })
+  it('вне сетки: разовый материал проверка не трогает', () => {
+    const p = moveItem(smallPlan(), 'thesis', '2026-10-31')
+    p.items = p.items.map((x) => (x.id === 'thesis' ? { ...x, offGrid: true } : x))
+    expect(check(p)).toEqual([])
   })
   it('Тезис в субботу — не свой день', () => {
     const v = check(moveItem(smallPlan(), 'thesis', '2026-10-31'))

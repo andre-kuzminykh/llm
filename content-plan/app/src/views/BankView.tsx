@@ -1,33 +1,80 @@
 import { useState } from 'react'
-import { clampDate, shortDate, today } from '../model/dates'
+import { shortDate, today } from '../model/dates'
 import { bankOf, planFill } from '../model/store'
-import { isSlot, type Item, type Plan, type Rule } from '../model/types'
-import { ChannelDot, IconButton, startDrag, useDrop } from '../ui/bits'
+import { isSlot, type ISODate, type Item, type Plan, type Rule } from '../model/types'
+import { ChannelDot, Check, IconButton, startDrag, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { TopBar } from '../ui/TopBar'
 
-/** Форматы, для которых есть смысл вести банк: тема собирается в заголовок или уже лежит в банке. */
+/** Форматы с банком тем: темы к ним придумывают заранее, или в банке уже что-то лежит. */
 export const bankRules = (plan: Plan) =>
-  plan.rules.filter((r) => r.pattern || plan.items.some((x: Item) => x.date === null && x.ruleId === r.id))
+  plan.rules.filter((r) => r.bank || plan.items.some((x: Item) => x.date === null && x.ruleId === r.id))
 
 /** Подпись банка — рубрика; формат — мелко, если у рубрики их несколько. */
 export const bankTitle = (plan: Plan, rule: Rule) => plan.rubrics.find((r) => r.id === rule.rubricId)?.name ?? rule.name
+export const bankLabel = (plan: Plan, rule: Rule) => `${bankTitle(plan, rule)}${rule.name !== 'FULL' && rule.name !== bankTitle(plan, rule) ? ` · ${rule.name}` : ''}`
+
+/** Какие банки выбраны галочками; пусто в хранилище — все. */
+export function useBankChoice(key: string, plan: Plan) {
+  const all = bankRules(plan).map((r) => r.id)
+  const [chosen, setChosen] = useState<string[] | null>(() => {
+    try {
+      const v = localStorage.getItem(key)
+      return v ? (JSON.parse(v) as string[]) : null
+    } catch {
+      return null
+    }
+  })
+  const list = chosen ?? all
+  const set = (next: string[]) => {
+    setChosen(next)
+    try {
+      localStorage.setItem(key, JSON.stringify(next))
+    } catch {
+      /* выбор живёт до перезагрузки */
+    }
+  }
+  return { list, toggle: (id: string) => set(list.includes(id) ? list.filter((x) => x !== id) : all.filter((x) => x === id || list.includes(x))), all: () => set(all), none: () => set([]) }
+}
+
+// куда недавно легли темы — до перезагрузки страницы
+const recent = new Map<string, { id: string; title: string; date: ISODate }[]>()
+
+const range = (dates: ISODate[]) => {
+  const s = [...dates].sort()
+  if (!s.length) return ''
+  return s.length === 1 || s[0] === s[s.length - 1] ? shortDate(s[0]) : `${shortDate(s[0])} – ${shortDate(s[s.length - 1])} ${s[s.length - 1].slice(0, 4)}`
+}
 
 export function BankView() {
   const { plan } = usePlan()
-  const from = clampDate(today(), plan.start, plan.end)
+  const from = today() < plan.start ? plan.start : today()
+  const choice = useBankChoice('cp:bank-shown', plan)
+  const rules = bankRules(plan)
   return (
     <>
       <TopBar title="Банк тем" side={false} />
       <div className="cp-body nr-scroll">
         <p className="cp-hint" style={{ padding: '14px 20px 0' }}>
-          Темы без даты. «Разложить по слотам» ставит их по порядку в ближайшие слоты «…» рубрики начиная с {shortDate(from)};
+          Темы без даты. «Разложить по слотам» ставит их по порядку в ближайшие пустые места рубрики начиная с {shortDate(from)};
           тему можно и перетащить на день в календаре — из боковой панели.
         </p>
-        <div className="cp-bank">
-          {bankRules(plan).map((r) => (
-            <BankColumn key={r.id} rule={r} from={from} />
+        <div className="cp-bank__pick" role="group" aria-label="Какие рубрики показывать">
+          {rules.map((r) => (
+            <Check key={r.id} checked={choice.list.includes(r.id)} onChange={() => choice.toggle(r.id)}>
+              {bankLabel(plan, r)} <span className="cp-muted">{bankOf(plan, r.id).length}</span>
+            </Check>
           ))}
+          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={choice.list.length === rules.length ? choice.none : choice.all}>
+            {choice.list.length === rules.length ? 'Снять все' : 'Выбрать все'}
+          </button>
+        </div>
+        <div className="cp-bank">
+          {rules
+            .filter((r) => choice.list.includes(r.id))
+            .map((r) => (
+              <BankColumn key={r.id} rule={r} from={from} />
+            ))}
         </div>
       </div>
     </>
@@ -35,15 +82,22 @@ export function BankView() {
 }
 
 function BankColumn({ rule, from }: { rule: Rule; from: string }) {
-  const { plan, dispatch, channels, toast } = usePlan()
+  const { plan, dispatch, channels, toast, goto } = usePlan()
   const [text, setText] = useState('')
+  const [, rerender] = useState(0)
   const topics = bankOf(plan, rule.id)
   const fill = planFill(plan, rule.id, from)
-  const title = bankTitle(plan, rule)
+  const title = bankLabel(plan, rule)
   const nextSlot = plan.items
     .filter((x) => x.ruleId === rule.id && x.date && x.date >= from && !x.derive && isSlot(x))
     .reduce<string | null>((m, x) => (!m || x.date! < m ? x.date! : m), null)
   const c = channels.get(rule.channelId)
+  // недавно разложенные, которые всё ещё стоят на своих местах с этой темой
+  const placed = (recent.get(rule.id) ?? []).filter((r) => plan.items.some((x) => x.id === r.id && x.date === r.date && x.title === r.title))
+  const remember = (list: { id: string; title: string; date: ISODate }[]) => {
+    recent.set(rule.id, [...list, ...placed].slice(0, 30))
+    rerender((n) => n + 1)
+  }
   const add = () => {
     const list = text.split('\n').map((s) => s.trim()).filter(Boolean)
     if (!list.length) return
@@ -55,7 +109,6 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
       <div className="cp-bank__head">
         <ChannelDot color={c?.color ?? '#999'} />
         {title}
-        <span className="nr-tag">{rule.name}</span>
       </div>
       <span className="cp-muted">
         тем: {topics.length} · свободных слотов: {fill.freeSlots}
@@ -75,7 +128,15 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
       </button>
       <div className="cp-list">
         {topics.map((t) => (
-          <Topic key={t.id} item={t} nextSlot={nextSlot} />
+          <Topic
+            key={t.id}
+            item={t}
+            nextSlot={nextSlot}
+            onPlaced={(date) => {
+              const slot = plan.items.find((x) => x.ruleId === rule.id && x.date === date && isSlot(x) && !x.derive)
+              if (slot) remember([{ id: slot.id, title: t.title, date }])
+            }}
+          />
         ))}
       </div>
       {topics.length > 0 && (
@@ -84,19 +145,46 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
           className="nr-btn nr-btn--primary nr-btn--sm"
           disabled={!fill.freeSlots}
           onClick={() => {
-            const n = fill.pairs.length
+            const pairs = fill.pairs.map((p) => ({ id: p.slot.id, title: p.bank.title, date: p.slot.date! }))
             dispatch({ type: 'fillSlots', ruleId: rule.id, from })
-            toast(`Разложено: ${n}${fill.left ? `, не влезло: ${fill.left}` : ''}`, true)
+            remember(pairs)
+            const first = pairs.map((p) => p.date).sort()[0]
+            toast(`Разложено: ${pairs.length} · ${range(pairs.map((p) => p.date))}${fill.left ? `, не влезло: ${fill.left}` : ''}`, {
+              undo: true,
+              actions: first ? [{ label: 'Показать', run: () => goto('plan', first) }] : undefined,
+            })
           }}
         >
           Разложить по слотам
         </button>
       )}
+      {placed.length > 0 && (
+        <div className="cp-bank__placed">
+          <span className="nr-label">Недавно разложены</span>
+          {placed.map((r) => (
+            <div key={r.id} className="cp-topic cp-topic--placed">
+              <span className="cp-topic__text">{r.title}</span>
+              <button type="button" className="cp-link cp-muted" onClick={() => goto('plan', r.date)} title="Показать в плане">
+                {shortDate(r.date)}
+              </button>
+              <IconButton
+                icon="undo"
+                size="sm"
+                label={`Вернуть в банк: ${r.title}`}
+                onClick={() => {
+                  dispatch({ type: 'unassign', id: r.id })
+                  toast(`«${r.title}» снова в банке, слот ${shortDate(r.date)} свободен`, true)
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
 
-function Topic({ item, nextSlot }: { item: Item; nextSlot: string | null }) {
+function Topic({ item, nextSlot, onPlaced }: { item: Item; nextSlot: string | null; onPlaced: (date: ISODate) => void }) {
   const { dispatch, toast, openItem } = usePlan()
   const drop = useDrop((d) => d.kind === 'bank' && dispatch({ type: 'bankReorder', id: d.id, beforeId: item.id }))
   return (
@@ -110,8 +198,9 @@ function Topic({ item, nextSlot }: { item: Item; nextSlot: string | null }) {
           size="sm"
           label={`В ближайший слот (${nextSlot})`}
           onClick={() => {
+            onPlaced(nextSlot)
             dispatch({ type: 'assign', bankId: item.id, date: nextSlot })
-            toast(`Поставлено на ${nextSlot}`, true)
+            toast(`Поставлено на ${shortDate(nextSlot)}`, true)
           }}
         />
       )}
