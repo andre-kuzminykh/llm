@@ -234,15 +234,18 @@ class Unit:
     source: str          # исходный план / правило / нужна тема
     rank: int
     orig: date | None = None
+    group: str | None = None   # материалы, которые двигаются вместе (FULL и всё, что из него)
+    derive: str | None = None  # шаблон текста от главного материала группы: {title}, {topic}
 
 
 UNITS: list[Unit] = []
 
 
-def add(day, brand, section, rid, fmt, text, platforms, source, rank, orig=None):
+def add(day, brand, section, rid, fmt, text, platforms, source, rank, orig=None, group=None,
+        derive=None):
     if START <= day <= END:
         UNITS.append(Unit(day, brand, section, rid, fmt, text, tuple(platforms), source, rank,
-                          orig if orig and orig != day else None))
+                          orig if orig and orig != day else None, group, derive))
 
 
 def fix(s):
@@ -474,36 +477,41 @@ def full_units(d, item):
     rid = {'Демо': 'f_demo', 'Технологии': 'f_tech', 'Кейсы': 'f_case', 'Разработка': 'f_dev',
            'Мысли': 'f_think', 'Исследования': 'f_res', 'Новости': 'f_news', 'Академия': 'f_aca',
            'Спецпроект': 'f_spec'}[cat]
-    add(d, 'Dataist', None, rid, 'FULL', title, ['YouTube'], source, 0, orig)
+    g = f'full-{d.isoformat()}'
+    add(d, 'Dataist', None, rid, 'FULL', title, ['YouTube'], source, 0, orig, g)
     if cat == 'Академия':
         return
     if cat != 'Исследования':
-        add(d, 'Dataist', None, 'sh_teaser', 'Shorts', f'Тизер: {title}', SHORTS, source, 60, orig)
+        add(d, 'Dataist', None, 'sh_teaser', 'Shorts', f'Тизер: {title}', SHORTS, source, 60, orig, g,
+            'Тизер: {title}')
     if cat in ('Демо', 'Спецпроект'):
-        office = f'Анонс / {topic}'
+        office, office_t = f'Анонс / {topic}', 'Анонс / {topic}'
     elif cat == 'Исследования':
-        office = f'Анонс / {title}'
-        add(d, 'Dataist', 'Lab', 'lab_month', 'Пост', title, ['Web', 'Telegram'], source, 15, orig)
+        office, office_t = f'Анонс / {title}', 'Анонс / {title}'
+        add(d, 'Dataist', 'Lab', 'lab_month', 'Пост', title, ['Web', 'Telegram'], source, 15, orig, g,
+            '{title}')
     else:
-        office = title
-    add(d, 'Dataist', 'Office', 'office', 'Пост', office, ['Web', 'Telegram'], source, 30, orig)
+        office, office_t = title, '{title}'
+    add(d, 'Dataist', 'Office', 'office', 'Пост', office, ['Web', 'Telegram'], source, 30, orig, g,
+        office_t)
     xs = ['X'] + (['LinkedIn', 'Mail'] if d.weekday() in (TUE, WED, THU) else [])
-    add(d, 'Dataist', None, 'an_full', 'Пост / строка письма', title, xs, source, 80, orig)
+    add(d, 'Dataist', None, 'an_full', 'Пост / строка письма', title, xs, source, 80, orig, g, '{title}')
     if cat in ('Демо', 'Спецпроект'):
         add(d, 'Andre AIT', None, 'ait', 'Пост / письмо', f'Анонс / {topic}', ['LinkedIn', 'Mail'],
-            source, 0, orig)
+            source, 0, orig, g, 'Анонс / {topic}')
     if cat == 'Новости':
-        add(d, 'Dataist', None, 'ml_week', 'Письмо', 'Недельный дайджест', ['Mail'], source, 85)
+        add(d, 'Dataist', None, 'ml_week', 'Письмо', 'Недельный дайджест', ['Mail'], source, 85,
+            group=g)
     if source == 'нужна тема':
         return
     if re.search(r'Landao|Ландао', title) and d >= LANDAO_START:
         add(d, 'Landao', None, 'lan_x', 'Пост + Shorts', title, ['Telegram', 'Instagram', 'TikTok'],
-            source, 10, orig)
+            source, 10, orig, g, '{title}')
     if re.search(r'Antropolis|Антрополис', title) and d >= ANTROPOLIS_START:
         add(d, 'Antropolis', None, 'ant_x', 'Пост + Shorts', title, ['Telegram', 'YouTube', 'TikTok'],
-            source, 10, orig)
+            source, 10, orig, g, '{title}')
     if re.search(r'Neuronium|Нейроний', title):
-        add(d, 'Neuronium', None, 'neu_x', 'Пост', title, ['Telegram'], source, 10, orig)
+        add(d, 'Neuronium', None, 'neu_x', 'Пост', title, ['Telegram'], source, 10, orig, g, '{title}')
 
 
 # ---------------------------------------------------------------- сборка плана
@@ -557,7 +565,8 @@ def build():
     for orig, titles in thesis:
         d = next(days)
         for t in titles:
-            add(d, 'Dataist', None, 'sh_thesis', 'Shorts', t, SHORTS, 'исходный план', 20, orig)
+            add(d, 'Dataist', None, 'sh_thesis', 'Shorts', t, SHORTS, 'исходный план', 20, orig,
+                f'intro-{d.isoformat()}' if len(titles) > 1 else None)
     for d in days:
         if d > END:
             break
@@ -566,15 +575,19 @@ def build():
     days = sequential(razbor[0][0])
     for orig, industry in razbor:
         d = next(days)
+        g = f'raz-{d.isoformat()}'
         add(d, 'Dataist', None, 'sh_razbor', 'Shorts', f'Разборы: {industry}', SHORTS,
-            'исходный план', 30, orig)
+            'исходный план', 30, orig, g)
         add(d, 'Dataist', None, 'th_call', 'Пост', f'Призыв: {industry}', ['Threads'],
-            'исходный план', 30, orig)
+            'исходный план', 30, orig, g, 'Призыв: {topic}')
     for d in days:
         if d > END:
             break
-        add(d, 'Dataist', None, 'sh_razbor', 'Shorts', f'Разборы: {PH}', SHORTS, 'нужна тема', 30)
-        add(d, 'Dataist', None, 'th_call', 'Пост', f'Призыв: {PH}', ['Threads'], 'нужна тема', 30)
+        g = f'raz-{d.isoformat()}'
+        add(d, 'Dataist', None, 'sh_razbor', 'Shorts', f'Разборы: {PH}', SHORTS, 'нужна тема', 30,
+            group=g)
+        add(d, 'Dataist', None, 'th_call', 'Пост', f'Призыв: {PH}', ['Threads'], 'нужна тема', 30,
+            group=g, derive='Призыв: {topic}')
     for d, t in calls:
         add(d, 'Dataist', None, 'th_call', 'Пост', t, ['Threads'], 'исходный план', 30)
 
@@ -857,9 +870,76 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
     wb.close()
 
 
+# ---------------------------------------------------------------- данные для приложения
+
+APP_SEED = ROOT / 'app' / 'public' / 'seed.json'
+CHANNEL_IDS = {'Neuronium': 'neuronium', 'Dataist': 'dataist', 'Andre AIT': 'andre',
+               'Landao': 'landao', 'Antropolis': 'antropolis'}
+SECTION_IDS = {'Lab': 'lab', 'Academy': 'academy', 'Office': 'office'}
+# Как из темы собирается заголовок — для банка тем в приложении
+PATTERNS = {'f_demo': 'Демо / {topic}', 'f_tech': 'Технологии / {topic}', 'f_case': 'Кейсы / {topic}',
+            'f_dev': 'Разработка / {topic}', 'f_res': 'Исследования / {topic}',
+            'f_think': 'Мысли / {topic}', 'f_aca': 'Академия / {topic}', 'f_spec': 'Демо / {topic}',
+            'sh_thesis': '{topic}', 'sh_razbor': 'Разборы: {topic}', 'sh_life': 'Лайфстайл: {topic}'}
+
+
+def write_seed():
+    import json
+    channels = [
+        dict(id='neuronium', name='Neuronium', start=START, platforms=['Telegram', 'YouTube'],
+             sections=[]),
+        dict(id='dataist', name='Dataist', start=START, platforms=PLATFORMS,
+             sections=[dict(id='lab', name='Dataist Lab', web='Лаборатория'),
+                       dict(id='academy', name='Dataist Academy', web='Академия'),
+                       dict(id='office', name='Dataist Office', web='Кабинет')]),
+        dict(id='andre', name='Andre AIT', start=START, platforms=['LinkedIn', 'Mail'], sections=[]),
+        dict(id='landao', name='Landao', start=LANDAO_START,
+             platforms=['Telegram', 'Instagram', 'TikTok'], sections=[]),
+        dict(id='antropolis', name='Antropolis', start=ANTROPOLIS_START,
+             platforms=['Telegram', 'YouTube', 'TikTok'], sections=[]),
+    ]
+    for c in channels:
+        c['color'] = BRAND_COLORS[c['name']]
+        c['start'] = c['start'].isoformat()
+    rubrics = []
+    for rid in RUBRIC_ORDER:
+        r = RUBRICS[rid]
+        names = [re.sub(r'\s*\(.*?\)', '', t).strip() for t in r['platforms'].split(',')]
+        rubric = dict(id=rid, channelId=CHANNEL_IDS[r['brand']], channel=r['channel'], name=r['name'],
+                      what=r['what'], format=r['fmt'], platforms=[p for p in PLATFORMS if p in names],
+                      days=[bool(c) for c in r['days']],
+                      dayNotes=['' if c == '●' else c for c in r['days']], freq=r['freq'],
+                      source=r['source'], full=r['fmt'] == 'FULL', limit=1)
+        if rid in PATTERNS:
+            rubric['pattern'] = PATTERNS[rid]
+        section = next((u.section for u in UNITS if u.rubric == rid and u.brand == r['brand']), None)
+        if section:
+            rubric['sectionId'] = SECTION_IDS[section]
+        rubrics.append(rubric)
+    items = []
+    for n, u in enumerate(UNITS, 1):
+        it = dict(id=f'i{n}', date=u.day.isoformat(), channelId=CHANNEL_IDS[u.brand], rubricId=u.rubric,
+                  title=u.text, format=u.fmt, platforms=list(u.platforms), status='planned',
+                  source=u.source, rank=u.rank)
+        if u.section:
+            it['sectionId'] = SECTION_IDS[u.section]
+        if u.group:
+            it['group'] = u.group
+        if u.derive:
+            it['derive'] = u.derive
+        if u.orig:
+            it['origDate'] = u.orig.isoformat()
+        items.append(it)
+    seed = dict(version=1, start=START.isoformat(), end=END.isoformat(), platforms=PLATFORMS,
+                channels=channels, rubrics=rubrics, items=items)
+    APP_SEED.parent.mkdir(parents=True, exist_ok=True)
+    APP_SEED.write_text(json.dumps(seed, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+
+
 def main():
     build()
     OUT.mkdir(exist_ok=True)
+    write_seed()
     rubrics, week_lines, plan, calendar = tables()
     write_csv('1_rubrics.csv', rubrics)
     write_csv('2_week.csv', [['День', *PLATFORMS]] +
