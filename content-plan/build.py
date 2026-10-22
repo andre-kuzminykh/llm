@@ -476,15 +476,38 @@ def schedule_full(full, starts):
         if t <= END and t not in slots:
             take(t, ('Исследования', f'Итоги {y} года', 'правило', None))
 
-    # 3. Остальное — на свой день недели в той же неделе, при занятости — дальше;
-    #    порядок внутри рубрики сохраняется
-    prev = {}
+    # 3. Остальное — на свой день недели в той же неделе, при занятости — дальше; порядок внутри
+    #    рубрики сохраняется. «Через неделю» — строго через неделю: у Технологий и Кейсов вторники
+    #    чередуются, у Разработки — свои недели (чётность от первого материала рубрики). Мысли — через
+    #    четверг среди свободных от Исследований: итоги месяца и года уже стоят (шаг 2).
+    #    Отдельные исследования из исходника (не итоги) — в свободный четверг после Мыслей.
+    week_no = lambda d: (d - (START - timedelta(START.weekday()))).days // 7
+    parity = {}
     for d, cat, topic in rest:
+        if cat in ('Технологии', 'Кейсы') and not parity:
+            p = week_no(on_weekday(d, TUE)) % 2
+            parity = {cat: p, ('Кейсы' if cat == 'Технологии' else 'Технологии'): 1 - p}
+    for d, cat, topic in rest:
+        if cat == 'Разработка' and cat not in parity:
+            parity[cat] = week_no(on_weekday(d, WED)) % 2
+    first_think = next(on_weekday(d, THU) for d, cat, _ in rest if cat == 'Мысли')
+    free_thu = [d for d in days_range(first_think) if d.weekday() == THU and d not in slots]
+    think_days = set(free_thu[::2])
+    first_src = {}
+
+    def place(d, cat, wd, par):
+        t = next_weekday(d, wd)
+        while t in slots or (par is not None and week_no(t) % 2 != par) or (cat == 'Мысли' and t not in think_days):
+            t += timedelta(7)
+        return t
+
+    prev = {}
+    for d, cat, topic in [x for x in rest if x[1] != 'Исследования'] + [x for x in rest if x[1] == 'Исследования']:
         wd = FULL_DAY[cat]
-        t = max(on_weekday(d, wd), prev.get(cat, START))
-        t = first_free(t, wd)
+        t = place(max(on_weekday(d, wd), prev.get(cat, START)), cat, wd, parity.get(cat))
         take(t, (cat, topic, 'исходный план', d))
         prev[cat] = t + timedelta(1)
+        first_src.setdefault(cat, t)
 
     # 4. Академия: после Автоматизации 1–8 — по видео на каждый модуль/курс,
     #    в ближайшее свободное воскресенье после старта модуля на сайте
@@ -498,31 +521,15 @@ def schedule_full(full, starts):
         take(t, ('Академия', lesson_title(name), 'правило', None))
         a = t + timedelta(1)
 
-    # 5. После исходного плана — слоты по сетке
-    def last_on(wd, cats):
-        return max(d for d, it in slots.items()
-                   if d.weekday() == wd and it[0] in cats and it[2] == 'исходный план')
-
-    for d in days_range(last_on(MON, {'Демо'}) + timedelta(1)):
-        if d.weekday() == MON and d not in slots:
-            take(d, ('Демо', PH, 'нужна тема', None))
-    lt = last_on(TUE, {'Технологии', 'Кейсы'})
-    cat = 'Технологии' if slots[lt][0] == 'Кейсы' else 'Кейсы'
-    for d in days_range(lt + timedelta(1)):
-        if d.weekday() == TUE and d not in slots:
-            take(d, (cat, PH, 'нужна тема', None))
-            cat = 'Технологии' if cat == 'Кейсы' else 'Кейсы'
-    lw = last_on(WED, {'Разработка'})
-    for d in days_range(lw + timedelta(14)):
-        if d.weekday() == WED and (d - lw).days % 14 == 0 and d not in slots:
-            take(d, ('Разработка', PH, 'нужна тема', None))
-    lth = last_on(THU, {'Мысли', 'Исследования'})
-    on = True
-    for d in days_range(lth + timedelta(1)):
-        if d.weekday() == THU and d not in slots:
-            if on:
-                take(d, ('Мысли', PH, 'нужна тема', None))
-            on = not on
+    # 5. Где тем из исходника нет — слоты «…» по той же сетке: каждый понедельник Демо, каждый вторник
+    #    Технологии или Кейсы по очереди, Разработка и Мысли — в свои недели (с первого материала рубрики)
+    series = [('Демо', MON, None), ('Технологии', TUE, parity['Технологии']), ('Кейсы', TUE, parity['Кейсы']),
+              ('Разработка', WED, parity['Разработка']), ('Мысли', THU, None)]
+    for cat, wd, par in series:
+        for d in days_range(first_src[cat]):
+            if d.weekday() == wd and d not in slots and (par is None or week_no(d) % 2 == par) \
+                    and (cat != 'Мысли' or d in think_days):
+                take(d, (cat, PH, 'нужна тема', None))
     return slots
 
 
