@@ -74,6 +74,7 @@ export interface Item {
   owner?: string // кто делает
   due?: ISODate // подготовить к; без него — за несколько дней до выхода (leadOf)
   done?: string[] // готовые части задачи: «id материала|площадка»
+  trigger?: string // версия для другой площадки: создаётся автоматически, когда выйдет оригинал (его id)
 }
 
 export interface Plan {
@@ -102,6 +103,9 @@ export const SLOT_TEXT = 'Нужна тема'
 export const SPREAD = 'С каждым FULL'
 export const isSlot = (it: Pick<Item, 'title'>) => it.title.trim() === PLACEHOLDER
 export const shownTitle = (it: Pick<Item, 'title'>) => (isSlot(it) ? SLOT_TEXT : it.title)
+
+/** Тема-хэштег: «Демо» → «#демо». */
+export const tagOf = (name: string) => `#${name.toLowerCase().replace(/\s+/g, '_')}`
 
 /** Подпись материала: «Демо · FULL», «Демо · Тизер FULL»; формат, совпадающий с рубрикой, не повторяется. */
 export function labelOf(rubric: Rubric | undefined, rule: Rule | undefined) {

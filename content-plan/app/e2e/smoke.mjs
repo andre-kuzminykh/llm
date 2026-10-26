@@ -1,7 +1,7 @@
 // T-CP-E1: реальный браузер против собранного приложения (npm run build && npm run preview).
-// Проверяет бесконечный месяц и переход к дате, карточки с рубрикой и площадками, перенос мышью
-// с группой, «Поменять местами» и отмену, панель дня, ▶ и задачу, неделю по времени и перенос на час,
-// «Сейчас», банк тем и возврат темы, сетку с панелью правки, проверку с действием, фильтры за кнопкой,
+// Проверяет панель отделов Neuronium, дашборд и календарь, бесконечный месяц и переход к дате, карточки
+// с хэштегом, перенос мышью с группой, «Поменять местами» и отмену, панель дня, ▶ и задачу, неделю по времени
+// и перенос на час, банк идей и темы на дашборде, «+» с версией по триггеру, фильтры за кнопкой,
 // «Как пользоваться», тёмную тему и телефон. Скриншоты — в e2e/shots (или в $SHOTS).
 import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright-core'
@@ -25,8 +25,16 @@ const cell = (d) => page.locator(`[data-date="${d}"]`)
 const toast = () => page.getByRole('status').filter({ has: page.locator('.cp-toast__msg') })
 
 await page.goto(BASE)
+await page.getByRole('heading', { name: 'Дашборд' }).waitFor()
+const nav = page.getByRole('navigation', { name: 'Отделы' })
+check(
+  (await nav.getByRole('button', { name: 'SMM — контент-план' }).getAttribute('aria-current')) === 'page' && (await nav.getByRole('button', { name: /— скоро$/ }).count()) === 9,
+  'слева — десять отделов Neuronium, открыт SMM',
+  'панель отделов не та',
+)
+await page.locator('.cp-top').getByRole('button', { name: 'Календарь' }).click()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
-check(!(await page.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Неделя' }).count()), '«Календарь» один, открывается неделей', 'в меню отдельная «Неделя»')
+ok('дашборд → «Календарь» справа вверху → неделя')
 await page.getByRole('radio', { name: 'Месяц' }).click()
 await page.getByRole('button', { name: 'Следующий месяц' }).click()
 await page.getByRole('heading', { name: 'Ноябрь 2026' }).waitFor()
@@ -36,8 +44,8 @@ ok('месяц открылся')
 const card = cell('2026-11-02').locator('.cp-card--main').first()
 check((await cell('2026-11-02').locator('.cp-card').count()) > 5 && !(await cell('2026-11-02').getByText(/^ещё/).count()), 'месяц: в дне все единицы контента, без «ещё N»', 'месяц показывает не всё')
 check(
-  (await card.getByLabel('Рубрика: Демо').count()) && (await card.locator('.cp-card__title').textContent()) === 'Landao',
-  'карточка: рубрика меткой, название — только тема',
+  (await card.getByLabel('Хэштег: #демо').count()) && (await card.locator('.cp-card__title').textContent()) === 'Landao',
+  'карточка: тема хэштегом, название — только тема',
   'карточка без метки рубрики или с рубрикой в названии',
 )
 
@@ -48,8 +56,8 @@ check(await cell('2026-11-03').locator('.cp-card--main', { hasText: 'Landao' }).
 check((await cell('2026-11-03').locator('.cp-viol').count()) === 1, 'нарушение отмечено', 'нет отметки нарушения')
 await toast().filter({ hasText: 'вместе с группой' }).waitFor()
 await page.screenshot({ path: `${SHOTS}/2-moved.png` })
-const v = await page.getByRole('button', { name: 'Проверка' }).locator('.cp-rail-badge').textContent()
-check(v === '1', 'два FULL в день — одно нарушение, а не шесть', `нарушений после переноса: ${v}`)
+const v = await cell('2026-11-03').locator('.cp-viol').getAttribute('title')
+check(v === 'Нарушений: 1', 'два FULL в день — одно нарушение, а не шесть', `после переноса: ${v}`)
 await toast().getByRole('button', { name: 'Поменять местами' }).click()
 check(
   (await cell('2026-11-02').locator('.cp-card--main', { hasText: 'Сбер' }).count()) && (await cell('2026-11-03').locator('.cp-card--main', { hasText: 'Landao' }).count()),
@@ -104,7 +112,6 @@ ok('форма материала')
 await page.keyboard.press('Escape')
 
 // неделя по времени: перенос на другой час
-await page.getByRole('button', { name: 'Календарь', exact: true }).click()
 await page.getByRole('radio', { name: 'Время' }).click()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 await page.getByLabel('Перейти к дате').fill('2026-11-09')
@@ -140,19 +147,17 @@ await page.screenshot({ path: `${SHOTS}/7-week-lanes.png` })
 ok('неделя дорожками')
 await page.getByRole('radio', { name: 'Время' }).click()
 
-// «Сейчас»
-await page.getByRole('button', { name: 'Сейчас', exact: true }).click()
-await page.getByRole('heading', { name: 'Что делать сейчас' }).waitFor()
-await page.screenshot({ path: `${SHOTS}/8-now.png` })
-ok('«Сейчас»')
-
-// банк тем: рубрика слева, темы справа; разложить, показать, вернуть
-await page.getByRole('button', { name: 'Банк тем', exact: true }).click()
-await page.getByRole('navigation', { name: 'Рубрики банка' }).getByRole('button', { name: 'Технологии', exact: true }).click()
-check(await page.getByRole('region', { name: 'Банк: Технологии', exact: true }).count(), 'банк: рубрика выбирается в списке слева', 'список рубрик банка не работает')
-await page.getByRole('navigation', { name: 'Рубрики банка' }).getByRole('button', { name: 'Демо', exact: true }).click()
-await page.getByLabel('Новые темы: Демо', { exact: true }).fill('Агент продаж\nИИ-бухгалтер')
-const bank = page.getByRole('region', { name: 'Банк: Демо', exact: true })
+// дашборд: что делать, банк идей (разложить, показать, вернуть), темы
+await page.locator('.cp-top').getByRole('button', { name: 'Дашборд' }).click()
+await page.getByRole('heading', { name: 'Дашборд' }).waitFor()
+check(await page.getByRole('region', { name: 'Что делать' }).count(), 'дашборд: «Что делать»', 'нет списка дел')
+await page.screenshot({ path: `${SHOTS}/8-dashboard.png` })
+const tags = page.getByRole('group', { name: 'Хэштеги банка' })
+await tags.getByRole('button', { name: /^#технологии/ }).click()
+check(await page.getByRole('region', { name: 'Банк: #технологии', exact: true }).count(), 'банк идей: хэштег выбирается кнопкой', 'хэштеги банка не работают')
+await tags.getByRole('button', { name: /^#демо/ }).click()
+await page.getByLabel('Новые темы: #демо', { exact: true }).fill('Агент продаж\nИИ-бухгалтер')
+const bank = page.getByRole('region', { name: 'Банк: #демо', exact: true })
 await bank.getByRole('button', { name: 'Добавить' }).click()
 await bank.getByRole('button', { name: 'Разложить по слотам' }).click()
 const t = await toast().textContent()
@@ -160,37 +165,30 @@ check(/Разложено: 2 · \d+ \S+ – \d+ \S+ \d{4}/.test(t ?? ''), `ба�
 await page.screenshot({ path: `${SHOTS}/9-bank.png` })
 await bank.getByRole('button', { name: 'Вернуть в банк: ИИ-бухгалтер' }).click()
 check(await bank.getByRole('button', { name: 'ИИ-бухгалтер' }).count(), 'тема вернулась в банк', 'тема не вернулась')
+const topics = page.getByRole('region', { name: 'Темы' })
+check(
+  (await topics.getByRole('group', { name: 'Темы: Лаборатория' }).getByRole('button', { name: /^#исследования/ }).count()) &&
+    (await topics.getByRole('group', { name: 'Темы: Academy' }).count()) + (await topics.getByRole('group', { name: 'Темы: Академия' }).count()),
+  'темы-хэштеги по каналам и разделам',
+  'нет хэштегов разделов',
+)
+await topics.getByRole('group', { name: 'Темы: Dataist' }).getByRole('button', { name: /^#демо/ }).first().click()
+await page.getByRole('grid').first().waitFor()
+const only = page.getByRole('button', { name: 'Снять фильтр: Только #демо' })
+check(await only.count(), 'хэштег открывает календарь только по этой теме', 'фильтр по хэштегу не встал')
+await only.click()
 
-// сетка
-await page.getByRole('button', { name: 'Сетка', exact: true }).click()
-await page.getByRole('heading', { name: 'Типовая неделя' }).waitFor()
-await page.getByRole('button', { name: 'Раскрыть: Академия' }).click()
-check((await page.locator('.cp-rule-row').count()) > 0 && !(await page.locator('.cp-rule-row input').count()), 'сетка: строки форматов для просмотра, без полей ввода', 'в строках сетки остались поля')
-await page.getByRole('button', { name: 'Править: Академия · FULL' }).click()
-await page.getByRole('complementary', { name: 'Правка формата' }).waitFor()
-check(await page.getByLabel('Формат: Академия · FULL').count(), 'сетка: формат правится в панели', 'нет панели правки формата')
-check(await page.getByLabel('Что выходит: Академия · FULL, YouTube').count(), 'сетка: что выходит на каждой площадке', 'нет типов по площадкам')
-await page.screenshot({ path: `${SHOTS}/10-rules.png` })
-await page.keyboard.press('Escape')
-const wide = await page.evaluate(() => { const b = document.querySelector('.cp-body'); return b.scrollWidth > b.clientWidth + 1 })
-check(!wide, 'сетка помещается по ширине', 'сетка шире экрана')
-
-// проверка: нарушение с готовым действием «Перенести … на …»
-await page.getByRole('button', { name: 'Календарь', exact: true }).click()
-await page.getByRole('radio', { name: 'Месяц' }).click()
-await page.getByLabel('Перейти к дате').fill('2026-11-02')
-await page.waitForTimeout(900)
-await cell('2026-11-02').locator('.cp-card--main').first().dragTo(cell('2026-11-03'))
-await page.getByRole('button', { name: 'Проверка' }).click()
-const fix = page.getByRole('button', { name: /^Перенести «/ })
-check(await fix.count(), `проверка: ${await fix.first().textContent()}`, 'у нарушения нет действия')
-await fix.first().click()
-check(await page.getByText('Нарушений нет').count(), 'перенос по кнопке снял нарушение', 'нарушение осталось')
-await page.keyboard.press('Control+z')
+// «+» справа внизу: новый контент, версия для Instagram — автоматически после выхода оригинала
+await page.getByRole('button', { name: 'Новый контент' }).click()
+const newForm = page.getByRole('complementary', { name: 'Новый контент' })
+await newForm.getByRole('textbox', { name: 'Тема' }).fill('Пересоздать для Instagram')
+await newForm.getByRole('button', { name: 'Версия для Instagram' }).click()
+await newForm.getByRole('radio', { name: 'Автоматически после выхода' }).click()
+await newForm.getByRole('button', { name: 'Создать' }).click()
+check(await toast().filter({ hasText: 'версий: 1, после выхода' }).count(), '«+»: новый контент с версией по триггеру', 'версия не создалась')
 await page.keyboard.press('Control+z')
 
-// фильтры — за кнопкой; включённые видны метками и снимаются
-await page.getByRole('button', { name: 'Календарь', exact: true }).click()
+// фильтры — за кнопкой; включённые видны метками и снимаются; у Dataist — разделы
 check(!(await page.locator('.cp-side').count()), 'фильтры спрятаны за кнопку', 'панель фильтров открыта сама')
 await page.getByRole('button', { name: 'Фильтры' }).click()
 await page.locator('.cp-side').getByRole('button', { name: 'Neuronium', exact: true }).click()
@@ -198,18 +196,20 @@ const chip = page.getByRole('button', { name: 'Снять фильтр: Без N
 check(await chip.count(), 'включённый фильтр — меткой в шапке', 'нет метки фильтра')
 await chip.click()
 check(!(await chip.count()), 'метка снимает фильтр', 'фильтр не снялся')
+await page.locator('.cp-side').getByRole('button', { name: 'Лаборатория', exact: true }).click()
+const sec = page.getByRole('button', { name: /^Снять фильтр: Без Лаборатория/ })
+check(await sec.count(), 'фильтр по разделу канала (Лаборатория)', 'разделы канала не фильтруются')
+await sec.click()
 await page.getByRole('button', { name: 'Закрыть фильтры' }).click()
 
-// подсказки — в «Как пользоваться»
-await page.getByRole('button', { name: 'Как пользоваться' }).click()
-check(await page.getByRole('complementary', { name: 'Как пользоваться' }).getByRole('region', { name: 'Календарь' }).count(), 'подсказки собраны в «Как пользоваться»', 'нет справки')
+// профиль: «Как пользоваться» и тёмная тема
+await page.getByRole('button', { name: 'Профиль' }).click()
+await page.getByRole('menuitem', { name: 'Как пользоваться' }).click()
+check(await page.getByRole('complementary', { name: 'Как пользоваться' }).getByRole('region', { name: 'Календарь' }).count(), 'подсказки — в профиле, «Как пользоваться»', 'нет справки')
 await page.keyboard.press('Escape')
-
-// тёмная тема
-await page.getByRole('button', { name: 'Данные и тема' }).click()
+await page.getByRole('button', { name: 'Профиль' }).click()
 await page.getByRole('radio', { name: 'Тёмная' }).click()
 await page.keyboard.press('Escape')
-await page.getByRole('button', { name: 'Календарь', exact: true }).click()
 check(await page.evaluate(() => document.documentElement.classList.contains('dark')), 'тёмная тема', 'тема не переключилась')
 await page.waitForTimeout(500)
 await page.screenshot({ path: `${SHOTS}/11-dark.png` })
@@ -217,14 +217,16 @@ await page.screenshot({ path: `${SHOTS}/11-dark.png` })
 // после перезагрузки план тот же (IndexedDB): разложенная тема на месте
 await page.waitForTimeout(800)
 await page.reload()
-await page.getByRole('grid').first().waitFor()
-await page.getByRole('button', { name: 'План', exact: true }).click()
+await page.locator('.cp-top').waitFor()
+if (await page.locator('.cp-top').getByRole('button', { name: 'Дашборд' }).count()) await page.locator('.cp-top').getByRole('button', { name: 'Дашборд' }).click()
 await page.getByLabel('Поиск по плану').fill('Агент продаж')
 check(await page.getByRole('button', { name: 'Агент продаж' }).count(), 'правки пережили перезагрузку', 'правки потерялись')
 
 // телефон: лента по дням
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 await phone.goto(BASE)
+await phone.getByRole('heading', { name: 'Дашборд' }).waitFor()
+await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Календарь' }).click()
 await phone.getByRole('button', { name: 'Вид', exact: true }).click()
 await phone.getByRole('menuitemradio', { name: 'Лента' }).click()
 await phone.getByRole('feed', { name: 'Лента по дням' }).waitFor()
@@ -232,13 +234,12 @@ check(!(await phone.evaluate(() => document.documentElement.scrollWidth > window
 await phone.waitForTimeout(500)
 await phone.screenshot({ path: `${SHOTS}/12-phone.png` })
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
-check(tabs.join('|') === 'Сейчас|Календарь|План|Банк|Ещё', 'телефон: внизу четыре раздела с подписями и «Ещё»', `телефон: внизу ${tabs.join(', ')}`)
+check(tabs.join('|') === 'ДашбордКалендарьПрофиль'.replace(/(?<=.)(?=[А-Я])/g, '|'), 'телефон: внизу Дашборд, Календарь, Профиль', `телефон: внизу ${tabs.join(', ')}`)
 await phone.getByRole('button', { name: 'Вид', exact: true }).click()
 await phone.getByRole('menuitemradio', { name: 'Время' }).click()
 await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка недели в одну строку, вид — в меню «Вид»', `телефон: шапка недели ${head?.height}px`)
-await phone.getByRole('button', { name: 'Календарь', exact: true }).click()
 await phone.getByRole('button', { name: 'Фильтры' }).click()
 await phone.getByRole('button', { name: 'Закрыть фильтры' }).click()
 check(!(await phone.locator('.cp-side[data-open="true"]').count()), 'фильтры на телефоне закрываются', 'фильтры на телефоне не закрываются')

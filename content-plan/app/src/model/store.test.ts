@@ -189,3 +189,44 @@ describe('T-CP-012 FR-CP-012 отмена и повтор', () => {
     expect(s.past.length).toBe(100)
   })
 })
+
+describe('T-CP-027 FR-CP-027 копия и версии для других площадок', () => {
+  it('копия на другую дату — вместе с группой, в плане', () => {
+    const p = smallPlan()
+    const next = reducer({ plan: p, past: [], future: [] }, { type: 'duplicate', id: 'demo', date: '2026-11-16' }).plan!
+    const copies = next.items.filter((x) => x.date === '2026-11-16')
+    expect(copies.map((x) => x.ruleId).sort()).toEqual(['ait', 'f_demo', 'office', 'sh_teaser'])
+    expect(new Set(copies.map((x) => x.group)).size).toBe(1)
+    expect(copies.every((x) => x.status === 'planned' && x.title === 'Стратегия')).toBe(true)
+  })
+  it('вместе с оригиналом — в той же карточке, вне сетки', () => {
+    const p = smallPlan()
+    const next = reducer({ plan: p, past: [], future: [] }, { type: 'versions', id: 'demo', platforms: ['Instagram', 'Telegram'], after: false }).plan!
+    const v = next.items.filter((x) => x.source === 'версия')
+    expect(v.map((x) => [x.platforms[0], x.date, x.group, x.offGrid])).toEqual([
+      ['Instagram', '2026-10-26', 'full-2026-10-26', true],
+      ['Telegram', '2026-10-26', 'full-2026-10-26', true],
+    ])
+    // переименовали оригинал — версии следом
+    const renamed = reducer({ plan: next, past: [], future: [] }, { type: 'update', id: 'demo', patch: { title: 'Агент продаж' } }).plan!
+    expect(renamed.items.filter((x) => x.source === 'версия').map((x) => x.title)).toEqual(['Агент продаж', 'Агент продаж'])
+  })
+  it('автоматически по триггеру: на следующий день и «в работе», когда оригинал вышел', () => {
+    const p = smallPlan()
+    let s = reducer({ plan: p, past: [], future: [] }, { type: 'versions', id: 'demo', platforms: ['Instagram'], after: true })
+    const v = s.plan!.items.find((x) => x.trigger === 'demo')!
+    expect([v.date, v.status, v.group]).toEqual(['2026-10-27', 'planned', undefined])
+    s = reducer(s, { type: 'updateMany', ids: ['demo', 'teaser', 'office'], patch: { status: 'published' } })
+    expect(s.plan!.items.find((x) => x.id === v.id)!.status).toBe('progress')
+    // отмена возвращает и оригинал, и версию
+    s = reducer(s, { type: 'undo' })
+    expect(s.plan!.items.find((x) => x.id === v.id)!.status).toBe('planned')
+  })
+  it('несколько правок формы — один шаг истории', () => {
+    const p = smallPlan()
+    let s = reducer({ plan: p, past: [], future: [] }, { type: 'batch', actions: [{ type: 'duplicate', id: 'thesis', date: '2026-10-28' }, { type: 'versions', id: 'thesis', platforms: ['X'], after: false }] })
+    expect(s.plan!.items.length).toBe(p.items.length + 2)
+    s = reducer(s, { type: 'undo' })
+    expect(s.plan!.items.length).toBe(p.items.length)
+  })
+})

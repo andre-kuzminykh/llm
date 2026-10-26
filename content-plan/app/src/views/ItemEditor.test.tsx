@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from '../test/renderApp'
 
@@ -27,9 +27,9 @@ describe('T-CP-005 FR-CP-005 форма материала', () => {
   it('новый материал из шапки появляется на своей дате', async () => {
     renderApp()
     await screen.findByRole('heading', { name: 'Октябрь 2026' })
-    await userEvent.click(screen.getByRole('button', { name: 'Новый материал' }))
-    const form = screen.getByRole('complementary', { name: 'Новый материал' })
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Рубрика' }), 'Тезисы')
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
     expect(within(form).getByRole('combobox', { name: 'Формат' })).toHaveDisplayValue('Тезис дня')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'ИИ не заменит вас')
     const date = within(form).getByLabelText('Дата')
@@ -106,9 +106,9 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
   it('материал на «чужой» день сразу вне сетки — проверка его не трогает', async () => {
     renderApp()
     await screen.findByRole('heading', { name: 'Октябрь 2026' })
-    await userEvent.click(screen.getByRole('button', { name: 'Новый материал' }))
-    const form = screen.getByRole('complementary', { name: 'Новый материал' })
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Рубрика' }), 'Тезисы')
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Разовый тезис')
     const date = within(form).getByLabelText('Дата')
     await userEvent.clear(date)
@@ -120,13 +120,42 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
   it('общие форматы FULL предлагаются только рубрикам, у которых есть FULL', async () => {
     renderApp()
     await screen.findByRole('heading', { name: 'Октябрь 2026' })
-    await userEvent.click(screen.getByRole('button', { name: 'Новый материал' }))
-    const form = screen.getByRole('complementary', { name: 'Новый материал' })
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
     const formats = () => within(within(form).getByRole('combobox', { name: 'Формат' })).getAllByRole('option').map((o) => o.textContent)
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Рубрика' }), 'Демо')
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#демо')
     expect(formats()).toContain('Тизер FULL (с FULL)')
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Рубрика' }), 'Тезисы')
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
     expect(formats()).toEqual(['Тезис дня'])
   })
 })
 
+describe('T-CP-027 FR-CP-027 «+»: новый контент, копии и версии для площадок', () => {
+  it('копия на другую дату и версия для Instagram — автоматически, когда оригинал выйдет', async () => {
+    renderApp()
+    await screen.findByRole('heading', { name: 'Октябрь 2026' })
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    // у нового контента все поля открыты сразу
+    expect(within(form).getByRole('button', { name: 'Подробнее' })).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Агенты вместо отделов')
+    const date = within(form).getByLabelText('Дата')
+    await userEvent.clear(date)
+    await userEvent.type(date, '2026-10-28')
+    fireEvent.change(within(form).getByLabelText('Копия на дату'), { target: { value: '2026-11-04' } })
+    expect(within(form).getByRole('button', { name: 'Убрать копию на 4 ноя' })).toBeInTheDocument()
+    await userEvent.click(within(form).getByRole('button', { name: 'Версия для Instagram' }))
+    await userEvent.click(within(form).getByRole('radio', { name: 'Автоматически после выхода' }))
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
+    expect(screen.getByText(/Создано на 28 окт · копий: 1, версий: 1, после выхода/)).toBeInTheDocument()
+    expect(within(day('2026-11-04')).getByRole('button', { name: /^#?Тезисы · Тезис дня: Агенты вместо отделов/ })).toBeInTheDocument()
+    const version = () => within(day('2026-10-29')).getByRole('button', { name: /Тезисы · Тезис дня: Агенты вместо отделов/ }).closest('.cp-card') as HTMLElement
+    expect(version().querySelector('.cp-auto')).not.toBeNull()
+    // оригинал вышел — версия стала задачей «в работе»
+    await userEvent.click(within(day('2026-10-28')).getByRole('button', { name: 'Начать: Агенты вместо отделов' }))
+    const task = screen.getByRole('complementary', { name: 'Задача' })
+    await userEvent.click(within(within(task).getByRole('group', { name: 'Статус задачи' })).getByRole('button', { name: 'Вышло' }))
+    expect(within(version()).getByRole('button', { name: 'Задача: Агенты вместо отделов (в работе)' })).toBeInTheDocument()
+  })
+})

@@ -12,15 +12,11 @@ import { PlanCtx, usePlan, type Ctx, type Drag, type ToastOpts, type View } from
 import { Icon } from './ui/Icon'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
-import { BankView } from './views/BankView'
-import { ChecksView } from './views/ChecksView'
+import { DashboardView } from './views/DashboardView'
 import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
 import { ItemEditor } from './views/ItemEditor'
 import { MonthView } from './views/MonthView'
-import { NowView } from './views/NowView'
-import { PlanView } from './views/PlanView'
-import { RulesView } from './views/RulesView'
 import { TaskSheet } from './views/TaskSheet'
 import { WeekView } from './views/WeekView'
 
@@ -32,15 +28,22 @@ type Sheet =
   | { kind: 'help' }
   | null
 
-// «Календарь» один: неделя (по умолчанию) и месяц — виды внутри него
-const NAV: { id: View; label: string; icon: string; main?: boolean; also?: View }[] = [
-  { id: 'now', label: 'Сейчас', icon: 'now', main: true },
-  { id: 'week', label: 'Календарь', icon: 'calendar', main: true, also: 'month' },
-  { id: 'plan', label: 'План', icon: 'list', main: true },
-  { id: 'bank', label: 'Банк тем', icon: 'bank', main: true },
-  { id: 'rules', label: 'Сетка', icon: 'grid' },
-  { id: 'checks', label: 'Проверка', icon: 'alert' },
+/** Отделы Neuronium на левой панели — как в nr (F20): SMM — это приложение, остальные пока не подключены. */
+const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
+  { id: 'management', label: 'Менеджмент', icon: 'briefcase' },
+  { id: 'hr', label: 'HR', icon: 'people' },
+  { id: 'marketing', label: 'Маркетинг', icon: 'megaphone' },
+  { id: 'smm', label: 'SMM', icon: 'hash' },
+  { id: 'sales', label: 'Продажи', icon: 'trending' },
+  { id: 'support', label: 'Поддержка', icon: 'lifebuoy' },
+  { id: 'analytics', label: 'Аналитика', icon: 'chart' },
+  { id: 'design', label: 'Дизайн', icon: 'palette' },
+  { id: 'development', label: 'Разработка', icon: 'code' },
+  { id: 'engineering', label: 'Инжиниринг', icon: 'wrench' },
 ]
+const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
+
+const VIEWS: View[] = ['dashboard', 'week', 'month']
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -151,7 +154,11 @@ interface WorkspaceProps {
 }
 
 function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: WorkspaceProps) {
-  const [view, setViewState] = useState<View>(() => readLS<View>('cp:view', 'week'))
+  // SMM открывается дашбордом; календарь — неделей или месяцем, как оставили
+  const [view, setViewState] = useState<View>(() => {
+    const v = readLS<string>('cp:view', 'dashboard')
+    return VIEWS.includes(v as View) ? (v as View) : 'dashboard'
+  })
   // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
   const [anchor, setAnchorState] = useState<ISODate>(() => readLS('cp:anchor', today()))
   const [jump, setJump] = useState({ date: anchor, n: 0 })
@@ -169,7 +176,6 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       return next
     })
   const [menu, setMenu] = useState(false)
-  const [more, setMore] = useState(false)
   const theme = useTheme()
 
   const setView = (v: View) => {
@@ -250,7 +256,6 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
       if (e.key === 'Escape') {
         setMenu(false)
-        setMore(false)
         if (narrow) setSideState(false)
         setSheet((s) => (s && s.kind !== 'day' && s.kind !== 'help' && s.back ? { kind: 'day', date: s.back } : null))
       }
@@ -306,91 +311,74 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     toggleSide: () => setSideOpen((o) => !o),
     sideOpen,
     openHelp: () => setSheet({ kind: 'help' }),
+    view,
     saved,
     phone,
   }
 
   const closeSheet = () => setSheet(null)
   const back = sheet && sheet.kind !== 'day' && sheet.kind !== 'help' && sheet.back ? () => setSheet({ kind: 'day', date: sheet.back! }) : undefined
-  const withSide = view === 'month' || view === 'week' || view === 'plan' || view === 'now'
+  const withSide = true // фильтры — и в дашборде, и в календаре
 
   return (
     <PlanCtx.Provider value={ctx}>
       <div className="nr-app">
         {phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
-            {NAV.filter((n) => n.main).map((n) => (
-              <button key={n.id} type="button" className="cp-tab" aria-current={view === n.id || view === n.also ? 'page' : undefined} onClick={() => view !== n.also && setView(n.id)}>
-                <Icon name={n.icon} size={22} />
-                <span>{n.id === 'bank' ? 'Банк' : n.label}</span>
-              </button>
-            ))}
-            <button
-              type="button"
-              className="cp-tab"
-              aria-expanded={more}
-              aria-current={NAV.some((n) => !n.main && n.id === view) ? 'page' : undefined}
-              onClick={() => setMore((m) => !m)}
-            >
-              <Icon name="more" size={22} />
-              <span>Ещё</span>
-              {violations.length > 0 && <span className="cp-rail-badge">{violations.length > 99 ? '99+' : violations.length}</span>}
+            <button type="button" className="cp-tab" aria-current={view === 'dashboard' ? 'page' : undefined} onClick={() => setView('dashboard')}>
+              <Icon name="dashboard" size={22} />
+              <span>Дашборд</span>
             </button>
-            {more && (
-              <div className="cp-menu nr-glass" role="menu" aria-label="Ещё">
-                {NAV.filter((n) => !n.main).map((n) => (
-                  <button key={n.id} type="button" role="menuitem" className="cp-menu__item" onClick={() => { setView(n.id); setMore(false) }}>
-                    <Icon name={n.icon} size={18} /> {n.label}
-                    {n.id === 'checks' && violations.length > 0 && <span className="cp-menu__count">{violations.length}</span>}
-                  </button>
-                ))}
-                <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { setMore(false); setMenu(true) }}>
-                  <Icon name="more" size={18} /> Данные и тема
-                </button>
-                <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { setMore(false); setSheet({ kind: 'help' }) }}>
-                  <Icon name="help" size={18} /> Как пользоваться
-                </button>
-              </div>
-            )}
-            {menu && <DataMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} />}
+            <button type="button" className="cp-tab" aria-current={view !== 'dashboard' ? 'page' : undefined} onClick={() => view === 'dashboard' && setView('week')}>
+              <Icon name="calendar" size={22} />
+              <span>Календарь</span>
+            </button>
+            <button type="button" className="cp-tab" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+              <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
+              <span>Профиль</span>
+            </button>
+            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} />}
           </nav>
         ) : (
-          <nav className="nr-rail" aria-label="Разделы">
-            <div className="nr-rail-brand" aria-hidden="true">КП</div>
-            {NAV.map((n) => (
-              <button key={n.id} type="button" className="nr-rail-item" aria-current={view === n.id || view === n.also ? 'page' : undefined} aria-label={n.label} onClick={() => view !== n.also && setView(n.id)}>
-                <Icon name={n.icon} size={22} />
-                <span className="cp-rail-tip" aria-hidden="true">{n.label}</span>
-                {n.id === 'checks' && violations.length > 0 && <span className="cp-rail-badge">{violations.length > 99 ? '99+' : violations.length}</span>}
-              </button>
-            ))}
+          <nav className="nr-rail" aria-label="Отделы">
+            <div className="nr-rail-brand" aria-hidden="true">Nr</div>
+            {DEPARTMENTS.map((d) =>
+              d.id === 'smm' ? (
+                <button key={d.id} type="button" className="nr-rail-item" aria-current="page" aria-label="SMM — контент-план" onClick={() => setView('dashboard')}>
+                  <Icon name={d.icon} size={22} />
+                  <span className="cp-rail-tip" aria-hidden="true">SMM — контент-план</span>
+                </button>
+              ) : (
+                <button key={d.id} type="button" className="nr-rail-item cp-rail-soon" aria-disabled="true" tabIndex={-1} aria-label={`${d.label} — скоро`}>
+                  <Icon name={d.icon} size={22} />
+                  <span className="cp-rail-tip" aria-hidden="true">{d.label} — скоро</span>
+                </button>
+              ),
+            )}
             <span className="nr-rail-spacer" />
-            <button type="button" className="nr-rail-item" aria-label="Как пользоваться" aria-pressed={sheet?.kind === 'help'} onClick={() => setSheet((s) => (s?.kind === 'help' ? null : { kind: 'help' }))}>
-              <Icon name="help" size={22} />
-              <span className="cp-rail-tip" aria-hidden="true">Как пользоваться</span>
+            <button type="button" className="nr-rail-item cp-rail-account" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+              <span className="cp-avatar" aria-hidden="true"><Icon name="user" size={16} /></span>
+              <span className="cp-rail-tip" aria-hidden="true">Профиль</span>
             </button>
-            <button type="button" className="nr-rail-item" aria-label="Данные и тема" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-              <Icon name="more" size={22} />
-              <span className="cp-rail-tip" aria-hidden="true">Данные и тема</span>
-            </button>
-            {menu && <DataMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} />}
+            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} />}
           </nav>
         )}
         {withSide && sideOpen && narrow && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {withSide && sideOpen && <Sidebar open={sideOpen} withBank={view === 'month' || view === 'week'} onClose={() => setSideOpen(false)} />}
+        {withSide && sideOpen && <Sidebar open={sideOpen} withBank={view !== 'dashboard'} onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
-          {view === 'now' && <NowView />}
+          {view === 'dashboard' && <DashboardView />}
           {view === 'month' && <MonthView />}
           {view === 'week' && <WeekView />}
-          {view === 'plan' && <PlanView />}
-          {view === 'bank' && <BankView />}
-          {view === 'rules' && <RulesView />}
-          {view === 'checks' && <ChecksView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'help' && <HelpSheet view={view} onClose={closeSheet} />}
+          {!sheet && (
+            <button type="button" className="cp-fab" aria-label="Новый контент" title="Запланировать контент" onClick={() => ctx.openNew({ date: anchor < today() ? today() : anchor })}>
+              <Icon name="plus" size={26} />
+            </button>
+          )}
         </main>
         {toastState && (
           <div className="cp-toast nr-glass" role="status" key={toastState.n}>
@@ -427,12 +415,23 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   )
 }
 
-function DataMenu({ onClose, seedUrl, theme, onTheme }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void }) {
+function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; onHelp: () => void }) {
   const { plan, dispatch, toast, saved } = usePlan()
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
   return (
-    <div className="cp-menu nr-glass" role="menu" aria-label="Данные и тема">
+    <div className="cp-menu nr-glass" role="menu" aria-label="Профиль">
+      <div className="cp-menu__head">
+        <span className="cp-avatar" aria-hidden="true"><Icon name="user" size={18} /></span>
+        <span>
+          <b>Профиль</b>
+          <span className="cp-muted">SMM · контент-план</span>
+        </span>
+      </div>
+      <p className="cp-menu__note">Скоро: {SOON.join(', ')}</p>
+      <button type="button" role="menuitem" className="cp-menu__item" onClick={onHelp}>
+        <Icon name="help" size={18} /> Как пользоваться
+      </button>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { download(`content-plan-${stamp}.json`, exportJSON(plan), 'application/json'); onClose() }}>
         <Icon name="download" size={18} /> Выгрузить JSON
       </button>

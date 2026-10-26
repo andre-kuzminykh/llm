@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { addDays, fromMin, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
-import { shownTitle, type ISODate, type Item, type Plan } from '../model/types'
+import { shownTitle, tagOf, type ISODate, type Item, type Plan } from '../model/types'
 import { platformTypes, type Unit } from '../model/units'
 import { grab, IconButton, Seg, UnitCard, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
@@ -8,7 +8,7 @@ import { Icon } from '../ui/Icon'
 import { useInfinite } from '../ui/infinite'
 import { DateJump, TopBar } from '../ui/TopBar'
 
-type Mode = 'time' | 'channels' | 'platforms'
+type Mode = 'time' | 'channels' | 'platforms' | 'topics'
 
 interface Lane {
   id: string
@@ -32,7 +32,7 @@ export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
     out.push({ id: `${c.id}:full`, label: `${c.name} · FULL`, color: c.color, channelId: c.id, match: (it) => it.channelId === c.id && it.format === 'FULL' })
     out.push({ id: `${c.id}:shorts`, label: `${c.name} · Shorts`, color: c.color, channelId: c.id, match: (it) => it.channelId === c.id && it.format === 'Shorts' })
     for (const s of c.sections) {
-      out.push({ id: `${c.id}:${s.id}`, label: s.name, color: c.color, channelId: c.id, sectionId: s.id, match: (it) => it.channelId === c.id && it.sectionId === s.id })
+      out.push({ id: `${c.id}:${s.id}`, label: `${c.name} · ${s.web}`, color: c.color, channelId: c.id, sectionId: s.id, match: (it) => it.channelId === c.id && it.sectionId === s.id })
     }
     out.push({
       id: `${c.id}:text`,
@@ -48,7 +48,7 @@ export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
 const readMode = (): Mode => {
   try {
     const m = localStorage.getItem('cp:week-mode')
-    return m === 'channels' || m === 'platforms' ? m : 'time'
+    return m === 'channels' || m === 'platforms' || m === 'topics' ? m : 'time'
   } catch {
     return 'time'
   }
@@ -73,6 +73,7 @@ export function CalendarSwitch({ value, onChange }: { value: CalendarMode; onCha
     { id: 'time', label: 'Время' },
     { id: 'channels', label: 'Каналы' },
     { id: 'platforms', label: 'Площадки' },
+    { id: 'topics', label: 'Темы' },
     { id: 'month', label: phone ? 'Лента' : 'Месяц' },
   ]
   const [open, setOpen] = useState(false)
@@ -385,7 +386,9 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
   const lanes: Lane[] =
     mode === 'channels'
       ? channelLanes(plan, hidden)
-      : plan.platforms.filter((p) => !filters.hiddenPlatforms.includes(p)).map((p) => ({ id: p, label: p, match: (it) => it.platforms.includes(p) }))
+      : mode === 'topics'
+        ? plan.rubrics.filter((r) => !filters.hiddenRubrics.includes(r.id)).map((r) => ({ id: r.id, label: tagOf(r.name), match: (it: Item) => it.rubricId === r.id }))
+        : plan.platforms.filter((p) => !filters.hiddenPlatforms.includes(p)).map((p) => ({ id: p, label: p, match: (it: Item) => it.platforms.includes(p) }))
   // по каналам карточка стоит в дорожке своего главного материала (FULL — в «FULL», тизер внутри неё);
   // по площадкам — строкой на каждой площадке, где она выходит, с тем, что там выходит
   const cells = lanes.map((lane) => ({
@@ -393,7 +396,7 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
     days: days.map(({ date }) => ({
       date,
       rows: unitsOn(date).flatMap((u) => {
-        if (mode === 'channels') return lane.match(u.head) ? [{ u }] : []
+        if (mode !== 'platforms') return lane.match(u.head) ? [{ u }] : []
         if (!u.items.some(lane.match)) return []
         const p = platformTypes(u, rules, plan.platforms).find((x) => x.platform === lane.id)
         return [{ u, kind: p?.parts.map((x) => x.type).join(', ') }]
@@ -406,7 +409,7 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
   const first = days[0]?.i ?? 0
   const cols = `${gutter}px ${first * col}px repeat(${days.length}, ${col}px) ${Math.max(0, count - first - days.length) * col}px`
   return (
-    <div className="cp-week" role="grid" aria-label={`Неделя по ${mode === 'channels' ? 'каналам' : 'площадкам'}`} style={{ gridTemplateColumns: cols }}>
+    <div className="cp-week" role="grid" aria-label={`Неделя по ${mode === 'channels' ? 'каналам' : mode === 'topics' ? 'темам' : 'площадкам'}`} style={{ gridTemplateColumns: cols }}>
       <div className="cp-week__corner" />
       <div aria-hidden="true" className="cp-week__pad" />
       {days.map(({ date }) => (

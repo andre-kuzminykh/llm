@@ -1,9 +1,9 @@
 import { useId, useMemo, useState } from 'react'
 import { addDays, dayTitle, shortDate, WEEKDAYS, weekday } from '../model/dates'
-import { newId } from '../model/store'
-import { isSlot, PLACEHOLDER, timeOf, type Item, type Rule, type Status } from '../model/types'
+import { newId, type Action } from '../model/store'
+import { isSlot, PLACEHOLDER, tagOf, timeOf, type ISODate, type Item, type Rule, type Status } from '../model/types'
 import { dueOf, leadOf } from '../model/units'
-import { IconButton, PickText, StatusPicker, Switch } from '../ui/bits'
+import { IconButton, PickText, Seg, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
@@ -50,7 +50,10 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [withGroup, setWithGroup] = useState(true)
   const [withFamily, setWithFamily] = useState(true)
   const [error, setError] = useState('')
-  const [more, setMore] = useState(false)
+  const [more, setMore] = useState(!existing) // новый контент — все поля сразу
+  const [copies, setCopies] = useState<ISODate[]>([]) // копии на другие даты
+  const [versions, setVersions] = useState<string[]>([]) // пересоздать для этих площадок
+  const [after, setAfter] = useState(false) // версии — автоматически, когда оригинал выйдет
 
   const channel = channels.get(channelId)
   const rule = rules.get(ruleId)
@@ -108,13 +111,19 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       due: due || undefined,
       offGrid: isOffGrid || undefined,
     }
+    // копии и версии — в том же шаге истории, что и сам материал
+    const extra = (id: string): Action[] => [
+      ...copies.map((d): Action => ({ type: 'duplicate', id, date: d })),
+      ...(versions.length && date ? [{ type: 'versions', id, platforms: versions, after } as Action] : []),
+    ]
+    const also = [copies.length && `копий: ${copies.length}`, versions.length && date && `версий: ${versions.length}${after ? ', после выхода' : ''}`].filter(Boolean).join(', ')
+    const run = (actions: Action[]) => dispatch(actions.length > 1 ? { type: 'batch', actions } : actions[0])
     if (existing && isBank && date) {
-      dispatch({ type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } })
-      dispatch({ type: 'assign', bankId: existing.id, date })
-      toast(`Тема поставлена на ${date}`, true)
+      run([{ type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }, ...extra(existing.id)])
+      toast(`Тема поставлена на ${date}${also ? ` · ${also}` : ''}`, true)
     } else if (existing) {
-      dispatch({ type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup })
-      toast('Сохранено', true)
+      run([{ type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }, ...extra(existing.id)])
+      toast(`Сохранено${also ? ` · ${also}` : ''}`, true)
     } else {
       const sample = plan.items.find((x) => x.ruleId === ruleId && x.date && !x.derive)
       const item: Item = {
@@ -137,8 +146,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         offGrid: patch.offGrid,
       }
       for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
-      dispatch({ type: 'create', item, withFamily: withFamily && !!date })
-      toast(date ? `Создано на ${date}` : 'Тема добавлена в банк', true)
+      run([{ type: 'create', item, withFamily: withFamily && !!date }, ...(date ? extra(item.id) : [])])
+      toast(date ? `Создано на ${shortDate(date)}${also ? ` · ${also}` : ''}` : 'Тема добавлена в банк идей', true)
     }
     onClose()
   }
@@ -150,7 +159,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     onClose()
   }
 
-  const heading = existing ? (isBank ? 'Тема в банке' : 'Материал') : 'Новый материал'
+  const heading = existing ? (isBank ? 'Тема в банке' : 'Материал') : 'Новый контент'
   const offGridField = (
     <div className="cp-field">
       <Switch checked={isOffGrid} onChange={setOffGrid}>Вне сетки — разовый, проверка его не трогает</Switch>
@@ -194,10 +203,10 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
 
         <div className="cp-field__row">
           <label className="cp-field" title={rubric?.what || undefined}>
-            <span className="nr-label">Рубрика</span>
+            <span className="nr-label">Хэштег</span>
             <select className="nr-field" value={rubricId ?? ''} onChange={(e) => pickRubric(e.target.value)} disabled={fromFull}>
               {rubricsFor(channelId, rubricId).map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
+                <option key={r.id} value={r.id}>{tagOf(r.name)}</option>
               ))}
             </select>
           </label>
@@ -270,7 +279,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
                   <PickText
                     type="date"
                     label="Подготовить к"
-                    value={due || (existing ? dueOf({ ...existing, date }, rule) ?? '' : '')}
+                    value={due || (existing ? dueOf({ ...existing, date }, rule) ?? '' : addDays(date, -leadOf(rule)))}
                     text={shortDate(due || (existing ? dueOf({ ...existing, date }, rule) ?? date : addDays(date, -leadOf(rule))))}
                     onChange={setDue}
                   />
@@ -301,6 +310,59 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             )}
             {!existing && (
               <Switch checked={withFamily} onChange={setWithFamily}>С сопутствующими публикациями, как у ближайшего материала рубрики</Switch>
+            )}
+            {date && !isBank && (
+              <div className="cp-field">
+                <span className="nr-label">Копии на другие даты</span>
+                <div className="cp-chips cp-chips--wrap" role="group" aria-label="Копии на другие даты">
+                  {copies.map((d) => (
+                    <button key={d} type="button" className="cp-chip" aria-label={`Убрать копию на ${shortDate(d)}`} onClick={() => setCopies(copies.filter((x) => x !== d))}>
+                      {WEEKDAYS[weekday(d)]}, {shortDate(d)}
+                      <Icon name="close" size={12} />
+                    </button>
+                  ))}
+                  <PickText type="date" label="Копия на дату" value="" text="" placeholder="+ дата" onChange={(d) => d && d !== date && !copies.includes(d) && setCopies([...copies, d].sort())} />
+                </div>
+              </div>
+            )}
+            {date && !isBank && (
+              <div className="cp-field">
+                <span className="nr-label">Пересоздать для площадок</span>
+                <div className="cp-pills" style={{ padding: 0 }} role="group" aria-label="Пересоздать для площадок">
+                  {plan.platforms
+                    .filter((p) => !platforms.includes(p))
+                    .map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        className="nr-pill"
+                        aria-pressed={versions.includes(p)}
+                        aria-label={`Версия для ${p}`}
+                        onClick={() => setVersions(versions.includes(p) ? versions.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || versions.includes(x)))}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                </div>
+                {versions.length > 0 && (
+                  <Seg
+                    value={after ? 'after' : 'with'}
+                    onChange={(v) => setAfter(v === 'after')}
+                    label="Когда пересоздать"
+                    options={[
+                      { id: 'with', label: 'Вместе с оригиналом' },
+                      { id: 'after', label: 'Автоматически после выхода' },
+                    ]}
+                  />
+                )}
+                {versions.length > 0 && (
+                  <span className="cp-hint">
+                    {after
+                      ? 'Когда оригинал отметят «Вышло», версии на следующий день станут задачами «в работе».'
+                      : 'Версии выйдут в тот же день и встанут в ту же карточку.'}
+                  </span>
+                )}
+              </div>
             )}
             {existing?.origDate && <p className="cp-hint">В исходной сетке стоял {shortDate(existing.origDate)}.</p>}
           </div>

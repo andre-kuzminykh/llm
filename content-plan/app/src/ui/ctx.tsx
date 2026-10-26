@@ -5,7 +5,8 @@ import type { Action } from '../model/store'
 import type { Channel, ISODate, Item, Plan, Rubric, Rule, Status } from '../model/types'
 import type { Unit } from '../model/units'
 
-export type View = 'now' | 'month' | 'week' | 'plan' | 'bank' | 'rules' | 'checks'
+/** Экраны SMM: дашборд и календарь (неделей или месяцем). */
+export type View = 'dashboard' | 'week' | 'month'
 
 export type Drag = { kind: 'item' | 'bank'; id: string }
 
@@ -53,6 +54,7 @@ export interface Ctx {
   toggleSide: () => void
   sideOpen: boolean
   openHelp: () => void
+  view: View
   saved: 'idle' | 'saving' | 'saved' | 'memory' | 'error'
   phone: boolean
 }

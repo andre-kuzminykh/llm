@@ -1,6 +1,6 @@
 // Мелкие общие части: карточка материала, площадки, статусы, переключатели, перетаскивание.
 import { useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
-import { isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
+import { isSlot, shownTitle, STATUSES, statusOf, tagOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { Icon } from './Icon'
@@ -67,11 +67,11 @@ export function PlatformIcon({ platform, size = 14 }: { platform: string; size?:
   )
 }
 
-/** Рубрика — словом: «Демо». Формат и время — рядом мелко. */
+/** Тема — хэштегом: «#демо». Формат и время — рядом мелко. */
 export function RubricChip({ name }: { name: string }) {
   return (
-    <span className="cp-rub" aria-label={`Рубрика: ${name}`}>
-      {name}
+    <span className="cp-rub" aria-label={`Хэштег: ${tagOf(name)}`}>
+      {tagOf(name)}
     </span>
   )
 }
@@ -188,6 +188,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
             <span className="cp-card__rub">
               {showTime && <span className="cp-card__time">{timeText(unit)}</span>}
               {kind ? <span className="cp-card__kind">{kind}</span> : rubric && <RubricChip name={rubric.name} />}
+              {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
             </span>
             <span className="cp-card__title">{title}</span>
@@ -198,6 +199,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
               {rubric && <RubricChip name={rubric.name} />}
               {format && variant !== 'mini' && <span className="cp-card__fmt">{format}</span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
+              {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
               {showTime && <span className="cp-card__time" title={unit.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : undefined}>{timeText(unit)}</span>}
             </span>
             <span className="cp-card__title">{title}</span>

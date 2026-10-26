@@ -1,5 +1,5 @@
-// Видеодемо: как вести контент — от «Сейчас» и пустого слота до «Вышло», неделя по времени,
-// «Поменять местами», банк тем и сетка. Пишет webm в $OUT (по умолчанию e2e/shots/demo);
+// Видеодемо SMM: дашборд, календарь (неделя и месяц), от пустого слота до «Вышло», перенос на час,
+// «Поменять местами», банк идей и темы, «+» с версией для другой площадки по триггеру. Пишет webm в $OUT (по умолчанию e2e/shots/demo);
 // в mp4: ffmpeg -i <файл>.webm -c:v libx264 -pix_fmt yuv420p -crf 24 -movflags +faststart demo.mp4
 // Запуск — как у smoke.mjs: npm run build && npm run preview, затем node e2e/demo.mjs
 import { mkdirSync } from 'node:fs'
@@ -15,7 +15,7 @@ const browser = await chromium.launch({ executablePath: CHROME })
 const ctx = await browser.newContext({ viewport: size, recordVideo: { dir: OUT, size } })
 // курсор и подписи — в самой странице, чтобы попали в запись
 await ctx.addInitScript(() => {
-  localStorage.setItem('cp:view', JSON.stringify('now'))
+  localStorage.setItem('cp:view', JSON.stringify('dashboard'))
   localStorage.setItem('cp:theme', 'light')
   addEventListener('DOMContentLoaded', () => {
     const css = document.createElement('style')
@@ -84,19 +84,20 @@ const jump = async (date) => {
 }
 
 await page.goto(BASE)
-await page.getByRole('heading', { name: 'Что делать сейчас' }).waitFor()
+await page.getByRole('heading', { name: 'Дашборд' }).waitFor()
 await page.mouse.move(720, 450)
 await wait(600)
 
-// 1. Сейчас
-await cap('«Сейчас» — что подготовить на две недели вперёд, по сроку подготовки', 3200)
+// 1. Дашборд
+await cap('SMM в Neuronium: слева — отделы, открыт SMM', 2600)
+await cap('Дашборд: что делать на две недели, банк идей и темы-хэштеги по каналам', 3200)
 await page.mouse.wheel(0, 420)
 await wait(1200)
 await page.mouse.wheel(0, -420)
-await cap('Строка — время, рубрика словом и тема; ▶ — начать', 2600)
+await cap('Строка — время, #хэштег и тема; ▶ — начать', 2600)
 
 // 2. Календарь без конца и переход к дате
-await click(page.getByRole('button', { name: 'Календарь', exact: true }))
+await click(page.locator('.cp-top').getByRole('button', { name: 'Календарь' }))
 await cap('Календарь открывается неделей: по часам, как в Google Календаре', 2600)
 await click(page.getByRole('radio', { name: 'Месяц' }), 600)
 await cap('Месяц: все материалы строками — время, рубрика, тема; цвет полоски — канал', 2600)
@@ -163,28 +164,34 @@ await drag(page.locator('[data-date="2026-11-02"] .cp-card--main').first(), targ
 await wait(1600)
 await click(page.locator('.cp-toast').getByRole('button', { name: 'Поменять местами' }), 2200)
 
-// 6. Банк тем
-await click(page.getByRole('button', { name: 'Банк тем', exact: true }), 500)
-await cap('Банк тем: слева рубрики, справа — темы выбранной', 900)
-await click(page.getByRole('navigation', { name: 'Рубрики банка' }).getByRole('button', { name: 'Тезисы · Тезис дня' }), 900)
-await type(page.getByLabel('Новые темы: Тезисы · Тезис дня'), 'Агенты вместо отделов\nИИ не отнимет работу\nСколько стоит ИИ-сотрудник')
-const bank = page.getByRole('region', { name: 'Банк: Тезисы · Тезис дня' })
+// 6. Банк идей на дашборде
+await click(page.locator('.cp-top').getByRole('button', { name: 'Дашборд' }), 500)
+await cap('Банк идей: хэштег — кнопкой, темы — списком', 900)
+await click(page.getByRole('group', { name: 'Хэштеги банка' }).getByRole('button', { name: /^#тезисы/ }), 900)
+await type(page.getByLabel('Новые темы: #тезисы · Тезис дня'), 'Агенты вместо отделов\nИИ не отнимет работу\nСколько стоит ИИ-сотрудник')
+const bank = page.getByRole('region', { name: 'Банк: #тезисы · Тезис дня' })
 await click(bank.getByRole('button', { name: 'Добавить' }), 700)
 await cap('«Разложить по слотам» — и сразу видно, куда легли', 600)
 await click(bank.getByRole('button', { name: 'Разложить по слотам' }), 2600)
 await cap('Любую тему можно вернуть в банк', 600)
 await click(bank.getByRole('button', { name: 'Вернуть в банк: ИИ не отнимет работу' }), 2000)
 
-// 7. Сетка
-await click(page.getByRole('button', { name: 'Сетка', exact: true }), 500)
-await click(page.getByRole('button', { name: 'Раскрыть: Демо' }), 500)
-await cap('Сетка: дни, время и площадки — строками; правка — по нажатию на формат', 1400)
-await click(page.getByRole('button', { name: 'Править: Демо · FULL' }), 2600)
-await page.keyboard.press('Escape')
+// 7. Темы и «+»
+await moveTo(page.getByRole('region', { name: 'Темы' }))
+await cap('Темы-хэштеги каждого канала и его разделов: Лаборатория, Академия', 2600)
+await cap('«+» справа внизу — запланировать новый контент', 600)
+await click(page.getByRole('button', { name: 'Новый контент' }), 700)
+const form = page.getByRole('complementary', { name: 'Новый контент' })
+await type(form.getByRole('textbox', { name: 'Тема' }), 'Как мы собрали ИИ-отдел продаж')
+await moveTo(form.getByRole('button', { name: 'Версия для Instagram' }))
+await cap('Пересоздать для других площадок — вместе или автоматически, когда выйдет оригинал', 600)
+await click(form.getByRole('button', { name: 'Версия для Instagram' }), 400)
+await click(form.getByRole('button', { name: 'Версия для TikTok' }), 400)
+await click(form.getByRole('radio', { name: 'Автоматически после выхода' }), 1600)
+await click(form.getByRole('button', { name: 'Создать' }), 2400)
 
 // 8. Конец
-await click(page.getByRole('button', { name: 'Сейчас', exact: true }), 500)
-await cap('Весь контент-план — в одном месте, без таблиц', 3000)
+await cap('Контент-план SMM — дашборд и календарь, без таблиц', 3000)
 await cap('')
 await wait(500)
 

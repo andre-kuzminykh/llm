@@ -3,7 +3,6 @@ import type { ISODate } from '../model/types'
 import { IconButton } from './bits'
 import { activeFilters, FilterChips } from './Sidebar'
 import { usePlan } from './ctx'
-import { today } from '../model/dates'
 import { Icon } from './Icon'
 
 // о сохранении шапка молчит, пока всё в порядке
@@ -12,11 +11,11 @@ const SAVED: Record<string, string> = {
   error: 'Не сохранилось',
 }
 
-/** Шапка вида: «Фильтры», заголовок и навигация вида слева, включённые фильтры, отмена и «+» справа.
- *  Повтор — с клавиатуры (⇧⌘Z). */
+/** Шапка экрана: «Фильтры», заголовок и навигация слева; справа включённые фильтры, отмена и переход
+ *  «Календарь» ⇄ «Дашборд». «+» — круглая кнопка справа внизу. Повтор — с клавиатуры (⇧⌘Z). */
 export function TopBar({ title, children, side = true }: { title: ReactNode; children?: ReactNode; side?: boolean }) {
   const ctx = usePlan()
-  const { dispatch, canUndo, openNew, anchor, saved, toggleSide, sideOpen } = ctx
+  const { dispatch, canUndo, saved, toggleSide, sideOpen, view, goto, phone } = ctx
   const n = side ? activeFilters(ctx).length : 0
   return (
     <header className="cp-top">
@@ -31,14 +30,23 @@ export function TopBar({ title, children, side = true }: { title: ReactNode; chi
       <span className="cp-top__spacer" />
       {side && <FilterChips />}
       {SAVED[saved] && (
-        <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню «Данные и тема»' : undefined}>
+        <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню профиля' : undefined}>
           {SAVED[saved]}
         </span>
       )}
       <IconButton icon="undo" label="Отменить (⌘Z)" onClick={() => dispatch({ type: 'undo' })} disabled={!canUndo} />
-      <button type="button" className="nr-btn nr-btn--primary nr-btn--icon" aria-label="Новый материал" title="Новый материал" onClick={() => openNew({ date: anchor < today() ? today() : anchor })}>
-        <Icon name="plus" size={18} />
-      </button>
+      {!phone &&
+        (view === 'dashboard' ? (
+          <button type="button" className="nr-btn cp-switch" onClick={() => goto('week')}>
+            <Icon name="calendar" size={16} />
+            Календарь
+          </button>
+        ) : (
+          <button type="button" className="nr-btn cp-switch" onClick={() => goto('dashboard')}>
+            <Icon name="dashboard" size={16} />
+            Дашборд
+          </button>
+        ))}
     </header>
   )
 }

@@ -1,6 +1,6 @@
 import { NO_FILTERS, type Filters } from '../model/filters'
 import { bankOf } from '../model/store'
-import { statusOf } from '../model/types'
+import { statusOf, tagOf } from '../model/types'
 import { bankLabel, bankRules, useBankChoice } from '../views/BankView'
 import { ChannelDot, Check, IconButton, startDrag, StatusFilter, Switch } from './bits'
 import { usePlan, type Ctx } from './ctx'
@@ -17,11 +17,20 @@ export function activeFilters({ plan, filters: f, setFilters }: Pick<Ctx, 'plan'
   const out: { id: string; label: string; clear: () => void }[] = []
   if (f.hiddenChannels.length)
     out.push({ id: 'ch', label: `Без ${names(f.hiddenChannels.map((id) => plan.channels.find((c) => c.id === id)?.name ?? id))}`, clear: () => set({ hiddenChannels: [] }) })
+  if (f.hiddenSections?.length) {
+    const sections = plan.channels.flatMap((c) => c.sections)
+    out.push({ id: 'sec', label: `Без ${names(f.hiddenSections.map((id) => sections.find((x) => x.id === id)?.web ?? id))}`, clear: () => set({ hiddenSections: [] }) })
+  }
   if (f.hiddenPlatforms.length) out.push({ id: 'pl', label: `Без ${names(f.hiddenPlatforms)}`, clear: () => set({ hiddenPlatforms: [] }) })
   if (f.hiddenRubrics.length)
     out.push({
       id: 'rb',
-      label: f.hiddenRubrics.length > 2 ? `Скрыто рубрик: ${f.hiddenRubrics.length}` : `Без ${names(f.hiddenRubrics.map((id) => plan.rubrics.find((r) => r.id === id)?.name ?? id))}`,
+      label:
+        f.hiddenRubrics.length === plan.rubrics.length - 1
+          ? `Только ${tagOf(plan.rubrics.find((r) => !f.hiddenRubrics.includes(r.id))?.name ?? '')}`
+          : f.hiddenRubrics.length > 2
+            ? `Скрыто хэштегов: ${f.hiddenRubrics.length}`
+            : `Без ${names(f.hiddenRubrics.map((id) => tagOf(plan.rubrics.find((r) => r.id === id)?.name ?? id)))}`,
       clear: () => set({ hiddenRubrics: [] }),
     })
   if (f.statuses.length) out.push({ id: 'st', label: `Только «${f.statuses.map((s) => statusOf(s).label).join('», «')}»`, clear: () => set({ statuses: [] }) })
@@ -68,19 +77,36 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
       </div>
       <div className="cp-side__block">
         <span className="nr-label">Каналы</span>
-        {plan.channels.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className="nr-row"
-            aria-pressed={!filters.hiddenChannels.includes(c.id)}
-            onClick={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}
-          >
-            <ChannelDot color={c.color} />
-            {c.name}
-            {c.start > plan.start && <span className="cp-side__count">с {c.start.slice(8)}.{c.start.slice(5, 7)}</span>}
-          </button>
-        ))}
+        {plan.channels.map((c) => {
+          const off = filters.hiddenChannels.includes(c.id)
+          return (
+            <div key={c.id} className="cp-side__ch">
+              <button
+                type="button"
+                className="nr-row"
+                aria-pressed={!off}
+                onClick={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}
+              >
+                <ChannelDot color={c.color} />
+                {c.name}
+                {c.start > plan.start && <span className="cp-side__count">с {c.start.slice(8)}.{c.start.slice(5, 7)}</span>}
+              </button>
+              {!off &&
+                c.sections.map((sec) => (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    className="nr-row cp-side__sec"
+                    aria-pressed={!filters.hiddenSections?.includes(sec.id)}
+                    title={sec.name}
+                    onClick={() => setFilters({ ...filters, hiddenSections: toggle(filters.hiddenSections ?? [], sec.id) })}
+                  >
+                    {sec.web}
+                  </button>
+                ))}
+            </div>
+          )
+        })}
       </div>
       <div className="cp-side__block">
         <span className="nr-label">Статус</span>
@@ -111,7 +137,7 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
         </div>
       </div>
       <div className="cp-side__block">
-        <span className="nr-label">Рубрики</span>
+        <span className="nr-label">Хэштеги</span>
         <div className="cp-pills">
           {plan.rubrics.map((r) => (
             <button
@@ -121,14 +147,14 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
               aria-pressed={!filters.hiddenRubrics.includes(r.id)}
               onClick={() => setFilters({ ...filters, hiddenRubrics: toggle(filters.hiddenRubrics, r.id) })}
             >
-              {r.name}
+              {tagOf(r.name)}
             </button>
           ))}
         </div>
       </div>
       {withBank && rules.length > 0 && (
         <div className="cp-side__block cp-side__block--pad">
-          <span className="nr-label">Банк тем</span>
+          <span className="nr-label">Банк идей</span>
           <div className="cp-side__banks" role="group" aria-label="Рубрики банка">
             {rules.map((r) => (
               <Check key={r.id} checked={banks.list.includes(r.id)} onChange={() => banks.toggle(r.id)}>
@@ -154,8 +180,8 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
             })}
             {chosen.every((r) => !bankOf(plan, r.id).length) && <span className="cp-hint">{chosen.length ? 'В отмеченных рубриках тем нет.' : 'Отметьте рубрики галочками.'}</span>}
           </div>
-          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" style={{ alignSelf: 'flex-start' }} onClick={() => goto('bank')}>
-            Открыть банк тем
+          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" style={{ alignSelf: 'flex-start' }} onClick={() => goto('dashboard')}>
+            Банк идей на дашборде
           </button>
         </div>
       )}

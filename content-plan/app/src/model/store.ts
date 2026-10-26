@@ -48,7 +48,44 @@ export function fitRange(plan: Plan): Plan {
 /** Одна правка нескольких материалов — например, статус всей карточки. */
 export function updateMany(plan: Plan, ids: string[], patch: Partial<Item>): Plan {
   const set = new Set(ids)
-  return { ...plan, items: plan.items.map((x) => (set.has(x.id) ? { ...x, ...patch } : x)) }
+  const next = { ...plan, items: plan.items.map((x) => (set.has(x.id) ? { ...x, ...patch } : x)) }
+  return patch.status === 'published' ? fireTriggers(next, set) : next
+}
+
+/** Оригинал вышел — версии для других площадок, ждавшие его, становятся задачами «в работе». */
+export function fireTriggers(plan: Plan, published: Set<string>): Plan {
+  if (!plan.items.some((x) => x.trigger && published.has(x.trigger) && x.status === 'planned')) return plan
+  return { ...plan, items: plan.items.map((x) => (x.trigger && published.has(x.trigger) && x.status === 'planned' ? { ...x, status: 'progress' } : x)) }
+}
+
+/** Версии материала для других площадок: вместе с оригиналом (в той же карточке) или автоматически —
+ *  на следующий день, когда оригинал выйдет. Версия — вне сетки: проверка её не трогает. */
+export function addVersions(plan: Plan, id: string, platforms: string[], after: boolean): Plan {
+  const it = plan.items.find((x) => x.id === id)
+  if (!it || !it.date || !platforms.length) return plan
+  const group = after ? undefined : it.group ?? newId('g')
+  const versions: Item[] = platforms.map((p) => ({
+    id: newId(),
+    date: after ? addDays(it.date!, 1) : it.date,
+    channelId: it.channelId,
+    sectionId: it.sectionId,
+    ruleId: it.ruleId,
+    rubricId: it.rubricId,
+    title: it.title,
+    format: it.format,
+    platforms: [p],
+    status: 'planned',
+    source: 'версия',
+    rank: it.rank + 1,
+    group,
+    derive: '{title}',
+    offGrid: true,
+    ...(after ? { trigger: it.id } : {}),
+    ...(it.time ? { time: it.time } : {}),
+  }))
+  for (const v of versions) for (const k of Object.keys(v) as (keyof Item)[]) if (v[k] === undefined) delete v[k]
+  const items = group && !it.group ? plan.items.map((x) => (x.id === id ? { ...x, group } : x)) : plan.items
+  return fitRange({ ...plan, items: [...items, ...versions] })
 }
 
 export function updateItem(plan: Plan, id: string, patch: Partial<Item>): Plan {
@@ -60,7 +97,8 @@ export function updateItem(plan: Plan, id: string, patch: Partial<Item>): Plan {
   })
   if (!head) return plan
   if (head.group && !head.derive && ('title' in patch || 'rubricId' in patch)) items = rederive(items, head)
-  return { ...plan, items }
+  const next = { ...plan, items }
+  return patch.status === 'published' ? fireTriggers(next, new Set([id])) : next
 }
 
 /** Правка из формы: поля, затем дата (с группой или без) — одним шагом истории. */
@@ -100,13 +138,19 @@ export function createItem(plan: Plan, item: Item, withFamily = true): Plan {
   return fitRange({ ...plan, items: rederive([...plan.items, head, ...copies], head) })
 }
 
-export function duplicateItem(plan: Plan, id: string): Plan {
+/** Копия материала (с его группой) — на тот же день или на другую дату. */
+export function duplicateItem(plan: Plan, id: string, date?: ISODate): Plan {
   const it = plan.items.find((x) => x.id === id)
   if (!it) return plan
   const members = it.group && it.date ? plan.items.filter((x) => x.group === it.group && x.date === it.date) : [it]
   const group = members.length > 1 ? newId('g') : undefined
-  const copies = members.map((x) => ({ ...x, id: newId(), group, origDate: undefined }))
-  return { ...plan, items: [...plan.items, ...copies] }
+  const copies = members.map((x) => {
+    const c: Item = { ...x, id: newId(), group, origDate: undefined, date: date ?? x.date, status: date ? 'planned' : x.status, done: date ? undefined : x.done }
+    if (!c.group) delete c.group
+    for (const k of ['origDate', 'done'] as const) if (c[k] === undefined) delete c[k]
+    return c
+  })
+  return fitRange({ ...plan, items: [...plan.items, ...copies] })
 }
 
 export function removeItem(plan: Plan, id: string, withGroup = true): Plan {
@@ -288,7 +332,9 @@ export type Action =
   | { type: 'unassign'; id: string }
   | { type: 'edit'; id: string; patch: Partial<Item>; date?: ISODate; withGroup?: boolean }
   | { type: 'create'; item: Item; withFamily?: boolean }
-  | { type: 'duplicate'; id: string }
+  | { type: 'duplicate'; id: string; date?: ISODate }
+  | { type: 'versions'; id: string; platforms: string[]; after: boolean }
+  | { type: 'batch'; actions: Action[] } // несколько правок — одним шагом истории
   | { type: 'remove'; id: string; withGroup?: boolean }
   | { type: 'bankAdd'; ruleId: string; topics: string[] }
   | { type: 'bankReorder'; id: string; beforeId: string | null }
@@ -322,7 +368,9 @@ function apply(plan: Plan, a: Action): Plan {
     case 'unassign': return unassignTopic(plan, a.id)
     case 'edit': return editItem(plan, a.id, a.patch, a.date, a.withGroup ?? true)
     case 'create': return createItem(plan, a.item, a.withFamily ?? true)
-    case 'duplicate': return duplicateItem(plan, a.id)
+    case 'duplicate': return duplicateItem(plan, a.id, a.date)
+    case 'versions': return addVersions(plan, a.id, a.platforms, a.after)
+    case 'batch': return a.actions.reduce(apply, plan)
     case 'remove': return removeItem(plan, a.id, a.withGroup ?? true)
     case 'bankAdd': return bankAdd(plan, a.ruleId, a.topics)
     case 'bankReorder': return bankReorder(plan, a.id, a.beforeId)
