@@ -1,4 +1,4 @@
-// Видеодемо SMM: календарь с панелью слева («Показать» и фильтры), перенос и растягивание на шкале, «Поменять местами»,
+// Видеодемо SMM: календарь с фильтрами слева и видом справа от поиска, перенос и растягивание на шкале, «Поменять местами»,
 // от пустого слота до «Вышло», черновики во вкладке «+», периодичность хэштега и планирование недели, дашборд справа,
 // хэштег с подсказками и версия для другой площадки по триггеру, поиск вверху. Пишет webm в $OUT (по умолчанию e2e/shots/demo);
 // в mp4: ffmpeg -i <файл>.webm -c:v libx264 -pix_fmt yuv420p -crf 24 -movflags +faststart demo.mp4
@@ -87,15 +87,18 @@ await page.goto(BASE)
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 await page.mouse.move(720, 450)
 await wait(600)
-const side = page.getByRole('complementary', { name: 'Вид и фильтры' })
+const side = page.getByRole('complementary', { name: 'Фильтры' })
 const top = page.locator('.cp-top')
 
 // 1. Календарь и панель слева
-await cap('SMM в Neuronium: слева — отделы, рядом — что показать и фильтры', 2800)
-await moveTo(side.getByRole('radiogroup', { name: 'Показать' }))
-await cap('Показать: время, каналы, площадки, темы — выбирается как фильтр', 2600)
+await cap('SMM в Neuronium: слева — отделы и фильтры', 2400)
+await click(side.getByRole('button', { name: 'Свернуть фильтры' }), 900)
+await cap('Фильтры сворачиваются — дням больше места', 1600)
+await click(top.getByRole('button', { name: 'Фильтры' }), 900)
 await moveTo(top.getByRole('searchbox', { name: 'Поиск по плану' }))
-await cap('Вверху — поиск темы и значок дашборда', 2200)
+await cap('Вверху — поиск темы, вид календаря и значок дашборда', 1600)
+await moveTo(top.getByRole('radiogroup', { name: 'Вид календаря' }))
+await wait(1200)
 
 // 2. Неделя по времени: перенос, край, лист
 await jump('2026-11-09')
@@ -120,9 +123,9 @@ await page.mouse.down()
 await page.mouse.move(sheet.x + sheet.width - 330, sheet.y + sheet.height / 2 - 80, { steps: 30 })
 await page.mouse.up()
 await wait(1200)
-await click(side.getByRole('radio', { name: 'Каналы' }), 600)
+await click(top.getByRole('radio', { name: 'Каналы' }), 600)
 await cap('Или дорожками по каналам — как в исходной таблице', 2600)
-await click(side.getByRole('radio', { name: 'Время' }), 600)
+await click(top.getByRole('radio', { name: 'Время' }), 600)
 
 // 3. Поменять местами
 await jump('2026-11-02')

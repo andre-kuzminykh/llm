@@ -5,7 +5,7 @@ import { renderApp } from '../test/renderApp'
 
 const day = (date: string) => document.querySelector(`[data-date="${date}"]`) as HTMLElement
 const ready = () => screen.findByRole('grid', { name: 'Неделя по времени' })
-const side = () => screen.getByRole('complementary', { name: 'Вид и фильтры' })
+const side = () => screen.getByRole('complementary', { name: 'Фильтры' })
 
 describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
   it('в дне — все единицы контента; фильтры слева убирают лишнее', async () => {
@@ -48,21 +48,25 @@ describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
 })
 
 describe('T-CP-028 FR-CP-028 оболочка: отделы, панель слева, дашборд справа вверху', () => {
-  it('слева — отделы Neuronium; рядом — «Показать» с иконками и фильтры; «Месяца», дней-окон и «Отменить» в шапке нет', async () => {
+  it('слева — отделы и фильтры; вид календаря с иконками — справа от поиска; «Месяца», окон дней и «Отменить» в шапке нет', async () => {
     renderApp()
     await ready()
     const nav = screen.getByRole('navigation', { name: 'Отделы' })
     expect(within(nav).getByRole('button', { name: 'SMM — контент-план' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getAllByRole('button', { name: /— скоро$/ })).toHaveLength(9)
     expect(within(nav).getByRole('button', { name: 'Профиль' })).toBeInTheDocument()
-    const show = within(side()).getByRole('radiogroup', { name: 'Показать' })
-    expect(within(show).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Время', 'Каналы', 'Площадки', 'Темы'])
-    expect(within(show).getByRole('radio', { name: 'Время' }).querySelector('svg')).not.toBeNull()
-    await userEvent.click(within(show).getByRole('radio', { name: 'Темы' }))
-    expect(await screen.findByRole('grid', { name: 'Неделя по темам' })).toBeInTheDocument()
-    await userEvent.click(within(show).getByRole('radio', { name: 'Время' }))
-    await ready()
     const top = screen.getByRole('banner')
+    const views = within(top).getByRole('radiogroup', { name: 'Вид календаря' })
+    expect(within(views).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['Время', 'Каналы', 'Площадки', 'Темы'])
+    expect(within(views).getByRole('radio', { name: 'Время' }).querySelector('svg')).not.toBeNull()
+    // справа от поиска, а значок дашборда — в самом углу
+    const order = [...top.querySelectorAll('[role="search"], [aria-label="Вид календаря"], [aria-label="Дашборд"]')].map((el) => (el.getAttribute('role') === 'search' ? 'search' : el.getAttribute('aria-label')))
+    expect(order).toEqual(['search', 'Вид календаря', 'Дашборд'])
+    await userEvent.click(within(views).getByRole('radio', { name: 'Темы' }))
+    expect(await screen.findByRole('grid', { name: 'Неделя по темам' })).toBeInTheDocument()
+    await userEvent.click(within(views).getByRole('radio', { name: 'Время' }))
+    await ready()
+    expect(within(side()).queryByRole('radiogroup', { name: /Вид|Показать/ })).toBeNull()
     expect(within(top).queryByRole('radio', { name: 'Месяц' })).toBeNull()
     expect(within(top).queryByRole('button', { name: /Отменить/ })).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: /Сколько дней/ })).toBeNull()
@@ -75,6 +79,25 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     expect(screen.getByRole('grid', { name: 'Неделя по времени' })).toBeInTheDocument()
     await userEvent.click(within(top).getByRole('button', { name: 'Дашборд' }))
     expect(screen.queryByRole('complementary', { name: 'Дашборд' })).toBeNull()
+  })
+  it('фильтры сворачиваются и разворачиваются; свёрнутые — метками в шапке и числом на кнопке; помнится', async () => {
+    renderApp()
+    await ready()
+    const top = screen.getByRole('banner')
+    const button = within(top).getByRole('button', { name: 'Фильтры' })
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(within(side()).getByRole('button', { name: 'Andre AIT' }))
+    expect(within(top).queryByRole('button', { name: 'Снять фильтр: Без Andre AIT' })).toBeNull()
+    await userEvent.click(within(side()).getByRole('button', { name: 'Свернуть фильтры' }))
+    expect(screen.queryByRole('complementary', { name: 'Фильтры' })).toBeNull()
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button.querySelector('.cp-top__badge')).toHaveTextContent('1')
+    expect(within(top).getByRole('button', { name: 'Снять фильтр: Без Andre AIT' })).toBeInTheDocument()
+    expect(localStorage.getItem('cp:side')).toBe('false')
+    await userEvent.click(button)
+    expect(side()).toBeInTheDocument()
+    expect(within(side()).getByRole('button', { name: 'Andre AIT' })).toHaveAttribute('aria-pressed', 'false')
+    expect(localStorage.getItem('cp:side')).toBe('true')
   })
   it('каналы, площадки и хэштеги добавляются в панели слева и сразу фильтруются', async () => {
     renderApp()

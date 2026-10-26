@@ -3,9 +3,11 @@ import { shortDate, today } from '../model/dates'
 import { visible } from '../model/filters'
 import { planningSlots } from '../model/planning'
 import { shownTitle, tagOf, timeOf, type ISODate } from '../model/types'
+import { IconButton } from './bits'
 import { activeFilters, FilterChips } from './Sidebar'
-import { usePlan } from './ctx'
+import { usePlan, type Mode } from './ctx'
 import { Icon } from './Icon'
+import { useMedia } from './theme'
 
 // о сохранении шапка молчит, пока всё в порядке
 const SAVED: Record<string, string> = {
@@ -13,33 +15,41 @@ const SAVED: Record<string, string> = {
   error: 'Не сохранилось',
 }
 
-/** Шапка календаря: заголовок с датой и стрелки, справа — поиск и значок дашборда (открывается панелью справа).
- *  Вид и фильтры — в панели слева; на узком экране она за кнопкой «Фильтры». «+» — круглая кнопка справа внизу.
- *  Отмена — ⌘Z и кнопкой во всплывашке после правки. */
+/** Шапка календаря: «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки; справа — поиск,
+ *  вид календаря (время, каналы, площадки, темы) и значок дашборда в углу (открывается панелью справа).
+ *  «+» — круглая кнопка справа внизу. Отмена — ⌘Z и кнопкой во всплывашке после правки. */
 export function TopBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
   const ctx = usePlan()
-  const { plan, saved, toggleSide, sideOpen, narrow, phone, panel, openDashboard, show } = ctx
-  const n = narrow ? activeFilters(ctx).length : 0
+  const { plan, saved, toggleSide, sideOpen, phone, panel, openDashboard, show } = ctx
+  // фильтры свёрнуты — сколько включено, видно на кнопке и метками в шапке
+  const n = sideOpen ? 0 : activeFilters(ctx).length
   // за неделю календарь просит уточнить темы: точка на значке дашборда
   const need = useMemo(() => planningSlots(plan, today()).length, [plan])
   return (
     <header className="cp-top">
-      {narrow && (
-        <button type="button" className="nr-btn nr-btn--ghost nr-btn--icon cp-top__filter" aria-label="Фильтры" title="Вид и фильтры" aria-pressed={sideOpen} onClick={toggleSide}>
-          <Icon name="filter" size={20} />
-          {n > 0 && <span className="cp-top__badge" aria-hidden="true">{n}</span>}
-        </button>
-      )}
+      <button
+        type="button"
+        className="nr-btn nr-btn--ghost nr-btn--icon cp-top__filter"
+        aria-label="Фильтры"
+        title={sideOpen ? 'Свернуть фильтры' : 'Развернуть фильтры'}
+        aria-pressed={sideOpen}
+        aria-expanded={sideOpen}
+        onClick={toggleSide}
+      >
+        <Icon name="filter" size={20} />
+        {n > 0 && <span className="cp-top__badge" aria-hidden="true">{n}</span>}
+      </button>
       {typeof title === 'string' ? <h1 className="nr-title">{title}</h1> : title}
       {children}
       <span className="cp-top__spacer" />
-      {narrow && <FilterChips />}
+      {!sideOpen && <FilterChips />}
       {SAVED[saved] && (
         <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню профиля' : undefined}>
           {SAVED[saved]}
         </span>
       )}
       <Search />
+      <ViewSwitch />
       {!phone && (
         <button
           type="button"
@@ -57,6 +67,65 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
   )
 }
 
+const VIEWS: { id: Mode; label: string; icon: string; phone?: boolean }[] = [
+  { id: 'time', label: 'Время', icon: 'clock' },
+  { id: 'channels', label: 'Каналы', icon: 'channels' },
+  { id: 'platforms', label: 'Площадки', icon: 'platforms' },
+  { id: 'topics', label: 'Темы', icon: 'hash' },
+  { id: 'feed', label: 'Лента по дням', icon: 'list', phone: true },
+]
+
+/** Вид календаря — справа от поиска: иконка и подпись (если тесно — только иконка). Где совсем тесно — меню «Вид»,
+ *  на телефоне в нём ещё лента по дням. */
+function ViewSwitch() {
+  const { mode, setMode, phone } = usePlan()
+  const tight = useMedia('(max-width: 1100px)')
+  const [open, setOpen] = useState(false)
+  const list = VIEWS.filter((v) => !v.phone || phone)
+  if (!tight)
+    return (
+      <div className="nr-seg cp-views" role="radiogroup" aria-label="Вид календаря">
+        {list.map((v) => (
+          <button key={v.id} type="button" role="radio" aria-checked={mode === v.id} aria-label={v.label} title={v.label} className="nr-seg__item cp-views__item" onClick={() => setMode(v.id)}>
+            <Icon name={v.icon} size={16} />
+            <span className="cp-views__label" aria-hidden="true">{v.label}</span>
+          </button>
+        ))}
+      </div>
+    )
+  const cur = list.find((v) => v.id === mode) ?? list[0]
+  return (
+    <span className="cp-pop" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOpen(false)}>
+      <button type="button" className="nr-btn nr-btn--ghost nr-btn--icon" aria-label="Вид" title={`Вид: ${cur.label}`} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}>
+        <Icon name={cur.icon} size={20} />
+      </button>
+      {open && (
+        <span className="cp-pop__menu nr-glass" role="menu" aria-label="Вид календаря">
+          {list.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={mode === v.id}
+              className="cp-menu__item"
+              onClick={() => {
+                setMode(v.id)
+                setOpen(false)
+              }}
+            >
+              <span className="cp-views__row">
+                <Icon name={v.icon} size={18} />
+                {v.label}
+              </span>
+              {mode === v.id && <Icon name="check" size={14} />}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  )
+}
+
 const LIMIT = 30
 
 /** Поиск темы по всему плану, вверху: под полем — найденное по датам (и черновики); нажать — календарь на этой дате и материал открыт. */
@@ -64,6 +133,9 @@ function Search() {
   const { plan, filters, rules, rubrics, jumpTo, openItem } = usePlan()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
+  // где шапке тесно (и на телефоне) поиск — значком; нажали — поле поверх шапки
+  const compact = useMedia('(max-width: 1180px)')
+  const [shown, setShown] = useState(false)
   const query = q.trim().toLowerCase()
   const hits = useMemo(() => {
     if (query.length < 2) return []
@@ -77,15 +149,26 @@ function Search() {
     openItem(id)
     setQ('')
     setOpen(false)
+    setShown(false)
   }
+  if (compact && !shown) return <IconButton icon="search" label="Поиск" onClick={() => setShown(true)} />
   return (
-    <div className="cp-search" role="search" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOpen(false)}>
+    <div
+      className={`cp-search${compact ? ' cp-search--float' : ''}`}
+      role="search"
+      onBlur={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return
+        setOpen(false)
+        if (!q) setShown(false)
+      }}
+    >
       <Icon name="search" size={16} />
       <input
         className="cp-search__in"
         type="search"
         placeholder="Поиск темы"
         aria-label="Поиск по плану"
+        autoFocus={compact}
         value={q}
         onFocus={() => setOpen(true)}
         onChange={(e) => {
@@ -97,6 +180,7 @@ function Search() {
             e.stopPropagation()
             setQ('')
             setOpen(false)
+            setShown(false)
           }
           if (e.key === 'Enter' && hits[0]) pick(hits[0].id, hits[0].date)
         }}

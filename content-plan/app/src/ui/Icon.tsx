@@ -197,10 +197,8 @@ const P: Record<string, ReactElement> = {
   ),
   platforms: (
     <>
-      <rect x="4" y="4" width="6.5" height="6.5" rx="1.8" />
-      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" />
-      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" />
-      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
+      <path d="M12 3.8l8.5 4.4L12 12.6 3.5 8.2z" />
+      <path d="M3.5 12.2l8.5 4.4 8.5-4.4M3.5 16.2l8.5 4.4 8.5-4.4" />
     </>
   ),
   draft: (

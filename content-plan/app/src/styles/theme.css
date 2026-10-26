@@ -730,7 +730,6 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
   .cp-top .nr-title { font-size: var(--nr-fs-lg); }
   .cp-top > .nr-btn--primary { width: var(--nr-ctl-md); padding: 0; }
   .cp-top > .nr-btn--primary .cp-btn-text { display: none; }
-  .cp-top .cp-search { flex: 1 1 100px; width: auto; min-width: 0; } /* поиск — в той же строке, что и заголовок */
   .cp-plan__row { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 4px 6px 10px; }
   .cp-plan__ch { display: none; }
   .cp-plan__label { grid-column: 2; grid-row: 1; }
@@ -815,18 +814,14 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
   .cp-tabs .cp-avatar--sm { margin-bottom: 1px; }
 }
 
-/* ── панель слева: «Показать» (вид календаря, как фильтр) и фильтры с «+» ─── */
-.cp-modes { display: flex; flex-direction: column; gap: 1px; }
-.cp-mode .nr-icon { color: var(--nr-text-3); }
-.cp-mode[aria-checked='true'] { background: var(--nr-accent-soft); color: var(--nr-accent-text); }
-.cp-mode[aria-checked='true'] .nr-icon { color: var(--nr-accent); }
+/* ── фильтры слева: сворачиваются кнопкой «Фильтры», «+» у каналов, площадок и хэштегов ─── */
 .cp-side__label { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 2px 10px; }
 .cp-side__label .nr-label { padding: 0; }
 .cp-side__add { display: flex; gap: 6px; padding: 0 6px 6px; }
 .cp-side__add .nr-field { flex: 1; min-width: 0; }
 
 /* ── поиск вверху: поле и найденное под ним ─────────────────────────────── */
-.cp-search { position: relative; display: flex; align-items: center; gap: 6px; width: 240px; height: var(--nr-ctl-sm); padding: 0 10px;
+.cp-search { position: relative; display: flex; align-items: center; gap: 6px; flex: 0 1 240px; min-width: 130px; height: var(--nr-ctl-sm); padding: 0 10px;
   border-radius: var(--nr-r-full); background: var(--nr-fill-3); color: var(--nr-text-3); }
 .cp-search:focus-within { background: var(--nr-surface); box-shadow: inset 0 0 0 1px var(--nr-sep-strong); }
 .cp-search__in { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--nr-text); font: inherit; font-size: var(--nr-fs-md); }
@@ -898,8 +893,23 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-planrow__ok { color: var(--nr-success, var(--nr-accent)); display: inline-flex; }
 .cp-planrow--done .cp-planrow__in { color: var(--nr-text-2); }
 
+/* где шапке тесно (и на телефоне) поиск — значком, поле открывается поверх шапки справа */
+.cp-top { position: relative; }
+.cp-search--float { position: absolute; right: 12px; top: 50%; z-index: 6; transform: translateY(-50%); width: min(440px, calc(100% - 24px)); height: 40px; min-width: 0;
+  background: var(--nr-surface); box-shadow: inset 0 0 0 1px var(--nr-sep-strong), var(--nr-shadow-2); }
+.cp-search--float .cp-search__pop { left: 0; right: 0; width: auto; }
+
+/* вид календаря — справа от поиска: иконка и подпись; тесно — только иконка */
+.nr-main { container: main / inline-size; }
+.cp-views__item { display: inline-flex; align-items: center; gap: 6px; }
+.cp-views__item .nr-icon { flex: none; }
+.cp-views__row { display: inline-flex; align-items: center; gap: 10px; }
+@container main (max-width: 1200px) {
+  .cp-views__label { display: none; }
+  .cp-views__item { padding-left: 9px; padding-right: 9px; }
+}
+
 @media (max-width: 600px) {
-  .cp-search { width: auto; flex: 1 1 90px; }
   .cp-search__when { width: 64px; }
   .cp-sheet--dash .cp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

@@ -3,7 +3,7 @@ import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
 import { statusOf, tagOf } from '../model/types'
 import { ChannelDot, IconButton, StatusFilter, Switch } from './bits'
-import { usePlan, type Ctx, type Mode } from './ctx'
+import { usePlan, type Ctx } from './ctx'
 import { Icon } from './Icon'
 
 /** Фильтры по умолчанию: видно всё, и ежедневные авто-публикации тоже. */
@@ -56,14 +56,6 @@ export function FilterChips() {
   )
 }
 
-const MODES: { id: Mode; label: string; icon: string; phone?: boolean }[] = [
-  { id: 'time', label: 'Время', icon: 'clock' },
-  { id: 'channels', label: 'Каналы', icon: 'channels' },
-  { id: 'platforms', label: 'Площадки', icon: 'platforms' },
-  { id: 'topics', label: 'Темы', icon: 'hash' },
-  { id: 'feed', label: 'Лента по дням', icon: 'list', phone: true },
-]
-
 /** Поле «добавить» под заголовком блока: Enter — добавить, Esc — передумать. */
 function AddInline({ label, placeholder, onAdd, onDone }: { label: string; placeholder: string; onAdd: (v: string) => void; onDone: () => void }) {
   const [v, setV] = useState('')
@@ -102,49 +94,27 @@ function BlockHead({ label, add, adding, onAdd }: { label: string; add: string; 
   )
 }
 
-/** Панель слева — рядом с отделами, на большом экране всегда открыта: «Показать» (время, каналы, площадки, темы —
- *  выбирается как фильтр) и фильтры — каналы с разделами, площадки, хэштеги, статус. На узком экране — за кнопкой «Фильтры». */
-export function Sidebar({ onClose }: { onClose?: () => void }) {
-  const { plan, filters, setFilters, mode, setMode, phone, dispatch, toast } = usePlan()
+/** Фильтры — панелью слева, рядом с отделами: каналы с разделами, площадки, хэштеги, статус. Сворачивается и разворачивается
+ *  кнопкой «Фильтры» в шапке; на узком экране — поверх календаря. «+» у каналов, площадок и хэштегов — добавить новый. */
+export function Sidebar({ onClose }: { onClose: () => void }) {
+  const { plan, filters, setFilters, narrow, dispatch, toast } = usePlan()
   const [adding, setAdding] = useState<'channel' | 'platform' | 'tag' | null>(null)
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   const changed = activeFilters({ plan, filters, setFilters }).length > 0
   const open = (k: typeof adding) => setAdding(adding === k ? null : k)
   return (
-    <aside className="cp-side nr-scroll" aria-label="Вид и фильтры">
-      {onClose && (
-        <div className="cp-side__head">
-          <span className="cp-side__title">Вид и фильтры</span>
-          <IconButton icon="close" label="Закрыть фильтры" onClick={onClose} size="sm" />
-        </div>
-      )}
-      <div className="cp-side__block">
-        <span className="nr-label">Показать</span>
-        <div className="cp-modes" role="radiogroup" aria-label="Показать">
-          {MODES.filter((m) => !m.phone || phone).map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="radio"
-              aria-checked={mode === m.id}
-              className="nr-row cp-mode"
-              onClick={() => {
-                setMode(m.id)
-                onClose?.()
-              }}
-            >
-              <Icon name={m.icon} size={18} />
-              {m.label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <aside className="cp-side nr-scroll" aria-label="Фильтры">
       <div className="cp-side__head">
         <span className="cp-side__title">Фильтры</span>
         {changed && (
           <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setFilters(DEFAULT_FILTERS)}>
             Сбросить
           </button>
+        )}
+        {narrow ? (
+          <IconButton icon="close" label="Закрыть фильтры" onClick={onClose} size="sm" />
+        ) : (
+          <IconButton icon="chev-left" label="Свернуть фильтры" onClick={onClose} size="sm" />
         )}
       </div>
       <div className="cp-side__block">

@@ -180,8 +180,22 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)
   const narrow = useMedia('(max-width: 900px)')
   const phone = useMedia('(max-width: 600px)')
-  // вид и фильтры — панелью слева: на большом экране всегда открыта, на узком — за кнопкой «Фильтры», поверх
-  const [sideOpen, setSideOpen] = useState(false)
+  // фильтры — панелью слева, рядом с отделами: сворачиваются и разворачиваются кнопкой «Фильтры» (большой экран помнит как);
+  // на узком экране — поверх календаря и закрыты, пока не откроют
+  const [sideOpen, setSideState] = useState<boolean>(() => !narrow && readLS('cp:side', true))
+  const setSideOpen = (v: boolean | ((o: boolean) => boolean)) =>
+    setSideState((o) => {
+      const next = typeof v === 'function' ? v(o) : v
+      if (!narrow) writeLS('cp:side', next)
+      return next
+    })
+  // экран сузился — панель уходит под кнопку; расширился — как оставили
+  const wasNarrow = useRef(narrow)
+  useEffect(() => {
+    if (wasNarrow.current === narrow) return
+    wasNarrow.current = narrow
+    setSideState(narrow ? false : readLS('cp:side', true))
+  }, [narrow])
   const [menu, setMenu] = useState(false)
   const theme = useTheme()
 
@@ -382,7 +396,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           </nav>
         )}
         {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {(!narrow || sideOpen) && <Sidebar onClose={narrow ? () => setSideOpen(false) : undefined} />}
+        {sideOpen && <Sidebar onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
           {ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}

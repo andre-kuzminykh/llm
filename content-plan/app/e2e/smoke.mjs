@@ -1,5 +1,6 @@
 // T-CP-E1: реальный браузер против собранного приложения (npm run build && npm run preview).
-// Проверяет оболочку Neuronium (отделы, панель слева «Показать» и фильтры, дашборд — значок и панель справа, поиск вверху),
+// Проверяет оболочку Neuronium (отделы, фильтры слева — сворачиваются, вид календаря с иконками справа от поиска,
+// дашборд — значок в углу и панель справа, поиск вверху),
 // неделю по времени из nr_management (перенос указателем на час и день, край, лист рукой, «Поменять местами»),
 // дорожки и перенос в них, панель дня, ▶ и задачу, черновики во вкладке «+», периодичность хэштега и планирование недели,
 // хэштег с подсказками, «+» с версией по триггеру, «Как пользоваться», тёмную тему, сохранение и телефон.
@@ -25,7 +26,7 @@ page.on('pageerror', (e) => fail(`ошибка на странице: ${e.messag
 const cell = (d) => page.locator(`.cp-tg__col[data-date="${d}"]`)
 const toast = () => page.getByRole('status').filter({ has: page.locator('.cp-toast__msg') })
 const top = page.locator('.cp-top')
-const side = page.getByRole('complementary', { name: 'Вид и фильтры' })
+const side = page.getByRole('complementary', { name: 'Фильтры' })
 const jump = async (d) => {
   await page.getByLabel('Перейти к дате').fill(d)
   await page.waitForTimeout(900) // плавная прокрутка
@@ -38,7 +39,7 @@ const dragBy = async (loc, dx, dy) => {
   await page.mouse.up()
 }
 
-// оболочка: календарь сразу, слева — отделы и панель «Показать» + фильтры, справа вверху — поиск и дашборд
+// оболочка: календарь сразу, слева — отделы и фильтры, справа вверху — поиск, вид календаря и дашборд
 await page.goto(BASE)
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const nav = page.getByRole('navigation', { name: 'Отделы' })
@@ -47,12 +48,18 @@ check(
   'слева — десять отделов Neuronium, открыт SMM',
   'панель отделов не та',
 )
-const modes = side.getByRole('radiogroup', { name: 'Показать' })
+const modes = top.getByRole('radiogroup', { name: 'Вид календаря' })
 check(
   (await modes.getByRole('radio').allTextContents()).join('|') === 'Время|Каналы|Площадки|Темы' && (await modes.locator('svg').count()) === 4,
-  'панель слева всегда открыта: «Показать» — Время, Каналы, Площадки, Темы с иконками',
-  'нет панели «Показать» с иконками',
+  'вид календаря — Время, Каналы, Площадки, Темы с иконками',
+  'нет вида календаря с иконками',
 )
+const right = await page.evaluate(() => {
+  const x = (sel) => document.querySelector(`.cp-top ${sel}`)?.getBoundingClientRect()
+  const [s, v, d] = [x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]')]
+  return s && v && d && s.right <= v.left && v.right <= d.left && Math.abs(s.top - v.top) < 12 && d.right > window.innerWidth - 40
+})
+check(right, 'справа от поиска — вид календаря, в самом углу — дашборд, в одну строку', 'поиск, вид и дашборд стоят не так')
 check(
   !(await top.getByRole('radio', { name: 'Месяц' }).count()) && !(await page.getByRole('radiogroup', { name: /Сколько дней/ }).count()) && !(await page.getByRole('group', { name: 'Лента дней' }).count()),
   'нет «Месяца», «День · 3 дня · Неделя» и ленты дней',
@@ -62,6 +69,24 @@ check(!(await top.getByRole('button', { name: /Отменить/ }).count()), '�
 check(!(await side.getByText('Банк идей').count()), 'в фильтрах нет банка идей', 'банк идей в фильтрах')
 check(await top.getByRole('searchbox', { name: 'Поиск по плану' }).count(), 'поиск — вверху', 'нет поиска в шапке')
 await page.screenshot({ path: `${SHOTS}/1-week.png` })
+// фильтры сворачиваются и разворачиваются; свёрнутые — метками в шапке; помнится после перезагрузки
+await side.getByRole('button', { name: 'Neuronium', exact: true }).click()
+await side.getByRole('button', { name: 'Свернуть фильтры' }).click()
+const colW = (await page.locator('.cp-tg__col').first().boundingBox()).width
+check(
+  !(await side.count()) && (await top.getByRole('button', { name: 'Снять фильтр: Без Neuronium' }).count()) && (await top.locator('.cp-top__badge').textContent()) === '1',
+  'фильтры сворачиваются; включённые — меткой и числом на кнопке',
+  'фильтры не свернулись или не видно, что включено',
+)
+await page.screenshot({ path: `${SHOTS}/1b-collapsed.png` })
+await page.reload()
+await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
+check(!(await side.count()), 'свёрнутые фильтры помнятся после перезагрузки', 'фильтры снова развернулись')
+await top.getByRole('button', { name: 'Фильтры' }).click()
+await side.waitFor()
+const colW2 = (await page.locator('.cp-tg__col').first().boundingBox()).width
+check(colW > colW2, `без фильтров дни шире: ${Math.round(colW)} px против ${Math.round(colW2)} px`, 'ширина дней не поменялась')
+await side.getByRole('button', { name: 'Сбросить' }).click()
 
 // неделя по времени — календарь из nr_management: карточку берут и ведут указателем, тянут за край, лист тянут рукой
 await jump('2026-11-09')
@@ -321,7 +346,7 @@ await top.waitFor()
 await top.getByRole('searchbox', { name: 'Поиск по плану' }).fill('Агент продаж')
 check(await page.getByRole('region', { name: 'Найдено' }).getByRole('button', { name: /Агент продаж/ }).count(), 'правки пережили перезагрузку', 'правки потерялись')
 
-// телефон: внизу Дашборд, Календарь, Профиль; вид и фильтры — за кнопкой; лента по дням
+// телефон: внизу Дашборд, Календарь, Профиль; фильтры — за кнопкой; вид — меню, в нём лента по дням; поиск — значком
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 await phone.goto(BASE)
 await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
@@ -329,9 +354,16 @@ const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).get
 check(tabs.join('|') === 'ДашбордКалендарьПрофиль'.replace(/(?<=.)(?=[А-Я])/g, '|'), 'телефон: внизу Дашборд, Календарь, Профиль', `телефон: внизу ${tabs.join(', ')}`)
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка в одну строку', `телефон: шапка ${head?.height}px`)
-await phone.getByRole('button', { name: 'Фильтры' }).click()
-await phone.getByRole('radiogroup', { name: 'Показать' }).getByRole('radio', { name: 'Лента по дням' }).click()
+check(!(await phone.locator('.cp-side').count()), 'телефон: фильтры свёрнуты', 'телефон: фильтры открыты сами')
+await phone.getByRole('button', { name: 'Поиск', exact: true }).click()
+await phone.getByRole('searchbox', { name: 'Поиск по плану' }).fill('Landao')
+check(await phone.getByRole('region', { name: 'Найдено' }).count(), 'телефон: поиск значком, поле — поверх шапки', 'телефон: поиск не открылся')
+await phone.keyboard.press('Escape')
+await phone.getByRole('button', { name: 'Вид', exact: true }).click()
+await phone.getByRole('menuitemradio', { name: 'Лента по дням' }).click()
 await phone.getByRole('feed', { name: 'Лента по дням' }).waitFor()
+const head2 = await phone.locator('.cp-top').boundingBox()
+check(head2 && head2.height < 70, 'телефон: шапка ленты — в одну строку', `телефон: шапка ленты ${head2?.height}px`)
 check(!(await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), 'телефон: лента по дням без горизонтального скролла', 'на телефоне страница шире экрана')
 await phone.waitForTimeout(500)
 await phone.screenshot({ path: `${SHOTS}/13-phone.png` })

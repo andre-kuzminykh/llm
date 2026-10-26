@@ -40,7 +40,7 @@ describe('T-CP-020 FR-CP-020 дашборд — панелью справа: ч�
     const dash = await openDash()
     await userEvent.click(within(within(dash).getByRole('region', { name: 'Что делать' })).getByRole('radio', { name: 'В работе' }))
     expect(within(dash).getByText(/ничего не ждёт работы/)).toBeInTheDocument()
-    await userEvent.click(within(screen.getByRole('complementary', { name: 'Вид и фильтры' })).getByRole('button', { name: 'Сбросить' }))
+    await userEvent.click(within(screen.getByRole('complementary', { name: 'Фильтры' })).getByRole('button', { name: 'Сбросить' }))
     expect(within(within(dash).getByRole('region', { name: 'Что делать' })).getByRole('radio', { name: 'Все' })).toHaveAttribute('aria-checked', 'true')
   })
   it('хэштег в «Темах» показывает календарь только по этой теме', async () => {
@@ -50,7 +50,7 @@ describe('T-CP-020 FR-CP-020 дашборд — панелью справа: ч�
     expect(within(dataist).getByRole('button', { name: /^#демо/ })).toBeInTheDocument()
     await userEvent.click(within(dataist).getByRole('button', { name: /^#тезисы/ }))
     expect(screen.queryByRole('complementary', { name: 'Дашборд' })).toBeNull()
-    const side = screen.getByRole('complementary', { name: 'Вид и фильтры' })
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
     expect(within(side).getByRole('button', { name: '#тезисы' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(side).getByRole('button', { name: '#демо' })).toHaveAttribute('aria-pressed', 'false')
     expect(within(day('2026-10-26')).queryByRole('button', { name: /^Демо/ })).toBeNull()
