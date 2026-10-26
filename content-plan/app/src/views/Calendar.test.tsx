@@ -35,7 +35,7 @@ describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
     const full = within(panel).getByRole('button', { name: /^Демо · FULL: Стратегия, 12:00/ })
     expect(within(full).getByLabelText(/YouTube — FULL, Тизер · Shorts · Instagram — Тизер · Reels/)).toBeInTheDocument()
     expect(within(full).getByText('Тизер · Shorts')).toBeInTheDocument()
-    expect(within(full).getByText('Анонс · Кабинет')).toBeInTheDocument()
+    expect(within(full).getByText('Анонс · Офис')).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: /^Демо · Анонс от Andre AIT: Стратегия, 13:00/ })).toBeInTheDocument()
   })
   it('нарушение видно на дне', async () => {

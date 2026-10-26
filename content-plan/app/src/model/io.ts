@@ -1,6 +1,6 @@
 // Выгрузка и загрузка: JSON целиком и CSV-календарь в формате out/4_calendar.csv.
 import { addDays, MONTHS, WEEKDAYS, weekday } from './dates'
-import { lineOf, PLACEHOLDER, timeOf, type ISODate, type Item, type Plan, type Rule } from './types'
+import { formatOf, GRAY, isFormat, lineOf, PLACEHOLDER, timeOf, type ISODate, type Item, type Plan, type Rule } from './types'
 
 export const exportJSON = (plan: Plan) => JSON.stringify(plan)
 
@@ -136,9 +136,42 @@ export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
 
 /** Любая версия → текущая. Для старых нужен новый исходный план: из него берутся новые поля правил. */
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
-  if (isV1(p)) return migrateV1(p, await seed())
-  if (isV2(p)) return migrateV2(p, await seed())
-  return addStreams(p, seed)
+  if (isV1(p)) return renameAndFormats(migrateV1(p, await seed()))
+  if (isV2(p)) return renameAndFormats(migrateV2(p, await seed()))
+  return renameAndFormats(await addStreams(p, seed))
+}
+
+// Разделы Dataist теперь называются полностью и по умолчанию серые; «Кабинет» стал «Офисом Датаиста»
+const SECTION_NAMES: Record<string, string> = { Лаборатория: 'Лаборатория Датаиста', Академия: 'Академия Датаиста', Кабинет: 'Офис Датаиста' }
+
+/** План, сохранённый до новых названий разделов и четырёх форматов: переводится на них, правки не трогаются.
+ *  Уже переведённый план возвращается как есть. */
+export function renameAndFormats(p: Plan): Plan {
+  const oldSections = p.channels.some((c) => c.sections.some((s) => s.web in SECTION_NAMES))
+  const oldRules = p.rules.some((r) => !isFormat(r.format) || r.name === 'Анонс в Кабинете')
+  const oldItems = p.items.some((it) => !isFormat(it.format))
+  if (!oldSections && !oldRules && !oldItems) return p
+  return {
+    ...p,
+    channels: !oldSections
+      ? p.channels
+      : p.channels.map((c) => ({
+          ...c,
+          sections: c.sections.map((s) => (s.web in SECTION_NAMES ? { ...s, web: SECTION_NAMES[s.web], color: s.color ?? GRAY } : s)),
+        })),
+    rules: !oldRules
+      ? p.rules
+      : p.rules.map((r) => {
+          const office = r.name === 'Анонс в Кабинете'
+          return {
+            ...r,
+            format: formatOf(r.format, r.platforms),
+            name: office ? 'Анонс в Офисе' : r.name,
+            types: office && r.types.Web === 'Анонс · Кабинет' ? { ...r.types, Web: 'Анонс · Офис' } : r.types,
+          }
+        }),
+    items: !oldItems ? p.items : p.items.map((it) => (isFormat(it.format) ? it : { ...it, format: formatOf(it.format, it.platforms) })),
+  }
 }
 
 /** План, сохранённый до потоков 24/7: какие форматы — поток, берётся из исходного плана; остальные правки не трогаются. */

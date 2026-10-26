@@ -276,7 +276,7 @@ const day = page.getByRole('complementary', { name: /9 ноября 2026/ })
 await day.waitFor()
 await page.waitForTimeout(400) // лист выезжает 320 мс
 const full = day.getByRole('button', { name: /^Демо · FULL: Neuronium, 12:00/ })
-check((await full.getByText('Тизер · Shorts').count()) && (await full.getByText('Анонс · Кабинет').count()), 'панель дня: площадки и что на них выходит', 'в карточке нет типов контента')
+check((await full.getByText('Тизер · Shorts').count()) && (await full.getByText('Анонс · Офис').count()), 'панель дня: площадки и что на них выходит', 'в карточке нет типов контента')
 await page.screenshot({ path: `${SHOTS}/3-day.png` })
 
 // у карточки один значок статуса; ▶ — «в работе» и задача по созданию контента
@@ -296,6 +296,13 @@ await form.waitFor()
 check(!(await form.getByRole('button', { name: 'YouTube' }).count()), 'форма: тема и дата сверху, остальное — в «Подробнее»', 'форма показывает всё сразу')
 await form.getByRole('button', { name: 'Подробнее' }).click()
 check(await form.getByRole('button', { name: 'YouTube' }).count(), '«Подробнее» раскрывает площадки', 'нет площадок в «Подробнее»')
+const fmtSelect = form.getByRole('combobox', { name: /^Формат/ })
+check(
+  (await fmtSelect.locator('optgroup').evaluateAll((gs) => gs.map((g) => g.label).join('|'))) === 'Видео|Текст' &&
+    (await fmtSelect.inputValue()) === 'Полное горизонтальное видео',
+  'форма: формат — из четырёх в группах «Видео» и «Текст»; у FULL — полное горизонтальное видео',
+  `формат в форме не тот: ${await fmtSelect.inputValue()}`,
+)
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOTS}/5-editor.png` })
 await form.getByRole('button', { name: 'Отмена' }).click()
@@ -322,10 +329,22 @@ const dash = page.getByRole('complementary', { name: 'Дашборд' })
 await dash.waitFor()
 check((await dash.getByRole('region', { name: 'Что делать' }).count()) && (await page.getByRole('grid', { name: 'Неделя по времени' }).isVisible()), 'дашборд — панелью справа, календарь под ним', 'дашборд не панелью')
 await page.screenshot({ path: `${SHOTS}/8-dashboard.png` })
+// «Расписание» переворачивает дашборд: каналы → хэштеги → что и когда выходит, время подписью
+await dash.getByRole('radio', { name: 'Расписание' }).click()
+const schedDataist = dash.getByRole('region', { name: 'Расписание: Dataist' })
+check(
+  (await schedDataist.getByRole('group', { name: 'Dataist: #тезисы' }).getByRole('button').count()) >= 5 &&
+    (await dash.getByRole('region', { name: 'Расписание: Лаборатория Датаиста' }).count()) &&
+    !(await dash.getByRole('region', { name: 'Что делать' }).count()),
+  'дашборд → «Расписание»: каналы, в них хэштеги, по каждому — когда что выходит',
+  'нет расписания в дашборде',
+)
+await page.screenshot({ path: `${SHOTS}/8b-schedule.png` })
+await dash.getByRole('radio', { name: 'Сводка' }).click()
 const topics = dash.getByRole('region', { name: 'Темы' })
 check(
-  (await topics.getByRole('group', { name: 'Темы: Лаборатория' }).getByRole('button', { name: /^#исследования/ }).count()) &&
-    (await topics.getByRole('group', { name: 'Темы: Академия' }).count()),
+  (await topics.getByRole('group', { name: 'Темы: Лаборатория Датаиста' }).getByRole('button', { name: /^#исследования/ }).count()) &&
+    (await topics.getByRole('group', { name: 'Темы: Академия Датаиста' }).count()),
   'темы-хэштеги по каналам и разделам',
   'нет хэштегов разделов',
 )
@@ -390,9 +409,32 @@ await side.getByRole('textbox', { name: 'Новая площадка' }).fill('V
 await side.getByRole('textbox', { name: 'Новая площадка' }).press('Enter')
 check(await side.getByRole('button', { name: 'VK', exact: true }).count(), 'площадка добавляется в панели слева', 'площадка не добавилась')
 await page.keyboard.press('Control+z')
-await side.getByRole('button', { name: 'Лаборатория', exact: true }).click()
-check((await side.getByRole('button', { name: 'Лаборатория', exact: true }).getAttribute('aria-pressed')) === 'false', 'фильтр по разделу канала (Лаборатория)', 'разделы канала не фильтруются')
+await side.getByRole('button', { name: 'Лаборатория Датаиста', exact: true }).click()
+check((await side.getByRole('button', { name: 'Лаборатория Датаиста', exact: true }).getAttribute('aria-pressed')) === 'false', 'фильтр по разделу канала (Лаборатория Датаиста)', 'разделы канала не фильтруются')
 await side.getByRole('button', { name: 'Сбросить' }).click()
+
+// разделы Датаиста — полными названиями и серые; цвет канала меняется палитрой; у площадок — иконки
+const dotBg = (name) => side.getByRole('button', { name }).locator('.cp-colorpick__dot').evaluate((el) => getComputedStyle(el).backgroundColor)
+check(
+  (await side.getByRole('button', { name: 'Офис Датаиста', exact: true }).count()) && (await dotBg('Цвет: Академия Датаиста')) === 'rgb(142, 142, 147)',
+  'разделы: Лаборатория / Академия / Офис Датаиста — серые',
+  `разделы не те: ${await dotBg('Цвет: Академия Датаиста').catch(() => '—')}`,
+)
+const neuCard = () => page.locator('.cp-card').filter({ has: page.getByRole('button', { name: /^Новости: Все новости/ }) }).first()
+await side.getByRole('button', { name: 'Цвет: Neuronium' }).click()
+await side.getByRole('group', { name: 'Цвет: Neuronium' }).getByRole('button', { name: 'Зелёный' }).click()
+const recolored = await neuCard().evaluate((el) => el.style.getPropertyValue('--cp-c'))
+await side.getByRole('button', { name: 'Цвет: Neuronium' }).click()
+await side.getByRole('group', { name: 'Цвет: Neuronium' }).getByRole('button', { name: 'Фиолетовый' }).click()
+check(recolored === '#34c759', 'цвет канала меняется палитрой в фильтрах — карточки перекрашиваются', `цвет не сменился: ${recolored}`)
+const pills = side.locator('.cp-pills').first()
+check((await pills.locator('svg').count()) === (await pills.getByRole('button').count()), 'у площадок в фильтрах — иконки', 'у площадок нет иконок')
+const fmts = async (g) => (await side.getByRole('group', { name: g }).getByRole('button').allTextContents()).join('|')
+check(
+  (await fmts('Видео')) === 'Полное горизонтальное видео|Короткое вертикальное видео' && (await fmts('Текст')) === 'Страница на сайте|Текст с картинкой',
+  'форматы в фильтрах: Видео (полное горизонтальное, короткое вертикальное), Текст (страница на сайте, текст с картинкой)',
+  `форматы не те: ${await fmts('Видео')} / ${await fmts('Текст')}`,
+)
 
 // профиль: «Как пользоваться» и тёмная тема
 await page.getByRole('button', { name: 'Профиль' }).click()

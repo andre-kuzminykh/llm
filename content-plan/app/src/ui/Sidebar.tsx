@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
-import { statusOf, tagOf } from '../model/types'
-import { ChannelDot, IconButton, StatusFilter, Switch } from './bits'
+import { FORMATS, GRAY, statusOf, tagOf } from '../model/types'
+import { IconButton, PlatformIcon, StatusFilter, Switch } from './bits'
 import { usePlan, type Ctx } from './ctx'
 import { Icon } from './Icon'
 
@@ -22,6 +22,12 @@ export function activeFilters({ plan, filters: f, setFilters }: Pick<Ctx, 'plan'
     out.push({ id: 'sec', label: `Без ${names(f.hiddenSections.map((id) => sections.find((x) => x.id === id)?.web ?? id))}`, clear: () => set({ hiddenSections: [] }) })
   }
   if (f.hiddenPlatforms.length) out.push({ id: 'pl', label: `Без ${names(f.hiddenPlatforms)}`, clear: () => set({ hiddenPlatforms: [] }) })
+  if (f.hiddenFormats?.length)
+    out.push({
+      id: 'fm',
+      label: f.hiddenFormats.length === 1 ? `Скрыт формат: ${f.hiddenFormats[0].toLowerCase()}` : `Скрыто форматов: ${f.hiddenFormats.length}`,
+      clear: () => set({ hiddenFormats: [] }),
+    })
   if (f.hiddenRubrics.length)
     out.push({
       id: 'rb',
@@ -84,6 +90,76 @@ function AddInline({ label, placeholder, onAdd, onDone }: { label: string; place
   )
 }
 
+/** Цвета на выбор: серый — первым, им по умолчанию отмечены разделы. */
+const PALETTE: { color: string; name: string }[] = [
+  { color: GRAY, name: 'Серый' },
+  { color: '#7b2cbf', name: 'Фиолетовый' },
+  { color: '#1a56b8', name: 'Синий' },
+  { color: '#0a84ff', name: 'Голубой' },
+  { color: '#0b7a75', name: 'Бирюзовый' },
+  { color: '#34c759', name: 'Зелёный' },
+  { color: '#ff9f0a', name: 'Жёлтый' },
+  { color: '#d35400', name: 'Оранжевый' },
+  { color: '#ff375f', name: 'Красный' },
+  { color: '#c2185b', name: 'Малиновый' },
+  { color: '#5e5ce6', name: 'Индиго' },
+  { color: '#a2845e', name: 'Коричневый' },
+]
+
+/** Точка цвета у канала или раздела: нажали — палитра, выбрали — карточки перекрасились. Esc или щелчок мимо — закрыть. */
+function ColorPick({ label, color, onPick, reset }: { label: string; color: string; onPick: (c: string) => void; reset?: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  // щелчок мимо и Esc — на уровне документа: в Safari кнопки фокус не получают
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation() // панель фильтров на узком экране не закрывается
+      setOpen(false)
+    }
+    document.addEventListener('pointerdown', away)
+    window.addEventListener('keydown', esc, true)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      window.removeEventListener('keydown', esc, true)
+    }
+  }, [open])
+  const pick = (c: string) => {
+    onPick(c)
+    setOpen(false)
+  }
+  return (
+    <span ref={ref} className={`cp-colorpick${open ? ' cp-colorpick--open' : ''}`}>
+      <button type="button" className="cp-colorpick__btn" aria-label={label} aria-expanded={open} title="Сменить цвет" onClick={() => setOpen(!open)}>
+        <span className="cp-colorpick__dot" style={{ background: color }} />
+      </button>
+      {open && (
+        <span className="cp-colorpick__pop nr-panel" role="group" aria-label={label}>
+          {PALETTE.map((p) => (
+            <button
+              key={p.color}
+              type="button"
+              className="cp-colorpick__sw"
+              style={{ background: p.color }}
+              aria-label={p.name}
+              title={p.name}
+              aria-pressed={p.color.toLowerCase() === color.toLowerCase()}
+              onClick={() => pick(p.color)}
+            />
+          ))}
+          {reset && (
+            <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-colorpick__reset" onClick={() => (reset(), setOpen(false))}>
+              Как у канала
+            </button>
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
+
 /** Заголовок блока фильтров с «+»: каналы, площадки и хэштеги можно добавлять прямо здесь. */
 function BlockHead({ label, add, adding, onAdd }: { label: string; add: string; adding: boolean; onAdd: () => void }) {
   return (
@@ -132,31 +208,45 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
         )}
         {plan.channels.map((c) => {
           const off = filters.hiddenChannels.includes(c.id)
+          const setSection = (id: string, color?: string) =>
+            dispatch({ type: 'channel', id: c.id, patch: { sections: c.sections.map((s) => (s.id === id ? { ...s, color } : s)) } })
           return (
             <div key={c.id} className="cp-side__ch">
-              <button
-                type="button"
-                className="nr-row"
-                aria-pressed={!off}
-                onClick={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}
-              >
-                <ChannelDot color={c.color} />
-                {c.name}
-                {c.start > plan.start && <span className="cp-side__count">с {c.start.slice(8)}.{c.start.slice(5, 7)}</span>}
-              </button>
+              <div className={`cp-side__row${off ? ' cp-side__row--off' : ''}`}>
+                <ColorPick label={`Цвет: ${c.name}`} color={c.color} onPick={(color) => dispatch({ type: 'channel', id: c.id, patch: { color } })} />
+                <button
+                  type="button"
+                  className="nr-row"
+                  aria-pressed={!off}
+                  onClick={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}
+                >
+                  {c.name}
+                  {c.start > plan.start && <span className="cp-side__count">с {c.start.slice(8)}.{c.start.slice(5, 7)}</span>}
+                </button>
+              </div>
               {!off &&
-                c.sections.map((sec) => (
-                  <button
-                    key={sec.id}
-                    type="button"
-                    className="nr-row cp-side__sec"
-                    aria-pressed={!filters.hiddenSections?.includes(sec.id)}
-                    title={sec.name}
-                    onClick={() => setFilters({ ...filters, hiddenSections: toggle(filters.hiddenSections ?? [], sec.id) })}
-                  >
-                    {sec.web}
-                  </button>
-                ))}
+                c.sections.map((sec) => {
+                  const hidden = !!filters.hiddenSections?.includes(sec.id)
+                  return (
+                    <div key={sec.id} className={`cp-side__row cp-side__row--sec${hidden ? ' cp-side__row--off' : ''}`}>
+                      <ColorPick
+                        label={`Цвет: ${sec.web}`}
+                        color={sec.color ?? c.color}
+                        onPick={(color) => setSection(sec.id, color)}
+                        reset={sec.color ? () => setSection(sec.id, undefined) : undefined}
+                      />
+                      <button
+                        type="button"
+                        className="nr-row cp-side__sec"
+                        aria-pressed={!hidden}
+                        title={sec.name}
+                        onClick={() => setFilters({ ...filters, hiddenSections: toggle(filters.hiddenSections ?? [], sec.id) })}
+                      >
+                        {sec.web}
+                      </button>
+                    </div>
+                  )
+                })}
             </div>
           )
         })}
@@ -183,10 +273,30 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
               aria-pressed={!filters.hiddenPlatforms.includes(p)}
               onClick={() => setFilters({ ...filters, hiddenPlatforms: toggle(filters.hiddenPlatforms, p) })}
             >
+              <PlatformIcon platform={p} />
               {p}
             </button>
           ))}
         </div>
+      </div>
+      <div className="cp-side__block">
+        <span className="nr-label">Форматы</span>
+        {FORMATS.map((g) => (
+          <div key={g.group} className="cp-side__group" role="group" aria-label={g.group}>
+            <span className="cp-side__sub">{g.group}</span>
+            {g.items.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className="nr-row cp-side__sec"
+                aria-pressed={!filters.hiddenFormats?.includes(f)}
+                onClick={() => setFilters({ ...filters, hiddenFormats: toggle(filters.hiddenFormats ?? [], f) })}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        ))}
       </div>
       <div className="cp-side__block">
         <BlockHead label="Хэштеги" add="Добавить хэштег" adding={adding === 'tag'} onAdd={() => open('tag')} />

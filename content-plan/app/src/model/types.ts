@@ -10,13 +10,14 @@ export type ISODate = string // 'YYYY-MM-DD'
 export interface Section {
   id: string
   name: string // как в Telegram: «Dataist Lab»
-  web: string // как на сайте: «Лаборатория»
+  web: string // как на сайте и в плане: «Лаборатория Датаиста»
+  color?: string // свой цвет раздела; без него — цвет канала
 }
 
 export interface Channel {
   id: string
   name: string
-  color: string
+  color: string // цвет карточек; меняется в фильтрах
   start: ISODate
   platforms: string[]
   sections: Section[]
@@ -36,7 +37,7 @@ export interface Rule {
   sectionId?: string
   channel: string // где выходит: «YouTube Dataist», «Dataist Lab»
   what: string
-  format: string
+  format: string // один из FORMATS: «Полное горизонтальное видео», «Текст с картинкой»…
   platforms: string[]
   days: boolean[] // Пн..Вс
   dayNotes: string[] // уточнение к дню: «через нед.», «2-й чт»
@@ -126,6 +127,45 @@ export function lineOf(rubric: Rubric | undefined, rule: Rule | undefined, title
   return titleIsFormat(title, rule) ? label : `${label}: ${title}`
 }
 
+/** Форматы — какой это материал по виду. Что именно выходит на площадке (Reels, строка письма) — в типах правила. */
+export const FULL_VIDEO = 'Полное горизонтальное видео'
+export const SHORT_VIDEO = 'Короткое вертикальное видео'
+export const WEB_PAGE = 'Страница на сайте'
+export const TEXT_IMAGE = 'Текст с картинкой'
+export const FORMATS: { group: string; items: string[] }[] = [
+  { group: 'Видео', items: [FULL_VIDEO, SHORT_VIDEO] },
+  { group: 'Текст', items: [WEB_PAGE, TEXT_IMAGE] },
+]
+/** Коротко — в подписях дорожек и расписания и как название нового формата хэштега: «#кейсы · Текст с картинкой». */
+export const FORMAT_SHORT: Record<string, string> = { [FULL_VIDEO]: 'Полное видео', [SHORT_VIDEO]: 'Короткое видео', [WEB_PAGE]: 'Страница на сайте', [TEXT_IMAGE]: 'Текст с картинкой' }
+/** Где такой формат выходит, если канал там есть: полное видео — YouTube, страница — сайт… */
+export const FORMAT_PLATFORMS: Record<string, string[]> = {
+  [FULL_VIDEO]: ['YouTube'],
+  [SHORT_VIDEO]: ['YouTube', 'Instagram', 'TikTok'],
+  [WEB_PAGE]: ['Web'],
+  [TEXT_IMAGE]: ['Telegram'],
+}
+const FORMAT_NAMES = FORMATS.flatMap((g) => g.items)
+export const isFormat = (f: string) => FORMAT_NAMES.includes(f)
+/** Группа формата: «Видео» или «Текст». */
+export const formatGroup = (f: string) => FORMATS.find((g) => g.items.includes(f)) ?? FORMATS[1]
+
+/** Старый формат (FULL, Shorts, Пост, Урок, письмо…) → один из FORMATS; с сайтом — страница на сайте. */
+export function formatOf(old: string, platforms: string[]): string {
+  if (isFormat(old)) return old
+  if (old === 'FULL' || old === 'Видео') return FULL_VIDEO
+  if (/shorts|reels/i.test(old)) return SHORT_VIDEO
+  return platforms.includes('Web') ? WEB_PAGE : TEXT_IMAGE
+}
+
+/** Серый — цвет разделов по умолчанию; его же можно выбрать любому каналу. */
+export const GRAY = '#8e8e93'
+
+/** Цвет материала: свой цвет раздела, иначе цвет канала. */
+export function colorOf(channel: Channel | undefined, sectionId?: string) {
+  return channel?.sections.find((s) => s.id === sectionId)?.color ?? channel?.color
+}
+
 const DEFAULT_TYPES: Record<string, string> = {
   Web: 'Статья', YouTube: 'Видео', Instagram: 'Reels', TikTok: 'Видео', Threads: 'Пост', X: 'Пост', Telegram: 'Пост', LinkedIn: 'Пост', Mail: 'Письмо',
 }
@@ -135,7 +175,7 @@ export function typeOf(rule: Rule | undefined, platform: string) {
   const own = rule?.types?.[platform]
   if (own) return own
   if (platform === 'YouTube' && rule?.full) return 'FULL'
-  if (platform === 'YouTube' && rule?.format === 'Shorts') return 'Shorts'
+  if (platform === 'YouTube' && rule?.format === SHORT_VIDEO) return 'Shorts'
   return DEFAULT_TYPES[platform] ?? platform
 }
 

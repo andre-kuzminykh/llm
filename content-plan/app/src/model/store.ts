@@ -1,7 +1,7 @@
 // Все изменения плана — чистые функции Plan → Plan; reducer добавляет к ним историю
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
 import { addDays, daysBetween, fromMin, toMin, weekday } from './dates'
-import { isSlot, PLACEHOLDER, tagOf, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
+import { FORMAT_PLATFORMS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
 export const newId = (prefix = 'n') => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`
@@ -323,9 +323,19 @@ export const updateRule = (plan: Plan, id: string, patch: Partial<Rule>): Plan =
 })
 
 /** Новый формат хэштега в канале; без дней — разовый: периодичность задаётся потом. */
-export const addRule = (plan: Plan, rubricId: string | null, channelId: string, name: string, id = newId('r'), days?: boolean[], sectionId?: string): Plan => {
+export const addRule = (
+  plan: Plan,
+  rubricId: string | null,
+  channelId: string,
+  name: string,
+  id = newId('r'),
+  days?: boolean[],
+  sectionId?: string,
+  format = TEXT_IMAGE,
+): Plan => {
   const channel = plan.channels.find((c) => c.id === channelId)
   if (!channel || !name.trim() || plan.rules.some((r) => r.id === id)) return plan
+  const where = (FORMAT_PLATFORMS[format] ?? []).filter((p) => channel.platforms.includes(p))
   const rule: Rule = {
     id,
     ...(sectionId ? { sectionId } : {}),
@@ -334,8 +344,8 @@ export const addRule = (plan: Plan, rubricId: string | null, channelId: string, 
     channelId,
     channel: channel.name,
     what: '',
-    format: 'Пост',
-    platforms: channel.platforms.slice(0, 1),
+    format,
+    platforms: where.length ? where : channel.platforms.slice(0, 1),
     days: days ?? [true, true, true, true, true, false, true],
     dayNotes: ['', '', '', '', '', '', ''],
     freq: '',
@@ -404,7 +414,7 @@ export type Action =
   | { type: 'fillSlots'; ruleId: string; from: ISODate }
   | { type: 'createSlots'; ruleId: string; from: ISODate; to: ISODate }
   | { type: 'rule'; id: string; patch: Partial<Rule> }
-  | { type: 'addRule'; rubricId: string | null; channelId: string; name: string; id?: string; days?: boolean[]; sectionId?: string }
+  | { type: 'addRule'; rubricId: string | null; channelId: string; name: string; id?: string; days?: boolean[]; sectionId?: string; format?: string }
   | { type: 'rubric'; id: string; patch: Partial<Rubric> }
   | { type: 'addRubric'; name: string; what?: string; id?: string }
   | { type: 'channel'; id: string; patch: Partial<Channel> }
@@ -443,7 +453,7 @@ function apply(plan: Plan, a: Action): Plan {
     case 'fillSlots': return fillSlots(plan, a.ruleId, a.from)
     case 'createSlots': return createSlots(plan, a.ruleId, a.from, a.to)
     case 'rule': return updateRule(plan, a.id, a.patch)
-    case 'addRule': return addRule(plan, a.rubricId, a.channelId, a.name, a.id, a.days, a.sectionId)
+    case 'addRule': return addRule(plan, a.rubricId, a.channelId, a.name, a.id, a.days, a.sectionId, a.format)
     case 'rubric': return updateRubric(plan, a.id, a.patch)
     case 'addRubric': return addRubric(plan, a.name, a.what, a.id)
     case 'channel': return updateChannel(plan, a.id, a.patch)

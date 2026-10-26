@@ -133,7 +133,7 @@ describe('T-CP-033 FR-CP-033 подсказка при переносе — сл
     fireEvent.pointerMove(sheet(), { clientX: xOf('2026-10-26'), clientY: 400 + HOUR })
     expect(tip()).toHaveTextContent('Пн, 26 окт · 13:00')
     fireEvent.pointerMove(sheet(), { clientX: xOf('2026-10-28'), clientY: 400 })
-    expect(tip()).toHaveTextContent('Вместе с группой: Анонс в Кабинете, Тизер FULL, Анонс от Andre AIT')
+    expect(tip()).toHaveTextContent('Вместе с группой: Анонс в Офисе, Тизер FULL, Анонс от Andre AIT')
     expect(tip()).toHaveTextContent('По сетке Демо · FULL не выходит в Ср')
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(tip()).toBeNull()

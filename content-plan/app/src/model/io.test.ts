@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { loadSeed, smallPlan } from '../test/fixtures'
-import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, upgradePlan, type PlanV1, type PlanV2 } from './io'
+import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, renameAndFormats, upgradePlan, type PlanV1, type PlanV2 } from './io'
+import { FULL_VIDEO, GRAY, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Plan } from './types'
 
 describe('T-CP-013 FR-CP-013 выгрузка и загрузка', () => {
   it('CSV-календарь совпадает с out/4_calendar.csv генератора', () => {
@@ -78,5 +79,37 @@ describe('T-CP-026 FR-CP-026 поток 24/7', () => {
     expect(byId.get('sh_thesis')).toMatchObject({ stream: false, name: 'Тезис' })
     // уже знает о потоках — исходный план не нужен
     expect(await upgradePlan(p, async () => { throw new Error('не нужен') })).toBe(p)
+  })
+})
+
+describe('T-CP-035/036 FR-CP-035/036 разделы Датаиста и четыре формата', () => {
+  // план, сохранённый до новых названий: разделы «Лаборатория / Академия / Кабинет», форматы FULL, Shorts, Пост…
+  const old = (): Plan => {
+    const p = smallPlan()
+    p.channels[0].sections = [{ id: 'office', name: 'Dataist Office', web: 'Кабинет' }]
+    p.rules = p.rules.map((r) =>
+      r.id === 'office'
+        ? { ...r, name: 'Анонс в Кабинете', format: 'Пост', types: { ...r.types, Web: 'Анонс · Кабинет' } }
+        : { ...r, format: r.full ? 'FULL' : r.id.startsWith('sh_') ? 'Shorts' : 'Пост / письмо' },
+    )
+    p.items = p.items.map((it) => ({ ...it, format: it.ruleId.startsWith('sh_') ? 'Shorts' : it.ruleId === 'office' ? 'Пост' : 'FULL' }))
+    return p
+  }
+  it('старый план переводится: разделы называются полностью и серые, «Кабинет» — «Офис», форматы — из четырёх', () => {
+    const p = renameAndFormats(old())
+    expect(p.channels[0].sections[0]).toMatchObject({ web: 'Офис Датаиста', color: GRAY })
+    const rule = (id: string) => p.rules.find((r) => r.id === id)!
+    expect(rule('office')).toMatchObject({ name: 'Анонс в Офисе', format: WEB_PAGE, types: { Web: 'Анонс · Офис' } })
+    expect(rule('f_demo').format).toBe(FULL_VIDEO)
+    expect(rule('sh_thesis').format).toBe(SHORT_VIDEO)
+    expect(rule('ait').format).toBe(TEXT_IMAGE)
+    expect(new Set(p.items.map((it) => it.format))).toEqual(new Set([FULL_VIDEO, SHORT_VIDEO, WEB_PAGE]))
+  })
+  it('уже переведённый план не трогается; свой цвет раздела остаётся', () => {
+    const p = smallPlan()
+    expect(renameAndFormats(p)).toBe(p)
+    const o = old()
+    o.channels[0].sections[0].color = '#34c759'
+    expect(renameAndFormats(o).channels[0].sections[0].color).toBe('#34c759')
   })
 })

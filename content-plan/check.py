@@ -71,7 +71,7 @@ check('Площадки материала — только площадки е�
       [f"{it['date']} {it['ruleId']}: {p}" for it in ITEMS for p in it['platforms']
        if p not in CH[it['channelId']]['platforms'] or p not in RULES[it['ruleId']]['platforms']][:5])
 check('Andre AIT — только LinkedIn и почта', [p for it in ITEMS if it['channelId'] == 'andre' for p in it['platforms'] if p not in ('LinkedIn', 'Mail')][:5])
-check('Web — только Dataist, и всегда в своём разделе (Лаборатория, Академия, Кабинет)',
+check('Web — только Dataist, и всегда в своём разделе (Лаборатория, Академия, Офис Датаиста)',
       [f"{it['date']} {it['ruleId']}" for it in ITEMS if 'Web' in it['platforms'] and (it['channelId'] != 'dataist' or not it.get('sectionId'))][:5])
 check('Telegram Dataist — только Dataist Lab, Academy или Office',
       [f"{it['date']} {it['ruleId']}" for it in ITEMS if 'Telegram' in it['platforms'] and it['channelId'] == 'dataist' and not it.get('sectionId')][:5])
@@ -151,7 +151,7 @@ for d, its in BY_DAY.items():
     for rid, lim in (('office', 1), ('ait', 1), ('sh_razbor', 1), ('sh_thesis', 3 if d == SEED['start'] else 1)):
         if c[rid] > lim:
             bad.append(f'{d}: {rid} × {c[rid]}')
-check('Лимиты в день: анонс в Кабинете, Andre AIT, разбор — по одному; тезис — один (в первый день — три из исходника)', bad)
+check('Лимиты в день: анонс в Офисе, Andre AIT, разбор — по одному; тезис — один (в первый день — три из исходника)', bad)
 bad = []
 for it in ITEMS:
     r = RULES[it['ruleId']]
@@ -197,7 +197,7 @@ for it in FULLS:
                 bad.append(f"{it['date']} анонс FULL: {x['platforms']}, ждали {exp}")
         if x.get('derive') and x['title'] != it['title']:
             bad.append(f"{it['date']} {x['ruleId']}: тема «{x['title']}» ≠ «{it['title']}»")
-check('С каждым FULL: тизер (кроме Академии и Исследований), анонс в Кабинете и в X (кроме Академии); '
+check('С каждым FULL: тизер (кроме Академии и Исследований), анонс в Офисе и в X (кроме Академии); '
       'LinkedIn и письмо — только Вт–Чт; Andre AIT — с Демо; у тизера и анонсов та же тема', bad[:8])
 bad = []
 for it in ITEMS:

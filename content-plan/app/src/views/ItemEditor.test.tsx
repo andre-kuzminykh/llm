@@ -37,7 +37,8 @@ describe('T-CP-005 FR-CP-005 форма материала', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
     await pickTag(form, '#тезисы')
-    expect(within(form).getByRole('combobox', { name: 'Формат' })).toHaveDisplayValue('Тезис дня')
+    // формат — из четырёх: у #тезисы в Dataist это короткое вертикальное видео («Тезис дня»)
+    expect(within(form).getByRole('combobox', { name: 'Формат' })).toHaveDisplayValue('Короткое вертикальное видео')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'ИИ не заменит вас')
     const date = within(form).getByLabelText('Дата')
     await userEvent.clear(date)
@@ -124,16 +125,27 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
     expect(within(day('2026-10-31')).queryByRole('img', { name: /Нарушений/ })).toBeNull()
   })
-  it('общие форматы FULL предлагаются только рубрикам, у которых есть FULL', async () => {
+  it('формат — из четырёх в двух группах; общие форматы FULL достаются только рубрикам, у которых есть FULL', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
-    const formats = () => within(within(form).getByRole('combobox', { name: 'Формат' })).getAllByRole('option').map((o) => o.textContent)
+    const select = () => within(form).getByRole('combobox', { name: /^Формат/ })
+    expect(within(select()).getAllByRole('group').map((g) => g.getAttribute('label'))).toEqual(['Видео', 'Текст'])
+    expect(within(select()).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Полное горизонтальное видео',
+      'Короткое вертикальное видео',
+      'Страница на сайте',
+      'Текст с картинкой',
+    ])
+    // у #демо короткое видео — тизер FULL: формат уже есть, новым не заводится
     await pickTag(form, '#демо')
-    expect(formats()).toContain('Тизер FULL (с FULL)')
+    await userEvent.selectOptions(select(), 'Короткое вертикальное видео')
+    expect(within(form).queryByText('· новый')).toBeNull()
+    // у #тезисы FULL нет — страница на сайте для них новая, заведётся разовой
     await pickTag(form, '#тезисы')
-    expect(formats()).toEqual(['Тезис дня'])
+    await userEvent.selectOptions(select(), 'Страница на сайте')
+    expect(within(form).getByText('· новый')).toBeInTheDocument()
   })
 })
 

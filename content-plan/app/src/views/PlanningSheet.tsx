@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { dayTitle, shortDate, today } from '../model/dates'
 import { planningEnd, planningSlots } from '../model/planning'
 import { draftsFor } from '../model/store'
-import { isSlot, tagOf, timeOf, type Item } from '../model/types'
+import { colorOf, isSlot, tagOf, timeOf, type Item } from '../model/types'
 import { IconButton } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
@@ -72,7 +72,7 @@ function PlanRow({ item, draft }: { item: Item; draft?: Item }) {
     if (title && title !== item.title) dispatch({ type: 'update', id: item.id, patch: { title, source: 'вручную' } })
   }
   return (
-    <div className={`cp-planrow${done ? ' cp-planrow--done' : ''}`} style={{ '--cp-c': c?.color } as CSSProperties}>
+    <div className={`cp-planrow${done ? ' cp-planrow--done' : ''}`} style={{ '--cp-c': colorOf(c, item.sectionId) } as CSSProperties}>
       <span className="cp-planrow__time">{time}</span>
       <span className="cp-card__rub">
         {tag && <span className="cp-rub">{tag}</span>}

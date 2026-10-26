@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { Item, Plan, Rule } from '../model/types'
+import { FULL_VIDEO, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Item, type Plan, type Rule } from '../model/types'
 
 // тесты запускаются из content-plan/app
 export const seedPath = resolve(process.cwd(), 'public/seed.json')
@@ -10,7 +10,7 @@ const rule = (r: Partial<Rule> & Pick<Rule, 'id' | 'name' | 'rubricId'>): Rule =
   channelId: 'dataist',
   channel: 'Dataist',
   what: '',
-  format: 'Пост',
+  format: TEXT_IMAGE,
   platforms: ['X'],
   days: [true, true, true, true, true, false, true],
   dayNotes: ['', '', '', '', '', '', ''],
@@ -27,7 +27,7 @@ export const item = (i: Partial<Item> & Pick<Item, 'id' | 'ruleId' | 'title'>): 
   date: '2026-10-26',
   channelId: 'dataist',
   rubricId: 'demo',
-  format: 'Пост',
+  format: TEXT_IMAGE,
   platforms: ['X'],
   status: 'planned',
   source: 'исходный план',
@@ -44,7 +44,7 @@ export function smallPlan(): Plan {
     end: '2026-11-30',
     platforms: ['Web', 'YouTube', 'Instagram', 'Telegram', 'X', 'LinkedIn', 'Mail'],
     channels: [
-      { id: 'dataist', name: 'Dataist', color: '#1A56B8', start: '2026-10-25', platforms: ['Web', 'YouTube', 'Instagram', 'Telegram', 'X'], sections: [{ id: 'office', name: 'Dataist Office', web: 'Кабинет' }] },
+      { id: 'dataist', name: 'Dataist', color: '#1A56B8', start: '2026-10-25', platforms: ['Web', 'YouTube', 'Instagram', 'Telegram', 'X'], sections: [{ id: 'office', name: 'Dataist Office', web: 'Офис Датаиста', color: '#8e8e93' }] },
       { id: 'andre', name: 'Andre AIT', color: '#0B7A75', start: '2026-10-25', platforms: ['LinkedIn', 'Mail'], sections: [] },
       { id: 'landao', name: 'Landao', color: '#C2185B', start: '2026-11-02', platforms: ['Telegram'], sections: [] },
     ],
@@ -55,24 +55,24 @@ export function smallPlan(): Plan {
       { id: 'updates', name: 'Обновления', what: '' },
     ],
     rules: [
-      rule({ id: 'f_demo', rubricId: 'demo', name: 'FULL', format: 'FULL', platforms: ['YouTube'], days: [true, false, false, false, false, false, false], full: true, bank: true, types: { YouTube: 'FULL' } }),
-      rule({ id: 'f_tech', rubricId: 'tech', name: 'FULL', format: 'FULL', platforms: ['YouTube'], days: [false, true, false, false, false, false, false], full: true, bank: true, types: { YouTube: 'FULL' } }),
+      rule({ id: 'f_demo', rubricId: 'demo', name: 'FULL', format: FULL_VIDEO, platforms: ['YouTube'], days: [true, false, false, false, false, false, false], full: true, bank: true, types: { YouTube: 'FULL' } }),
+      rule({ id: 'f_tech', rubricId: 'tech', name: 'FULL', format: FULL_VIDEO, platforms: ['YouTube'], days: [false, true, false, false, false, false, false], full: true, bank: true, types: { YouTube: 'FULL' } }),
       rule({ id: 'ait', rubricId: 'demo', name: 'Анонс от Andre AIT', channelId: 'andre', platforms: ['LinkedIn', 'Mail'], time: '13:00', types: { LinkedIn: 'Пост', Mail: 'Письмо' } }),
-      rule({ id: 'sh_thesis', rubricId: 'thesis', name: 'Тезис дня', format: 'Shorts', platforms: ['YouTube'], bank: true, time: '11:00', types: { YouTube: 'Shorts' } }),
+      rule({ id: 'sh_thesis', rubricId: 'thesis', name: 'Тезис дня', format: SHORT_VIDEO, platforms: ['YouTube'], bank: true, time: '11:00', types: { YouTube: 'Shorts' } }),
       rule({ id: 'lan_upd', rubricId: 'updates', name: 'Пост', channelId: 'landao', platforms: ['Telegram'] }),
-      rule({ id: 'sh_teaser', rubricId: null, name: 'Тизер FULL', format: 'Shorts', platforms: ['YouTube', 'Instagram'], types: { YouTube: 'Тизер · Shorts', Instagram: 'Тизер · Reels' } }),
-      rule({ id: 'office', rubricId: null, name: 'Анонс в Кабинете', sectionId: 'office', platforms: ['Web', 'Telegram'], types: { Web: 'Анонс · Кабинет', Telegram: 'Анонс · Office' } }),
+      rule({ id: 'sh_teaser', rubricId: null, name: 'Тизер FULL', format: SHORT_VIDEO, platforms: ['YouTube', 'Instagram'], types: { YouTube: 'Тизер · Shorts', Instagram: 'Тизер · Reels' } }),
+      rule({ id: 'office', rubricId: null, name: 'Анонс в Офисе', format: WEB_PAGE, sectionId: 'office', platforms: ['Web', 'Telegram'], types: { Web: 'Анонс · Офис', Telegram: 'Анонс · Office' } }),
     ],
     items: [
-      item({ id: 'demo', ruleId: 'f_demo', title: 'Стратегия', format: 'FULL', platforms: ['YouTube'], group: g }),
-      item({ id: 'teaser', ruleId: 'sh_teaser', title: 'Стратегия', format: 'Shorts', platforms: ['YouTube', 'Instagram'], group: g, derive: '{title}', rank: 60 }),
-      item({ id: 'office', ruleId: 'office', sectionId: 'office', title: 'Стратегия', platforms: ['Web', 'Telegram'], group: g, derive: '{title}', rank: 30 }),
+      item({ id: 'demo', ruleId: 'f_demo', title: 'Стратегия', format: FULL_VIDEO, platforms: ['YouTube'], group: g }),
+      item({ id: 'teaser', ruleId: 'sh_teaser', title: 'Стратегия', format: SHORT_VIDEO, platforms: ['YouTube', 'Instagram'], group: g, derive: '{title}', rank: 60 }),
+      item({ id: 'office', ruleId: 'office', sectionId: 'office', title: 'Стратегия', format: WEB_PAGE, platforms: ['Web', 'Telegram'], group: g, derive: '{title}', rank: 30 }),
       item({ id: 'ait', ruleId: 'ait', channelId: 'andre', title: 'Стратегия', platforms: ['LinkedIn', 'Mail'], group: g, derive: '{title}' }),
-      item({ id: 'slot', date: '2026-11-02', ruleId: 'f_demo', title: '…', format: 'FULL', platforms: ['YouTube'], group: 'full-2026-11-02', source: 'нужна тема' }),
-      item({ id: 'slot-teaser', date: '2026-11-02', ruleId: 'sh_teaser', title: '…', format: 'Shorts', platforms: ['YouTube', 'Instagram'], group: 'full-2026-11-02', derive: '{title}', rank: 60, source: 'нужна тема' }),
-      item({ id: 'slot2', date: '2026-11-09', ruleId: 'f_demo', title: '…', format: 'FULL', platforms: ['YouTube'], group: 'full-2026-11-09', source: 'нужна тема' }),
-      item({ id: 'thesis', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'Я устал от хайпа вокруг ИИ', format: 'Shorts', platforms: ['YouTube'], rank: 20 }),
-      item({ id: 'th-slot', date: '2026-10-27', ruleId: 'sh_thesis', rubricId: 'thesis', title: '…', format: 'Shorts', platforms: ['YouTube'], rank: 20, source: 'нужна тема' }),
+      item({ id: 'slot', date: '2026-11-02', ruleId: 'f_demo', title: '…', format: FULL_VIDEO, platforms: ['YouTube'], group: 'full-2026-11-02', source: 'нужна тема' }),
+      item({ id: 'slot-teaser', date: '2026-11-02', ruleId: 'sh_teaser', title: '…', format: SHORT_VIDEO, platforms: ['YouTube', 'Instagram'], group: 'full-2026-11-02', derive: '{title}', rank: 60, source: 'нужна тема' }),
+      item({ id: 'slot2', date: '2026-11-09', ruleId: 'f_demo', title: '…', format: FULL_VIDEO, platforms: ['YouTube'], group: 'full-2026-11-09', source: 'нужна тема' }),
+      item({ id: 'thesis', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'Я устал от хайпа вокруг ИИ', format: SHORT_VIDEO, platforms: ['YouTube'], rank: 20 }),
+      item({ id: 'th-slot', date: '2026-10-27', ruleId: 'sh_thesis', rubricId: 'thesis', title: '…', format: SHORT_VIDEO, platforms: ['YouTube'], rank: 20, source: 'нужна тема' }),
     ],
   }
 }

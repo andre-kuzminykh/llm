@@ -3,15 +3,16 @@ import { isSlot, type ISODate, type Item, type Plan, type Status } from './types
 
 export interface Filters {
   hiddenChannels: string[]
-  hiddenSections?: string[] // разделы каналов: Лаборатория, Академия, Кабинет
+  hiddenSections?: string[] // разделы каналов: Лаборатория, Академия, Офис Датаиста
   hiddenRubrics: string[]
   hiddenPlatforms: string[]
+  hiddenFormats?: string[] // форматы: полное видео, короткое видео, страница на сайте, текст с картинкой
   onlySlots: boolean
   hideAuto: boolean // скрыть ежедневные авто-рубрики (по умолчанию видны)
   statuses: Status[] // показывать только эти статусы; пусто — все
 }
 
-export const NO_FILTERS: Filters = { hiddenChannels: [], hiddenSections: [], hiddenRubrics: [], hiddenPlatforms: [], onlySlots: false, hideAuto: false, statuses: [] }
+export const NO_FILTERS: Filters = { hiddenChannels: [], hiddenSections: [], hiddenRubrics: [], hiddenPlatforms: [], hiddenFormats: [], onlySlots: false, hideAuto: false, statuses: [] }
 
 /** Ежедневные форматы, которые выходят сами и почти не требуют внимания. */
 export const AUTO_RULES = new Set(['neu_all', 'neu_top', 'lab_day', 'lab_day_v', 'aca_lesson', 'sh_edu', 'tx_hack', 'ml_news'])
@@ -21,6 +22,7 @@ export function visible(it: Item, f: Filters) {
   if (it.sectionId && f.hiddenSections?.includes(it.sectionId)) return false
   if (it.rubricId && f.hiddenRubrics?.includes(it.rubricId)) return false
   if (f.hiddenPlatforms.length && !it.platforms.some((p) => !f.hiddenPlatforms.includes(p))) return false
+  if (f.hiddenFormats?.includes(it.format)) return false
   if (f.onlySlots && !isSlot(it)) return false
   if (f.hideAuto && AUTO_RULES.has(it.ruleId)) return false
   if (f.statuses?.length && !f.statuses.includes(it.status)) return false

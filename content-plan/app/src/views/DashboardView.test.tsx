@@ -98,7 +98,7 @@ describe('T-CP-031 FR-CP-031 периодичность хэштега и пла
     await userEvent.type(add, 'агенты')
     await userEvent.click(within(topics).getByRole('option', { name: 'Новый хэштег #агенты' }))
     const andre = within(topics).getByRole('group', { name: 'Темы: Andre AIT' })
-    expect(within(andre).getByRole('group', { name: 'Периодичность: #агенты · Пост' })).toBeInTheDocument()
+    expect(within(andre).getByRole('group', { name: 'Периодичность: #агенты · Текст с картинкой' })).toBeInTheDocument()
   })
 
   it('за неделю дашборд просит уточнить темы: вписать или взять ближайший черновик того же хэштега', async () => {
@@ -149,5 +149,38 @@ describe('T-CP-022 FR-CP-022 черновики — банк идей во вк�
     expect(within(col).getByRole('button', { name: 'Вернуть в черновики: ИИ-бухгалтер' })).toBeInTheDocument()
     await userEvent.click(within(drafts).getByRole('tab', { name: 'Новый контент' }))
     expect(screen.getByRole('complementary', { name: 'Новый контент' })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-037 FR-CP-037 расписание в дашборде', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-24T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('«Расписание» переворачивает дашборд: каналы → хэштеги → когда что выходит; щелчок открывает материал', async () => {
+    renderApp()
+    const dash = await openDash()
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Расписание' }))
+    expect(within(dash).queryByRole('heading', { name: 'Что делать' })).toBeNull()
+    const dataist = within(dash).getByRole('region', { name: 'Расписание: Dataist' })
+    const demo = within(dataist).getByRole('group', { name: 'Dataist: #демо' })
+    expect(within(demo).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Пн, 26 окт, 12:00: Стратегия',
+      'Пн, 2 ноя, 12:00: Нужна тема',
+    ])
+    expect(within(dash).getByRole('region', { name: 'Расписание: Andre AIT' })).toBeInTheDocument()
+    // неделя вместо двух: 2 ноября уже не попадает
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Неделя' }))
+    expect(within(within(dash).getByRole('group', { name: 'Dataist: #демо' })).getAllByRole('button')).toHaveLength(1)
+    await userEvent.click(within(dash).getByRole('button', { name: 'Пн, 26 окт, 12:00: Стратегия' }))
+    const sheet = screen.getByRole('complementary', { name: 'Материал' })
+    expect(within(sheet).getByRole('textbox', { name: 'Тема' })).toHaveValue('Стратегия')
+    // «Назад» — к расписанию, а не к сводке
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Назад' }))
+    expect(within(screen.getByRole('complementary', { name: 'Дашборд' })).getByRole('radio', { name: 'Расписание' })).toHaveAttribute('aria-checked', 'true')
   })
 })

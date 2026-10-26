@@ -41,8 +41,10 @@ MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', '�
 
 # Порядок заголовков внутри ячейки календаря
 HEADERS = ['Neuronium', 'Dataist', 'Dataist Lab', 'Dataist Academy', 'Dataist Office',
-           'Лаборатория', 'Академия', 'Кабинет', 'Andre AIT', 'Landao', 'Antropolis']
-WEB_SECTIONS = {'Lab': 'Лаборатория', 'Academy': 'Академия', 'Office': 'Кабинет'}
+           'Лаборатория Датаиста', 'Академия Датаиста', 'Офис Датаиста', 'Andre AIT', 'Landao', 'Antropolis']
+# Разделы Dataist на сайте и в плане (в исходнике — «Лаборатория», «Академия», «Кабинет»)
+WEB_SECTIONS = {'Lab': 'Лаборатория Датаиста', 'Academy': 'Академия Датаиста', 'Office': 'Офис Датаиста'}
+SECTION_COLOR = '#8e8e93'  # разделы — серые; цвет меняют в приложении
 BRAND_COLORS = {'Neuronium': '#7B2CBF', 'Dataist': '#1A56B8', 'Andre AIT': '#0B7A75',
                 'Landao': '#C2185B', 'Antropolis': '#D35400'}
 
@@ -202,8 +204,8 @@ rubric('ant_launch', 'launch', 'Запуск Antropolis', 'Antropolis', 'Antropo
 rubric('sh_teaser', None, 'Тизер FULL', 'Dataist', 'Shorts', 'Вертикальный тизер FULL-видео дня', 'Shorts',
        'YouTube, Instagram, TikTok', _days('●', '●', '●', 'Мысли', '●', '', 'спецпроекты'),
        'в дни FULL, кроме Академии и Исследований', S0, 'FULL дня')
-rubric('office', None, 'Анонс в Кабинете', 'Dataist', 'Dataist Office',
-       'Текстовая версия / анонс FULL-видео дня (кроме Академии)', 'Пост', 'Web (Кабинет), Telegram',
+rubric('office', None, 'Анонс в Офисе', 'Dataist', 'Dataist Office',
+       'Текстовая версия / анонс FULL-видео дня (кроме Академии)', 'Пост', 'Web (Офис), Telegram',
        _days('●', '●', '●', '●', '●', '', 'спецпроекты'), 'в дни FULL', S0, 'FULL дня',
        hint={SUN: ' (если спецпроект)', WED: ' (если Разработка)', THU: ' (если FULL)'})
 rubric('an_full', None, 'Анонс в X / LinkedIn / письме', 'Dataist', 'X / LinkedIn / Mail',
@@ -252,7 +254,7 @@ META = {
     'lan_launch': ('10:00', {'Telegram': 'Пост'}),
     'ant_launch': ('10:00', {'Telegram': 'Пост', 'Mail': 'Строка письма'}),
     'sh_teaser': ('12:00', {'YouTube': 'Тизер · Shorts', 'Instagram': 'Тизер · Reels', 'TikTok': 'Тизер'}),
-    'office': ('12:00', {'Web': 'Анонс · Кабинет', 'Telegram': 'Анонс · Office'}),
+    'office': ('12:00', {'Web': 'Анонс · Офис', 'Telegram': 'Анонс · Office'}),
     'an_full': ('12:00', {'X': 'Анонс', 'LinkedIn': 'Анонс', 'Mail': 'Анонс в письме'}),
     'neu_x': ('12:30', {'Telegram': 'Кросс-пост'}),
     'lan_x': ('12:30', {'Telegram': 'Кросс-пост', 'Instagram': 'Reels', 'TikTok': 'Видео'}),
@@ -958,6 +960,20 @@ APP_SEED = ROOT / 'app' / 'public' / 'seed.json'
 CHANNEL_IDS = {'Neuronium': 'neuronium', 'Dataist': 'dataist', 'Andre AIT': 'andre',
                'Landao': 'landao', 'Antropolis': 'antropolis'}
 SECTION_IDS = {'Lab': 'lab', 'Academy': 'academy', 'Office': 'office'}
+# Форматы в приложении: видео — полное горизонтальное и короткое вертикальное, текст — страница на сайте
+# и текст с картинкой. Что именно выходит на площадке (Reels, строка письма) — в типах правила.
+FULL_VIDEO, SHORT_VIDEO = 'Полное горизонтальное видео', 'Короткое вертикальное видео'
+WEB_PAGE, TEXT_IMAGE = 'Страница на сайте', 'Текст с картинкой'
+
+
+def app_format(fmt, platforms):
+    if fmt in ('FULL', 'Видео'):
+        return FULL_VIDEO
+    if 'shorts' in fmt.lower() or 'reels' in fmt.lower():
+        return SHORT_VIDEO
+    return WEB_PAGE if 'Web' in platforms else TEXT_IMAGE
+
+
 # Форматы с банком тем в приложении: темы к ним придумывают заранее
 BANK = {'f_demo', 'f_tech', 'f_case', 'f_dev', 'f_res', 'f_think', 'f_aca', 'sh_thesis', 'sh_razbor', 'sh_life'}
 
@@ -968,9 +984,8 @@ def write_seed():
         dict(id='neuronium', name='Neuronium', start=START, platforms=['Telegram', 'YouTube'],
              sections=[]),
         dict(id='dataist', name='Dataist', start=START, platforms=PLATFORMS,
-             sections=[dict(id='lab', name='Dataist Lab', web='Лаборатория'),
-                       dict(id='academy', name='Dataist Academy', web='Академия'),
-                       dict(id='office', name='Dataist Office', web='Кабинет')]),
+             sections=[dict(id=SECTION_IDS[k], name=f'Dataist {k}', web=v, color=SECTION_COLOR)
+                       for k, v in WEB_SECTIONS.items()]),
         dict(id='andre', name='Andre AIT', start=START, platforms=['LinkedIn', 'Mail'], sections=[]),
         dict(id='landao', name='Landao', start=LANDAO_START,
              platforms=['Telegram', 'Instagram', 'TikTok'], sections=[]),
@@ -986,11 +1001,12 @@ def write_seed():
         r = RUBRICS[rid]
         names = [re.sub(r'\s*\(.*?\)', '', t).strip() for t in r['platforms'].split(',')]
         rule = dict(id=rid, rubricId=r['cat'], name=r['fmt_name'], channelId=CHANNEL_IDS[r['brand']],
-                    channel=r['channel'], what=r['what'], format=r['fmt'],
+                    channel=r['channel'], what=r['what'],
                     platforms=[p for p in PLATFORMS if p in names], days=[bool(c) for c in r['days']],
                     dayNotes=['' if c == '●' else c for c in r['days']], freq=r['freq'],
                     source=r['source'], full=r['fmt'] == 'FULL', limit=1, time=META[rid][0],
                     types={p: META[rid][1][p] for p in PLATFORMS if p in META[rid][1]}, stream=rid in STREAM)
+        rule['format'] = app_format(r['fmt'], rule['platforms'])
         if rid in BANK:
             rule['bank'] = True
         section = next((u.section for u in UNITS if u.rubric == rid and u.brand == r['brand']), None)
@@ -1000,7 +1016,7 @@ def write_seed():
     items = []
     for n, u in enumerate(UNITS, 1):
         it = dict(id=f'i{n}', date=u.day.isoformat(), channelId=CHANNEL_IDS[u.brand], ruleId=u.rubric,
-                  rubricId=cat_of(u), title=u.text, format=u.fmt, platforms=list(u.platforms),
+                  rubricId=cat_of(u), title=u.text, format=app_format(u.fmt, u.platforms), platforms=list(u.platforms),
                   status='planned', source=u.source, rank=u.rank)
         if u.section:
             it['sectionId'] = SECTION_IDS[u.section]

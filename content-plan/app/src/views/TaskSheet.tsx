@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { shortDate, WEEKDAYS, weekday } from '../model/dates'
-import { isSlot, timeOf, titleIsFormat, type Item } from '../model/types'
+import { colorOf, isSlot, timeOf, titleIsFormat, type Item } from '../model/types'
 import { dueOf, leadOf, taskParts, unitsOf, type Unit } from '../model/units'
 import { IconButton, mainChannelId, PickText, PlatformIcon, RubricChip, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
@@ -55,7 +55,7 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
   const day = (d: string) => `${WEEKDAYS[weekday(d)]}, ${shortDate(d)}`
 
   return (
-    <aside className="cp-sheet cp-task" aria-label="Задача" style={{ '--cp-c': channel?.color } as CSSProperties}>
+    <aside className="cp-sheet cp-task" aria-label="Задача" style={{ '--cp-c': colorOf(channel, head.sectionId) } as CSSProperties}>
       <div className="cp-sheet__head">
         {onBack && <IconButton icon="chev-left" label="Назад" onClick={onBack} size="sm" />}
         <input

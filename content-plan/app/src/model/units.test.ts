@@ -6,7 +6,7 @@ import { dueOf, platformTypes, taskParts, timeText, unitsOf } from './units'
 const rulesOf = (p = smallPlan()) => new Map(p.rules.map((r) => [r.id, r]))
 
 describe('T-CP-017 FR-CP-017 карточка — материал целиком', () => {
-  it('FULL с тизером и анонсом в Кабинете — одна карточка Dataist, анонс Andre AIT — своя', () => {
+  it('FULL с тизером и анонсом в Офисе — одна карточка Dataist, анонс Andre AIT — своя', () => {
     const p = smallPlan()
     const units = unitsOf(indexByDate(p).get('2026-10-26')!, rulesOf(p), p.channels.map((c) => c.id))
     const full = units.find((u) => u.head.id === 'demo')!
@@ -19,7 +19,7 @@ describe('T-CP-017 FR-CP-017 карточка — материал целико�
     const full = unitsOf(indexByDate(p).get('2026-10-26')!, rulesOf(p)).find((u) => u.head.id === 'demo')!
     const types = platformTypes(full, rulesOf(p), p.platforms).map((x) => [x.platform, x.parts.map((y) => y.type)])
     expect(types).toEqual([
-      ['Web', ['Анонс · Кабинет']],
+      ['Web', ['Анонс · Офис']],
       ['YouTube', ['FULL', 'Тизер · Shorts']],
       ['Instagram', ['Тизер · Reels']],
       ['Telegram', ['Анонс · Office']],

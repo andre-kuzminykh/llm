@@ -1,0 +1,63 @@
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { renderApp } from '../test/renderApp'
+
+const side = () => screen.getByRole('complementary', { name: 'Фильтры' })
+const day = (date: string) => document.querySelector(`.cp-tg__col[data-date="${date}"]`) as HTMLElement
+const card = (date: string, name: RegExp) => within(day(date)).getByRole('button', { name }).closest('.cp-card') as HTMLElement
+const colorOf = (el: HTMLElement) => el.style.getPropertyValue('--cp-c').toLowerCase()
+
+describe('T-CP-035 FR-CP-035 разделы Датаиста, цвета и иконки площадок', () => {
+  it('раздел назван полностью и серый; цвет канала и раздела меняется в фильтрах, «Как у канала» — вернуть', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    expect(within(side()).getByRole('button', { name: 'Офис Датаиста' })).toBeInTheDocument()
+    expect(colorOf(card('2026-10-26', /^Демо · FULL: Стратегия/))).toBe('#1a56b8')
+
+    await userEvent.click(within(side()).getByRole('button', { name: 'Цвет: Dataist' }))
+    await userEvent.click(within(within(side()).getByRole('group', { name: 'Цвет: Dataist' })).getByRole('button', { name: 'Серый' }))
+    expect(within(side()).queryByRole('group', { name: 'Цвет: Dataist' })).toBeNull()
+    expect(colorOf(card('2026-10-26', /^Демо · FULL: Стратегия/))).toBe('#8e8e93')
+
+    await userEvent.click(within(side()).getByRole('button', { name: 'Цвет: Офис Датаиста' }))
+    const pop = within(side()).getByRole('group', { name: 'Цвет: Офис Датаиста' })
+    expect(within(pop).getByRole('button', { name: 'Серый' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(pop).getByRole('button', { name: 'Зелёный' }))
+    await userEvent.click(within(side()).getByRole('button', { name: 'Цвет: Офис Датаиста' }))
+    await userEvent.click(within(side()).getByRole('button', { name: 'Как у канала' }))
+    await userEvent.click(within(side()).getByRole('button', { name: 'Цвет: Офис Датаиста' }))
+    // своего цвета у раздела нет — он как у канала (серый, его только что выбрали)
+    expect(within(within(side()).getByRole('group', { name: 'Цвет: Офис Датаиста' })).queryByRole('button', { name: 'Как у канала' })).toBeNull()
+    await userEvent.keyboard('{Escape}')
+    expect(within(side()).queryByRole('group', { name: 'Цвет: Офис Датаиста' })).toBeNull()
+    expect(screen.getByRole('complementary', { name: 'Фильтры' })).toBeInTheDocument()
+    // щелчок мимо закрывает палитру
+    await userEvent.click(within(side()).getByRole('button', { name: 'Цвет: Dataist' }))
+    await userEvent.click(within(side()).getByText('Каналы'))
+    expect(within(side()).queryByRole('group', { name: 'Цвет: Dataist' })).toBeNull()
+  })
+  it('у площадок — иконки', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    const yt = within(side()).getByRole('button', { name: /YouTube/ })
+    expect(yt.querySelector('svg')).not.toBeNull()
+  })
+})
+
+describe('T-CP-036 FR-CP-036 четыре формата: видео и текст', () => {
+  it('в фильтрах — «Видео» и «Текст»; скрыли формат — карточки пропали, метка снимает', async () => {
+    renderApp(undefined, { 'cp:side': 'false' })
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Фильтры' }))
+    const video = within(side()).getByRole('group', { name: 'Видео' })
+    expect(within(video).getAllByRole('button').map((b) => b.textContent)).toEqual(['Полное горизонтальное видео', 'Короткое вертикальное видео'])
+    const text = within(side()).getByRole('group', { name: 'Текст' })
+    expect(within(text).getAllByRole('button').map((b) => b.textContent)).toEqual(['Страница на сайте', 'Текст с картинкой'])
+    expect(within(day('2026-10-26')).getByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeInTheDocument()
+    await userEvent.click(within(video).getByRole('button', { name: 'Короткое вертикальное видео' }))
+    expect(within(day('2026-10-26')).queryByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeNull()
+    await userEvent.click(within(side()).getByRole('button', { name: 'Свернуть фильтры' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Снять фильтр: Скрыт формат: короткое вертикальное видео' }))
+    expect(within(day('2026-10-26')).getByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeInTheDocument()
+  })
+})

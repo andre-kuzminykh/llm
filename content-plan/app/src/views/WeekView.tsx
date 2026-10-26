@@ -4,7 +4,7 @@ import {
 } from '../model/calendar'
 import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
 import { whereText } from '../model/hint'
-import { shownTitle, tagOf, type ISODate, type Item, type Plan } from '../model/types'
+import { FORMAT_SHORT, FULL_VIDEO, SHORT_VIDEO, shownTitle, tagOf, type ISODate, type Item, type Plan } from '../model/types'
 import { platformTypes, type Unit } from '../model/units'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan, type Mode } from '../ui/ctx'
@@ -32,17 +32,19 @@ export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
       continue
     }
     const inSection = (it: Item) => !!it.sectionId && c.sections.some((s) => s.id === it.sectionId)
-    out.push({ id: `${c.id}:full`, label: `${c.name} · FULL`, color: c.color, channelId: c.id, match: (it) => it.channelId === c.id && it.format === 'FULL' })
-    out.push({ id: `${c.id}:shorts`, label: `${c.name} · Shorts`, color: c.color, channelId: c.id, match: (it) => it.channelId === c.id && it.format === 'Shorts' })
+    const video = (it: Item) => it.format === FULL_VIDEO || it.format === SHORT_VIDEO
+    out.push({ id: `${c.id}:full`, label: `${c.name} · ${FORMAT_SHORT[FULL_VIDEO].toLowerCase()}`, color: c.color, channelId: c.id, match: (it) => it.channelId === c.id && it.format === FULL_VIDEO })
+    out.push({ id: `${c.id}:shorts`, label: `${c.name} · ${FORMAT_SHORT[SHORT_VIDEO].toLowerCase()}`, color: c.color, channelId: c.id, match: (it) => it.channelId === c.id && it.format === SHORT_VIDEO })
+    // раздел назван полностью («Лаборатория Датаиста») — канал в подписи не повторяется
     for (const s of c.sections) {
-      out.push({ id: `${c.id}:${s.id}`, label: `${c.name} · ${s.web}`, color: c.color, channelId: c.id, sectionId: s.id, match: (it) => it.channelId === c.id && it.sectionId === s.id })
+      out.push({ id: `${c.id}:${s.id}`, label: s.web, color: s.color ?? c.color, channelId: c.id, sectionId: s.id, match: (it) => it.channelId === c.id && it.sectionId === s.id })
     }
     out.push({
       id: `${c.id}:text`,
       label: `${c.name} · тексты и письма`,
       color: c.color,
       channelId: c.id,
-      match: (it) => it.channelId === c.id && it.format !== 'FULL' && it.format !== 'Shorts' && !inSection(it),
+      match: (it) => it.channelId === c.id && !video(it) && !inSection(it),
     })
   }
   return out

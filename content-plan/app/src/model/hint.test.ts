@@ -17,7 +17,7 @@ describe('T-CP-033 подсказка при переносе', () => {
     const p = smallPlan()
     p.items.push({ ...byId(p, 'demo'), id: 'tech', ruleId: 'f_tech', rubricId: 'tech', title: 'ИИ-агенты', group: undefined, date: '2026-10-27' })
     const lines = hint([{ id: 'demo', date: '2026-10-27' }], p)
-    expect(lines[0]).toEqual({ text: 'Вместе с группой: Анонс в Кабинете, Тизер FULL, Анонс от Andre AIT' })
+    expect(lines[0]).toEqual({ text: 'Вместе с группой: Анонс в Офисе, Тизер FULL, Анонс от Andre AIT' })
     expect(lines.some((l) => l.warn && l.text === 'Здесь уже FULL: Технологии · FULL «ИИ-агенты» — после переноса можно поменять местами')).toBe(true)
     // два FULL — одно событие: про «не тот день» у этой же группы отдельно не пишем
     expect(lines.some((l) => l.text.startsWith('По сетке'))).toBe(false)

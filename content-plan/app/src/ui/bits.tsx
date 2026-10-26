@@ -2,7 +2,7 @@
 import { useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from 'react'
 import { addDays, daysBetween } from '../model/dates'
 import { whereText } from '../model/hint'
-import { isSlot, shownTitle, STATUSES, statusOf, tagOf, titleIsFormat, type Plan, type Status } from '../model/types'
+import { colorOf, isSlot, shownTitle, STATUSES, statusOf, tagOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { grabCard } from './drag'
@@ -158,7 +158,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const picked = selected.has(head.id)
   const rule = rules.get(head.ruleId)
   const rubric = rubrics.get(head.rubricId ?? '')
-  const color = channels.get(unit.channelId)?.color
+  const color = colorOf(channels.get(unit.channelId), head.sectionId)
   const slot = isSlot(head)
   const title = shownTitle(head)
   // в мини-карточке стоят только FULL — подпись «FULL» там лишняя

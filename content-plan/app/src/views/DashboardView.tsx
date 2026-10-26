@@ -3,12 +3,13 @@ import { addDays, dayTitle, mondayOf, shortDate, today, WEEKDAYS } from '../mode
 import { AUTO_RULES } from '../model/filters'
 import { planningEnd, planningSlots } from '../model/planning'
 import { newId, setPeriod } from '../model/store'
-import { isSlot, shownTitle, tagOf, titleIsFormat, type ISODate, type Rubric, type Rule, type Status } from '../model/types'
+import { colorOf, FORMAT_SHORT, isSlot, shownTitle, tagOf, TEXT_IMAGE, titleIsFormat, type ISODate, type Rubric, type Rule, type Status } from '../model/types'
 import { daysLeft, dueOf, timeText, type Unit } from '../model/units'
-import { IconButton, mainChannelId, PickText, RubricChip, StatusFilter } from '../ui/bits'
+import { IconButton, mainChannelId, PickText, RubricChip, Seg, StatusFilter } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 import { TagInput } from '../ui/TagInput'
+import { Schedule } from './ScheduleView'
 
 const AHEAD = 14 // на сколько дней вперёд смотреть
 const BACK = 14 // и сколько назад — за просроченным
@@ -26,28 +27,59 @@ const weekRange = (monday: ISODate) => {
   return monday.slice(0, 7) === sun.slice(0, 7) ? `${Number(monday.slice(8))}–${shortDate(sun)}` : `${shortDate(monday)} – ${shortDate(sun)}`
 }
 
-/** Дашборд SMM — панелью справа, календарь остаётся под ним: за неделю — просьба уточнить темы, сводка,
- *  что делать сейчас и темы-хэштеги по каналам с периодичностью. */
+type DashView = 'summary' | 'schedule'
+const DASH_VIEWS: { id: DashView; label: string }[] = [
+  { id: 'summary', label: 'Сводка' },
+  { id: 'schedule', label: 'Расписание' },
+]
+
+function readView(): DashView {
+  try {
+    return localStorage.getItem('cp:dash-view') === 'schedule' ? 'schedule' : 'summary'
+  } catch {
+    return 'summary'
+  }
+}
+
+/** Дашборд SMM — панелью справа, календарь остаётся под ним. «Сводка»: за неделю — просьба уточнить темы, цифры,
+ *  что делать сейчас и темы-хэштеги по каналам с периодичностью. «Расписание»: то же, перевёрнутое в план повествования —
+ *  каналы, в них хэштеги, что и когда выходит. */
 export function DashboardSheet({ onClose }: { onClose: () => void }) {
   const { filters, setFilters } = usePlan()
+  const [view, setView] = useState<DashView>(readView)
+  const pick = (v: DashView) => {
+    setView(v)
+    try {
+      localStorage.setItem('cp:dash-view', v)
+    } catch {
+      /* вид проживёт до перезагрузки */
+    }
+  }
   return (
-    <aside className="cp-sheet cp-sheet--dash" aria-label="Дашборд">
+    <aside className={`cp-sheet cp-sheet--dash${view === 'schedule' ? ' cp-sheet--sched' : ''}`} aria-label="Дашборд">
       <div className="cp-sheet__head">
         <h2 className="cp-sheet__title">Дашборд</h2>
+        <Seg label="Вид дашборда" value={view} options={DASH_VIEWS} onChange={pick} />
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
-      <div className="cp-sheet__body nr-scroll cp-dash">
-        <PlanningAsk />
-        <Stats />
-        <section className="cp-panel" aria-labelledby="todo-h">
-          <div className="cp-panel__head">
-            <h2 className="cp-panel__title" id="todo-h">Что делать</h2>
-            <StatusFilter value={filters.statuses} onChange={(statuses) => setFilters({ ...filters, statuses })} options={FILTER} />
-          </div>
-          <TodoList />
-        </section>
-        <TopicsPanel />
-      </div>
+      {view === 'schedule' ? (
+        <div className="cp-sheet__body nr-scroll cp-dash">
+          <Schedule />
+        </div>
+      ) : (
+        <div className="cp-sheet__body nr-scroll cp-dash">
+          <PlanningAsk />
+          <Stats />
+          <section className="cp-panel" aria-labelledby="todo-h">
+            <div className="cp-panel__head">
+              <h2 className="cp-panel__title" id="todo-h">Что делать</h2>
+              <StatusFilter value={filters.statuses} onChange={(statuses) => setFilters({ ...filters, statuses })} options={FILTER} />
+            </div>
+            <TodoList />
+          </section>
+          <TopicsPanel />
+        </div>
+      )}
     </aside>
   )
 }
@@ -169,7 +201,7 @@ function TodoRow({ row, late }: { row: Row; late: boolean }) {
   const urgent = left <= 0 && head.status !== 'ready'
   const icon = head.status === 'paused' ? 'pause' : head.status === 'ready' ? 'check' : 'play'
   return (
-    <div className={`cp-now__row${urgent ? ' cp-now__row--urgent' : ''}`} style={{ '--cp-c': c?.color } as CSSProperties}>
+    <div className={`cp-now__row${urgent ? ' cp-now__row--urgent' : ''}`} style={{ '--cp-c': colorOf(c, head.sectionId) } as CSSProperties}>
       <span className="cp-now__time">{late ? shortDate(unit.date!) : timeText(unit)}</span>
       <div className="cp-now__main">
         <span className="cp-card__rub">
@@ -265,7 +297,7 @@ function AddTag({ channelId, sectionId, where, have }: { channelId: string; sect
           type: 'batch',
           actions: [
             ...('rubric' in p ? [] : [{ type: 'addRubric' as const, name, id: rubricId }]),
-            { type: 'addRule', rubricId, channelId, sectionId, name: 'Пост', id: newId('r'), days: [false, false, false, false, false, false, false] },
+            { type: 'addRule', rubricId, channelId, sectionId, name: FORMAT_SHORT[TEXT_IMAGE], id: newId('r'), days: [false, false, false, false, false, false, false] },
           ],
         })
         toast(`${tagOf(name)} — в ${where}. Задайте дни: слоты встанут в расписание`, true)
@@ -327,7 +359,7 @@ function TopicTags({ channelId, sectionId, where, edit, soon }: { channelId: str
   )
 }
 
-/** Темы-хэштеги по каналам и их разделам (Лаборатория, Академия, Кабинет); нажали — календарь только по этой теме.
+/** Темы-хэштеги по каналам и их разделам (Лаборатория, Академия, Офис Датаиста); нажали — календарь только по этой теме.
  *  «Править»: переименовать, задать периодичность (дни и время), добавить хэштег в канал. */
 function TopicsPanel() {
   const { plan } = usePlan()

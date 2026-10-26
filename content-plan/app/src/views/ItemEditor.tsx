@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { addDays, dayTitle, shortDate, WEEKDAYS, weekday } from '../model/dates'
 import { newId, type Action } from '../model/store'
-import { isSlot, PLACEHOLDER, tagOf, timeOf, type ISODate, type Item, type Rule, type Status } from '../model/types'
+import { FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type ISODate, type Item, type Rule, type Status } from '../model/types'
 import { dueOf, leadOf } from '../model/units'
 import { IconButton, PickText, Seg, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
@@ -57,12 +57,15 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [versions, setVersions] = useState<string[]>([]) // пересоздать для этих площадок
   const [after, setAfter] = useState(false) // версии — автоматически, когда оригинал выйдет
   const [newTag, setNewTag] = useState('') // хэштег, которого ещё нет: заведётся при сохранении
+  const [format, setFormat] = useState(base.format ?? rules.get(firstRule)?.format ?? TEXT_IMAGE)
 
   const channel = channels.get(channelId)
   const rule = rules.get(ruleId)
   const rubric = rubricId ? rubrics.get(rubricId) : undefined
-  // у хэштега в этом канале ещё нет формата — при сохранении заведётся «Пост», разовый (периодичность — в «Темах»)
-  const needRule = !rule || rule.channelId !== channelId || (rule.rubricId !== null && rule.rubricId !== rubricId) || !!newTag
+  // у хэштега в этом канале ещё нет такого формата — при сохранении заведётся, разовый (периодичность — в «Темах»)
+  const needRule = !rule || rule.channelId !== channelId || (rule.rubricId !== null && rule.rubricId !== rubricId) || !!newTag || (!existing && rule.format !== format)
+  // одного формата у хэштега может быть несколько в сетке: «Исследование дня» и «Итоги месяца» — обе страницы на сайте
+  const fits = needRule ? [] : rulesFor(channelId, rubricId).filter((r) => r.format === format || r.id === ruleId)
   const members = useMemo(
     () => (existing?.group && existing.date ? plan.items.filter((x) => x.group === existing.group && x.date === existing.date && x.id !== existing.id) : []),
     [plan.items, existing],
@@ -76,13 +79,27 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const takeRule = (r: Rule | undefined) => {
     setRuleId(r?.id ?? '')
     if (r?.sectionId) setSectionId(r.sectionId)
+    if (r) setFormat(r.format)
     if (!existing && r) setPlatforms(r.platforms)
+  }
+  /** Формат хэштега в канале: такой же, как выбран, если есть, иначе первый. */
+  const ruleFor = (cid: string, rb: string | null) => {
+    const list = rulesFor(cid, rb)
+    return list.find((r) => r.format === format) ?? list[0]
+  }
+  /** Выбрали формат: есть такой у хэштега в канале — берём его; нет — заведётся при сохранении (у материала — просто формат). */
+  const pickFormat = (f: string) => {
+    setFormat(f)
+    const r = rulesFor(channelId, rubricId).find((x) => x.format === f)
+    if (r) return takeRule(r)
+    const where = (FORMAT_PLATFORMS[f] ?? []).filter((p) => channel?.platforms.includes(p))
+    if (!existing && where.length) setPlatforms(where)
   }
   const pickChannel = (cid: string) => {
     setChannelId(cid)
     const rb = rubricsFor(cid)[0]?.id ?? null
     setRubricId(rb)
-    const r = rulesFor(cid, rb)[0]
+    const r = ruleFor(cid, rb)
     setSectionId(r?.sectionId)
     takeRule(r)
     const c = channels.get(cid)
@@ -91,7 +108,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const pickRubric = (rb: string) => {
     setRubricId(rb)
     setNewTag('')
-    if (rule?.rubricId !== null) takeRule(rulesFor(channelId, rb)[0])
+    if (rule?.rubricId !== null) takeRule(ruleFor(channelId, rb))
   }
   /** Хэштег из подсказок или новый: у такого в канале может не быть формата — тогда он заведётся при сохранении. */
   const pickTag = (p: TagPick) => {
@@ -117,8 +134,9 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       const rb = newTag ? newId('k') : rubricId
       if (newTag) setup.push({ type: 'addRubric', name: newTag, id: rb! })
       const id = newId('r')
-      setup.push({ type: 'addRule', rubricId: rb, channelId, sectionId, name: 'Пост', id, days: [false, false, false, false, false, false, false] })
-      ruleNow = { ...(rule ?? plan.rules[0]), id, rubricId: rb, channelId, sectionId, name: 'Пост', format: 'Пост', days: [false, false, false, false, false, false, false], time: rule?.time ?? '12:00' }
+      const name = FORMAT_SHORT[format] ?? format
+      setup.push({ type: 'addRule', rubricId: rb, channelId, sectionId, name, id, days: [false, false, false, false, false, false, false], format })
+      ruleNow = { ...(rule ?? plan.rules[0]), id, rubricId: rb, channelId, sectionId, name, format, full: false, days: [false, false, false, false, false, false, false], time: rule?.time ?? '12:00' }
     }
     if (!ruleNow) return setError('Выберите формат')
     const patch: Partial<Item> = {
@@ -130,7 +148,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       platforms,
       status,
       note: note || undefined,
-      format: existing?.format ?? ruleNow.format,
+      format,
       time: time && time !== ruleNow.time ? time : undefined,
       owner: owner.trim() || undefined,
       due: due || undefined,
@@ -159,7 +177,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         ruleId: ruleNow.id,
         rubricId: patch.rubricId ?? null,
         title: t,
-        format: ruleNow.format,
+        format,
         platforms,
         status,
         source: t === PLACEHOLDER ? 'нужна тема' : day ? 'вручную' : 'черновик',
@@ -226,7 +244,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           )}
         </div>
 
-        <div className="cp-field__row">
+        <div className="cp-field__row cp-field__row--fmt">
           <div className="cp-field" title={rubric?.what || undefined}>
             <span className="nr-label">Хэштег</span>
             <TagInput
@@ -238,19 +256,29 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
               disabled={fromFull}
             />
           </div>
-          <label className="cp-field" title={rule?.what || undefined}>
-            <span className="nr-label">Формат</span>
-            {needRule ? (
-              <span className="cp-field__note" title="У хэштега в этом канале формата ещё нет: заведётся «Пост», разовый">Пост · новый</span>
-            ) : (
-              <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
-                {rulesFor(channelId, rubricId).map((r) => (
-                  <option key={r.id} value={r.id}>{r.rubricId ? r.name : `${r.name} (с FULL)`}</option>
-                ))}
-              </select>
-            )}
+          <label className="cp-field" title={needRule ? 'У хэштега в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
+            <span className="nr-label">Формат{needRule && <span className="cp-field__new"> · новый</span>}</span>
+            <select className="nr-field" value={format} onChange={(e) => pickFormat(e.target.value)}>
+              {FORMATS.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.items.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </label>
         </div>
+        {fits.length > 1 && (
+          <label className="cp-field" title={rule?.what || undefined}>
+            <span className="nr-label">Что именно</span>
+            <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
+              {fits.map((r) => (
+                <option key={r.id} value={r.id}>{r.rubricId ? r.name : `${r.name} (с FULL)`}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {date && offDay && offGridField}
 
