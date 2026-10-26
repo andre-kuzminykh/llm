@@ -8,7 +8,7 @@ import { Icon } from '../ui/Icon'
 /** Все материалы дня по каналам и по времени; сюда можно бросить материал или тему из банка.
  *  Статус — значком в углу карточки: ▶ начинает задачу. */
 export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void }) {
-  const { byDate, unitsOn, channels, violByDate, openDay, openNew, dropOn, goto } = usePlan()
+  const { byDate, unitsOn, channels, violByDate, openDay, openNew, dropOn, show } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const units = unitsOn(date)
   const total = (byDate.get(date) ?? []).length
@@ -58,8 +58,8 @@ export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void
           Материал на этот день
         </button>
         <span className="cp-top__spacer" />
-        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => goto('week', date)}>
-          Неделя этого дня
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => show(date)}>
+          В календаре
         </button>
       </div>
     </aside>

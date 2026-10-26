@@ -5,7 +5,7 @@ import { renderApp } from '../test/renderApp'
 // календарь неделей по времени, неделя на экран: колонка — (1200 − 56) / 7 px (в jsdom ширины нет — берётся 1200)
 const COL = Math.floor((1200 - 56) / 7)
 const HOUR = 64
-const week = (span = 'week') => renderApp(undefined, { 'cp:view': JSON.stringify('week'), 'cp:week-mode': 'time', 'cp:span': span })
+const week = () => renderApp(undefined, { 'cp:week-mode': 'time' })
 const sheet = () => document.querySelector('.cp-body') as HTMLElement
 const column = (date: string) => document.querySelector(`.cp-tg__col[data-date="${date}"]`) as HTMLElement
 const card = (id: string) => document.querySelector(`.cp-tg__col [data-unit="${id}"]`) as HTMLElement
@@ -94,20 +94,12 @@ describe('T-CP-029 FR-CP-029 календарь по времени — жест
     expect(within(column('2026-10-26')).getByRole('button', { name: /^Тезисы · Тезис дня: .*, 10:00/ })).toBeInTheDocument()
   })
 
-  it('день, три дня или неделя на экран; стрелки — на ширину окна; лента дней с окном посередине', async () => {
-    week('3day')
+  it('неделя на экран; стрелки — на неделю', async () => {
+    week()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
-    const spans = screen.getByRole('radiogroup', { name: 'Сколько дней на экране' })
-    expect(within(spans).getByRole('radio', { name: '3 дня' })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('button', { name: 'Следующие 3 дня' })).toBeInTheDocument()
-    const strip = screen.getByRole('group', { name: 'Лента дней' })
-    expect(within(strip).getAllByRole('button')).toHaveLength(50)
-    expect(within(strip).getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'true').length).toBeGreaterThan(0)
-    await userEvent.click(within(spans).getByRole('radio', { name: 'День' }))
-    expect(screen.getByRole('button', { name: 'Следующий день' })).toBeInTheDocument()
-    expect(localStorage.getItem('cp:span')).toBe('day')
-    await userEvent.click(within(spans).getByRole('radio', { name: 'Неделя' }))
-    expect(screen.getByRole('button', { name: 'Следующая неделя' })).toBeInTheDocument()
+    expect(within(screen.getByRole('banner')).getByRole('heading', { name: '26 окт – 1 ноя 2026' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Следующая неделя' }))
+    expect(within(screen.getByRole('banner')).getByRole('heading', { name: '2–8 ноя 2026' })).toBeInTheDocument()
     await act(async () => {})
   })
 })

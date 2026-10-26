@@ -1,6 +1,8 @@
-import { useRef, type ReactNode } from 'react'
-import type { ISODate } from '../model/types'
-import { IconButton } from './bits'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { shortDate, today } from '../model/dates'
+import { visible } from '../model/filters'
+import { planningSlots } from '../model/planning'
+import { shownTitle, tagOf, timeOf, type ISODate } from '../model/types'
 import { activeFilters, FilterChips } from './Sidebar'
 import { usePlan } from './ctx'
 import { Icon } from './Icon'
@@ -11,16 +13,19 @@ const SAVED: Record<string, string> = {
   error: 'Не сохранилось',
 }
 
-/** Шапка экрана: «Фильтры», заголовок и навигация слева; справа включённые фильтры, отмена и переход
- *  «Календарь» ⇄ «Дашборд». «+» — круглая кнопка справа внизу. Повтор — с клавиатуры (⇧⌘Z). */
-export function TopBar({ title, children, side = true }: { title: ReactNode; children?: ReactNode; side?: boolean }) {
+/** Шапка календаря: заголовок с датой и стрелки, справа — поиск и значок дашборда (открывается панелью справа).
+ *  Вид и фильтры — в панели слева; на узком экране она за кнопкой «Фильтры». «+» — круглая кнопка справа внизу.
+ *  Отмена — ⌘Z и кнопкой во всплывашке после правки. */
+export function TopBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
   const ctx = usePlan()
-  const { dispatch, canUndo, saved, toggleSide, sideOpen, view, goto, phone } = ctx
-  const n = side ? activeFilters(ctx).length : 0
+  const { plan, saved, toggleSide, sideOpen, narrow, phone, panel, openDashboard, show } = ctx
+  const n = narrow ? activeFilters(ctx).length : 0
+  // за неделю календарь просит уточнить темы: точка на значке дашборда
+  const need = useMemo(() => planningSlots(plan, today()).length, [plan])
   return (
     <header className="cp-top">
-      {side && (
-        <button type="button" className="nr-btn nr-btn--ghost nr-btn--icon cp-top__filter" aria-label="Фильтры" title="Фильтры" aria-pressed={sideOpen} onClick={toggleSide}>
+      {narrow && (
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--icon cp-top__filter" aria-label="Фильтры" title="Вид и фильтры" aria-pressed={sideOpen} onClick={toggleSide}>
           <Icon name="filter" size={20} />
           {n > 0 && <span className="cp-top__badge" aria-hidden="true">{n}</span>}
         </button>
@@ -28,26 +33,92 @@ export function TopBar({ title, children, side = true }: { title: ReactNode; chi
       {typeof title === 'string' ? <h1 className="nr-title">{title}</h1> : title}
       {children}
       <span className="cp-top__spacer" />
-      {side && <FilterChips />}
+      {narrow && <FilterChips />}
       {SAVED[saved] && (
         <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню профиля' : undefined}>
           {SAVED[saved]}
         </span>
       )}
-      <IconButton icon="undo" label="Отменить (⌘Z)" onClick={() => dispatch({ type: 'undo' })} disabled={!canUndo} />
-      {!phone &&
-        (view === 'dashboard' ? (
-          <button type="button" className="nr-btn cp-switch" onClick={() => goto('week')}>
-            <Icon name="calendar" size={16} />
-            Календарь
-          </button>
-        ) : (
-          <button type="button" className="nr-btn cp-switch" onClick={() => goto('dashboard')}>
-            <Icon name="dashboard" size={16} />
-            Дашборд
-          </button>
-        ))}
+      <Search />
+      {!phone && (
+        <button
+          type="button"
+          className="nr-btn nr-btn--ghost nr-btn--icon cp-top__dash"
+          aria-label="Дашборд"
+          title={need ? `Дашборд · пора уточнить темы на неделю: ${need}` : 'Дашборд'}
+          aria-pressed={panel === 'dashboard'}
+          onClick={() => (panel === 'dashboard' ? show() : openDashboard())}
+        >
+          <Icon name="dashboard" size={20} />
+          {need > 0 && <span className="cp-top__dot" aria-hidden="true" />}
+        </button>
+      )}
     </header>
+  )
+}
+
+const LIMIT = 30
+
+/** Поиск темы по всему плану, вверху: под полем — найденное по датам (и черновики); нажать — календарь на этой дате и материал открыт. */
+function Search() {
+  const { plan, filters, rules, rubrics, jumpTo, openItem } = usePlan()
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const query = q.trim().toLowerCase()
+  const hits = useMemo(() => {
+    if (query.length < 2) return []
+    const key = (d: ISODate | null) => d ?? '9999'
+    return plan.items
+      .filter((it) => !it.derive && (it.date === null || visible(it, filters)) && it.title.toLowerCase().includes(query))
+      .sort((a, b) => (key(a.date) < key(b.date) ? -1 : key(a.date) > key(b.date) ? 1 : a.rank - b.rank))
+  }, [plan.items, filters, query])
+  const pick = (id: string, date: ISODate | null) => {
+    if (date) jumpTo(date)
+    openItem(id)
+    setQ('')
+    setOpen(false)
+  }
+  return (
+    <div className="cp-search" role="search" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOpen(false)}>
+      <Icon name="search" size={16} />
+      <input
+        className="cp-search__in"
+        type="search"
+        placeholder="Поиск темы"
+        aria-label="Поиск по плану"
+        value={q}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQ(e.target.value)
+          setOpen(true)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation()
+            setQ('')
+            setOpen(false)
+          }
+          if (e.key === 'Enter' && hits[0]) pick(hits[0].id, hits[0].date)
+        }}
+      />
+      {open && query.length >= 2 && (
+        <div className="cp-search__pop" role="region" aria-label="Найдено">
+          <span className="cp-search__count">{hits.length ? `Найдено: ${hits.length}` : 'Ничего не найдено'}</span>
+          {hits.slice(0, LIMIT).map((it) => {
+            const r = rubrics.get(it.rubricId ?? '')
+            const when = it.date ? `${shortDate(it.date)}, ${timeOf(it, rules.get(it.ruleId))}` : 'черновик'
+            return (
+              <button key={it.id} type="button" className="cp-search__row" onClick={() => pick(it.id, it.date)} aria-label={`${when} · ${r ? tagOf(r.name) : ''}: ${shownTitle(it)}`}>
+                <span className="cp-search__when">{when}</span>
+                {r && <span className="cp-rub">{tagOf(r.name)}</span>}
+                <span className="cp-search__title">{shownTitle(it)}</span>
+              </button>
+            )
+          })}
+          {hits.length > LIMIT && <span className="cp-search__count">и ещё {hits.length - LIMIT} — уточните запрос</span>}
+        </div>
+      )}
+    </div>
   )
 }
 

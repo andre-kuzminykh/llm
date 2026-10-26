@@ -1,19 +1,16 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  applyPan, blockGeometry, centerScrollLeft, dayStripRange, gestureEnd, layoutBlocks, minutesFromMidnight, minutesToClock, nowLine,
-  resizeEnd, shiftAnchor, snapMin, SPAN_DAYS, type Geometry, type Span,
+  applyPan, blockGeometry, gestureEnd, layoutBlocks, minutesFromMidnight, minutesToClock, nowLine, resizeEnd, shiftAnchor, snapMin, type Geometry,
 } from '../model/calendar'
-import { addDays, daysBetween, dayTitle, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
+import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
 import { shownTitle, tagOf, type ISODate, type Item, type Plan } from '../model/types'
 import { platformTypes, type Unit } from '../model/units'
-import { IconButton, Seg, UnitCard, useDrop } from '../ui/bits'
-import { usePlan } from '../ui/ctx'
+import { IconButton, UnitCard, useDrop } from '../ui/bits'
+import { usePlan, type Mode } from '../ui/ctx'
 import { autoScroll, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
 import { Icon } from '../ui/Icon'
 import { useInfinite } from '../ui/infinite'
 import { DateJump, TopBar } from '../ui/TopBar'
-
-type Mode = 'time' | 'channels' | 'platforms' | 'topics'
 
 interface Lane {
   id: string
@@ -50,93 +47,10 @@ export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
   return out
 }
 
-const readMode = (): Mode => {
-  try {
-    const m = localStorage.getItem('cp:week-mode')
-    return m === 'channels' || m === 'platforms' || m === 'topics' ? m : 'time'
-  } catch {
-    return 'time'
-  }
-}
-
-/** Запомнить вид недели: «Время», «Каналы» или «Площадки». */
-export const writeWeekMode = (m: Mode) => {
-  try {
-    localStorage.setItem('cp:week-mode', m)
-  } catch {
-    /* только на эту сессию */
-  }
-}
-
-/** Вид календаря: неделя по времени, дорожками по каналам или площадкам — или месяц (на телефоне — лента по дням). */
-export type CalendarMode = Mode | 'month'
-
-/** Переключатель вида календаря — в шапке и недели, и месяца. На телефоне — меню «Вид», чтобы шапка была в одну строку. */
-export function CalendarSwitch({ value, onChange }: { value: CalendarMode; onChange: (m: CalendarMode) => void }) {
-  const { phone } = usePlan()
-  const modes: { id: CalendarMode; label: string }[] = [
-    { id: 'time', label: 'Время' },
-    { id: 'channels', label: 'Каналы' },
-    { id: 'platforms', label: 'Площадки' },
-    { id: 'topics', label: 'Темы' },
-    { id: 'month', label: phone ? 'Лента' : 'Месяц' },
-  ]
-  const [open, setOpen] = useState(false)
-  if (!phone) return <Seg value={value} onChange={onChange} label="Вид календаря" options={modes} />
-  return (
-    <span className="cp-pop">
-      <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}>
-        Вид
-      </button>
-      {open && (
-        <span className="cp-pop__menu nr-glass" role="menu" aria-label="Вид календаря">
-          {modes.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={value === m.id}
-              className="cp-menu__item"
-              onClick={() => {
-                onChange(m.id)
-                setOpen(false)
-              }}
-            >
-              {m.label}
-              {value === m.id && <Icon name="check" size={14} />}
-            </button>
-          ))}
-        </span>
-      )}
-    </span>
-  )
-}
-
 const HOUR = 64 // px на час
 const PPM = HOUR / 60 // px на минуту
 const HEAD = 52 // высота шапки дней
 const GUT = 56 // колонка часов
-const SPANS: { id: Span; label: string }[] = [
-  { id: 'day', label: 'День' },
-  { id: '3day', label: '3 дня' },
-  { id: 'week', label: 'Неделя' },
-]
-const BACK: Record<Span, [string, string]> = {
-  day: ['Предыдущий день', 'Следующий день'],
-  '3day': ['Предыдущие 3 дня', 'Следующие 3 дня'],
-  week: ['Предыдущая неделя', 'Следующая неделя'],
-}
-
-const readSpan = (phone: boolean): Span => {
-  try {
-    const s = localStorage.getItem('cp:span')
-    if (s === 'day' || s === '3day' || s === 'week') return s
-  } catch {
-    /* по умолчанию */
-  }
-  return phone ? '3day' : 'week'
-}
-
 /** Карточку взяли на шкале времени: переносят (move) или тянут за нижний край (resize). */
 interface Gesture {
   unit: Unit
@@ -165,57 +79,38 @@ export interface TimeDrag {
   min: number
 }
 
-/** Календарь — вид по умолчанию: дни листаются вбок без конца. «Время» — шкала часов, как календарь в nr_management:
- *  карточку берут и ставят на другой день и час, тянут за нижний край, пустой лист тянут рукой; день, три дня или неделя
- *  на экран; сверху лента дней. «Каналы», «Площадки», «Темы» — дорожками, как в исходной таблице. */
+/** Календарь SMM — неделя: дни листаются вбок без конца. «Время» — шкала часов, как календарь в nr_management:
+ *  карточку берут и ставят на другой день и час, тянут за нижний край, пустой лист тянут рукой.
+ *  «Каналы», «Площадки», «Темы» — дорожками, как в исходной таблице. Вид выбирается в панели слева. */
 export function WeekView() {
-  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn, goto, dropOn, dispatch, toast } = usePlan()
-  const [mode, setModeState] = useState<Mode>(readMode)
-  const setMode = (m: Mode) => {
-    setModeState(m)
-    writeWeekMode(m)
-  }
-  const [span, setSpanState] = useState<Span>(() => readSpan(phone))
-  const spanStart = (d: ISODate) => (span === 'week' ? mondayOf(d) : d)
-  const spanJump = useRef(false)
-  const setSpan = (s: Span) => {
-    if (s === span) return
-    spanJump.current = true
-    setSpanState(s)
-    try {
-      localStorage.setItem('cp:span', s)
-    } catch {
-      /* до перезагрузки */
-    }
-  }
+  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn, dropOn, dispatch, toast, mode: m } = usePlan()
+  const mode = m as Exclude<Mode, 'feed'>
   const gutter = mode === 'time' ? GUT : phone ? 96 : 132
-  // на экране — день, три дня или неделя: колонка дня — доля ширины
+  // неделя целиком по ширине экрана: колонка дня — седьмая часть (на телефоне — два дня)
   const [width, setWidth] = useState(1200)
-  const col = Math.max(phone ? 56 : 96, Math.floor((width - gutter) / SPAN_DAYS[span]))
-  // неделя открывается с понедельника, три дня и день — с выбранного дня
-  const spanDate = useMemo(() => ({ date: spanStart(jump.date), n: jump.n }), [jump, span]) // eslint-disable-line react-hooks/exhaustive-deps
-  // шкала времени открывается за полчаса до первого материала на экране (недели, трёх дней, дня), дорожки — сверху
+  const col = Math.max(120, Math.floor((width - gutter) / (phone ? 2 : 7)))
+  // неделя открывается с понедельника; «Сегодня» и стрелки — тоже к понедельнику
+  const weekJump = useMemo(() => ({ date: mondayOf(jump.date), n: jump.n }), [jump])
+  // шкала времени открывается за полчаса до первого материала недели, дорожки — сверху
   const crossRef = useRef<(d: ISODate) => number | undefined>(() => undefined)
   crossRef.current = (d: ISODate) => {
     if (mode !== 'time') return 0
+    const from = mondayOf(d)
     let first: number | null = null
-    for (let k = 0; k < SPAN_DAYS[span]; k++) for (const u of unitsOn(addDays(d, k))) if (!u.stream) first = Math.min(first ?? 24 * 60, toMin(u.time))
+    for (let k = 0; k < 7; k++) for (const u of unitsOn(addDays(from, k))) if (!u.stream) first = Math.min(first ?? 24 * 60, toMin(u.time))
     // за полчаса до часа первого материала: подпись этого часа видна целиком
     return Math.max(0, (Math.floor((first ?? 8 * 60) / 60) - 0.5) * HOUR)
   }
   const cross = useCallback((d: ISODate) => crossRef.current(d), [])
-  const inf = useInfinite({ axis: 'x', step: 1, size: col, start: plan.start, end: plan.end, anchor: spanStart(anchor), jump: spanDate, onFocus: setAnchor, overscan: 4, cross })
+  const inf = useInfinite({ axis: 'x', step: 1, size: col, start: plan.start, end: plan.end, anchor: mondayOf(anchor), jump: weekJump, onFocus: setAnchor, overscan: 4, cross })
   const shownDays = Math.max(1, Math.floor(((inf.view.len || width) - gutter) / col))
   const firstDay = inf.dateAt(Math.round(inf.view.pos / col))
   const lastDay = addDays(firstDay, shownDays - 1)
-  // «9–15 ноя 2026»; через границу месяца — «30 ноя – 6 дек 2026»; один день — «10 ноя 2026»; на телефоне без года
+  // «9–15 ноя 2026»; через границу месяца — «30 ноя – 6 дек 2026»; на телефоне без года
   const year = phone ? '' : ` ${lastDay.slice(0, 4)}`
-  const title =
-    firstDay === lastDay
-      ? `${shortDate(firstDay)}${year}`
-      : firstDay.slice(0, 7) === lastDay.slice(0, 7)
-        ? `${Number(firstDay.slice(8))}–${shortDate(lastDay)}${year}`
-        : `${shortDate(firstDay)} – ${shortDate(lastDay)}${year}`
+  const title = firstDay.slice(0, 7) === lastDay.slice(0, 7)
+    ? `${Number(firstDay.slice(8))}–${shortDate(lastDay)}${year}`
+    : `${shortDate(firstDay)} – ${shortDate(lastDay)}${year}`
   const days: { date: ISODate; i: number }[] = []
   for (let i = inf.first; i <= inf.last; i++) days.push({ date: inf.dateAt(i), i })
 
@@ -228,21 +123,19 @@ export function WeekView() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [inf.ref])
-  // ширина колонки поменялась: окно поменяли — к его началу; окно браузера — остаться на том же дне
+  // ширина колонки поменялась — остаться на том же дне: он считается по старой ширине, пока лента не сдвинулась
   const lastCol = useRef(col)
   useLayoutEffect(() => {
     const old = lastCol.current
-    const changed = spanJump.current
-    spanJump.current = false
-    if (old === col && !changed) return
+    if (old === col) return
     lastCol.current = col
     const el = inf.ref.current
-    inf.scrollTo(changed ? spanStart(anchor) : el ? inf.dateAt(Math.round(el.scrollLeft / old)) : spanStart(anchor), false)
-  }, [col, span]) // eslint-disable-line react-hooks/exhaustive-deps
+    inf.scrollTo(el ? inf.dateAt(Math.round(el.scrollLeft / old)) : mondayOf(anchor), false)
+  }, [col]) // eslint-disable-line react-hooks/exhaustive-deps
   // смена вида: шкала — к первому часу недели, дорожки — наверх (при переходе к дате это делает сама лента)
   useEffect(() => {
     const el = inf.ref.current
-    if (el) el.scrollTop = crossRef.current(spanStart(anchor)) ?? 0
+    if (el) el.scrollTop = crossRef.current(mondayOf(anchor)) ?? 0
   }, [mode, inf.ref]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── жесты шкалы времени (как в nr_management): взять карточку, растянуть, тянуть лист ──
@@ -395,21 +288,16 @@ export function WeekView() {
   return (
     <>
       <TopBar title={<DateJump label={title} value={anchor} onPick={jumpTo} />}>
-        <nav className="cp-top__nav" aria-label="Дни">
-          <IconButton icon="chev-left" label={BACK[span][0]} onClick={() => jumpTo(shiftAnchor(firstDay, span, -1))} />
+        <nav className="cp-top__nav" aria-label="Недели">
+          <IconButton icon="chev-left" label="Предыдущая неделя" onClick={() => jumpTo(shiftAnchor(firstDay, 'week', -1))} />
           {!phone && (
             <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => jumpTo(today())}>
               Сегодня
             </button>
           )}
-          <IconButton icon="chev-right" label={BACK[span][1]} onClick={() => jumpTo(shiftAnchor(firstDay, span, 1))} />
+          <IconButton icon="chev-right" label="Следующая неделя" onClick={() => jumpTo(shiftAnchor(firstDay, 'week', 1))} />
         </nav>
-        <CalendarSwitch value={mode} onChange={(m) => (m === 'month' ? goto('month') : setMode(m))} />
       </TopBar>
-      <div className="cp-calbar">
-        <DayStrip from={firstDay} to={lastDay} onPick={jumpTo} />
-        <Seg value={span} onChange={setSpan} label="Сколько дней на экране" options={SPANS} />
-      </div>
       <div
         className={`cp-body nr-scroll cp-sheet-grab${timeMode ? ' cp-sheet-grab--time' : ''}`}
         ref={inf.ref}
@@ -433,36 +321,6 @@ export function WeekView() {
   )
 }
 
-/** Лента дней над календарём: окно на экране подсвечено и стоит посередине; точка — в дне что-то есть.
- *  Нажать — перейти; на день ленты можно и перенести карточку. */
-function DayStrip({ from, to, onPick }: { from: ISODate; to: ISODate; onPick: (d: ISODate) => void }) {
-  const { unitsOn } = usePlan()
-  const ref = useRef<HTMLDivElement>(null)
-  const days = useMemo(() => dayStripRange(from), [from])
-  const mid = addDays(from, Math.floor(daysBetween(from, to) / 2))
-  useLayoutEffect(() => {
-    const strip = ref.current
-    const chip = strip?.querySelector<HTMLElement>(`[data-drop="${mid}"]`)
-    if (strip && chip) strip.scrollLeft = centerScrollLeft(chip.offsetLeft, chip.offsetWidth, strip.clientWidth, strip.scrollWidth)
-  }, [mid])
-  return (
-    <div className="cp-strip nr-scroll" ref={ref} role="group" aria-label="Лента дней">
-      {days.map((d) => {
-        const on = d >= from && d <= to
-        const n = unitsOn(d).length
-        const cls = ['cp-strip__day', on && 'cp-strip__day--on', d === today() && 'cp-strip__day--today', weekday(d) === SAT && 'cp-strip__day--rest'].filter(Boolean).join(' ')
-        return (
-          <button key={d} type="button" className={cls} aria-current={on} aria-label={`${dayTitle(d)}${n ? ` · ${n}` : ''}`} onClick={() => onPick(d)} data-drop={d}>
-            <span className="cp-strip__wd">{WEEKDAYS[weekday(d)]}</span>
-            <span className="cp-strip__n">{Number(d.slice(8))}</span>
-            <span className={`cp-strip__dot${n ? ' cp-strip__dot--on' : ''}`} aria-hidden="true" />
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 function DayHead({ date }: { date: ISODate }) {
   const { violByDate, openDay } = usePlan()
   const viol = violByDate.get(date)?.length ?? 0
@@ -472,7 +330,7 @@ function DayHead({ date }: { date: ISODate }) {
         <span className="cp-week__wd">{WEEKDAYS[weekday(date)]}</span>
         <span className={`cp-week__date${date === today() ? ' cp-week__date--today' : ''}`}>{shortDate(date)}</span>
       </button>
-      {viol > 0 && <span className="cp-viol" title={`Нарушений: ${viol}`} />}
+      {viol > 0 && <span className="cp-viol" title={`Нарушений: ${viol}`} aria-label={`Нарушений: ${viol}`} role="img" />}
     </>
   )
 }

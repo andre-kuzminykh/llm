@@ -1,8 +1,16 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { smallPlan } from '../test/fixtures'
 import { renderApp } from '../test/renderApp'
 
-describe('T-CP-020 FR-CP-020 дашборд: что делать, банк идей, темы', () => {
+const day = (date: string) => document.querySelector(`[data-date="${date}"]`) as HTMLElement
+const openDash = async () => {
+  await screen.findByRole('grid', { name: 'Неделя по времени' })
+  await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Дашборд' }))
+  return screen.getByRole('complementary', { name: 'Дашборд' })
+}
+
+describe('T-CP-020 FR-CP-020 дашборд — панелью справа: что делать, темы', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-24T09:00:00'))
@@ -11,44 +19,135 @@ describe('T-CP-020 FR-CP-020 дашборд: что делать, банк ид�
     vi.useRealTimers()
   })
 
-  it('сверху просроченное (FULL готовят за 3 дня), дальше — по дням выхода; ▶ открывает задачу', async () => {
+  it('сверху просроченное (FULL готовят за 3 дня), дальше — по дням выхода; ▶ открывает задачу, «Назад» — к дашборду', async () => {
     renderApp()
-    await userEvent.click(await screen.findByRole('button', { name: 'Дашборд' }))
-    const late = screen.getByRole('region', { name: 'Просрочено' })
+    const dash = await openDash()
+    const late = within(dash).getByRole('region', { name: 'Просрочено' })
     expect(within(late).getByRole('button', { name: 'Стратегия' })).toBeInTheDocument()
-    const monday = screen.getByRole('region', { name: 'Пн, 26 октября' })
+    const monday = within(dash).getByRole('region', { name: 'Пн, 26 октября' })
     expect(within(monday).getByRole('button', { name: 'Я устал от хайпа вокруг ИИ' })).toBeInTheDocument()
     expect(within(monday).getAllByText('к 25 окт').length).toBeGreaterThan(0)
-    expect(within(screen.getByRole('region', { name: 'Пн, 2 ноября' })).getAllByRole('button', { name: 'Нужна тема' }).length).toBeGreaterThan(0)
-    // канал Dataist не повторяется, Andre AIT — подписан
+    expect(within(within(dash).getByRole('region', { name: 'Пн, 2 ноября' })).getAllByRole('button', { name: 'Нужна тема' }).length).toBeGreaterThan(0)
     expect(within(late).queryByText('Dataist')).toBeNull()
     await userEvent.click(within(late).getByRole('button', { name: 'Начать: Стратегия' }))
-    expect(screen.getByRole('complementary', { name: 'Задача' })).toBeInTheDocument()
-    expect(within(late).getByRole('button', { name: 'Задача: Стратегия' })).toBeInTheDocument()
+    const task = screen.getByRole('complementary', { name: 'Задача' })
+    await userEvent.click(within(task).getByRole('button', { name: 'Назад' }))
+    const again = screen.getByRole('complementary', { name: 'Дашборд' })
+    expect(within(within(again).getByRole('region', { name: 'Просрочено' })).getByRole('button', { name: 'Задача: Стратегия' })).toBeInTheDocument()
   })
-  it('фильтр статуса словами', async () => {
+  it('фильтр статуса словами — тот же, что в панели слева', async () => {
     renderApp()
-    await userEvent.click(await screen.findByRole('button', { name: 'Дашборд' }))
-    const top = screen.getByRole('banner')
-    await userEvent.click(within(screen.getByRole('region', { name: 'Что делать' })).getByRole('radio', { name: 'В работе' }))
-    expect(screen.getByText(/ничего не ждёт работы/)).toBeInTheDocument()
-    // включённый фильтр виден меткой и снимается одним нажатием
-    await userEvent.click(within(top).getByRole('button', { name: 'Снять фильтр: Только «В работе»' }))
-    expect(within(screen.getByRole('region', { name: 'Что делать' })).getByRole('radio', { name: 'Все' })).toHaveAttribute('aria-checked', 'true')
+    const dash = await openDash()
+    await userEvent.click(within(within(dash).getByRole('region', { name: 'Что делать' })).getByRole('radio', { name: 'В работе' }))
+    expect(within(dash).getByText(/ничего не ждёт работы/)).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('complementary', { name: 'Вид и фильтры' })).getByRole('button', { name: 'Сбросить' }))
+    expect(within(within(dash).getByRole('region', { name: 'Что делать' })).getByRole('radio', { name: 'Все' })).toHaveAttribute('aria-checked', 'true')
   })
-  it('банк идей и темы — на дашборде; хэштег открывает календарь только по этой теме', async () => {
+  it('хэштег в «Темах» показывает календарь только по этой теме', async () => {
     renderApp()
-    await userEvent.click(await screen.findByRole('button', { name: 'Дашборд' }))
-    const bank = screen.getByRole('region', { name: 'Банк идей' })
-    await userEvent.click(within(within(bank).getByRole('group', { name: 'Хэштеги банка' })).getByRole('button', { name: /^#тезисы/ }))
-    await userEvent.type(within(bank).getByLabelText('Новые темы: #тезисы · Тезис дня'), 'Агенты вместо отделов')
-    await userEvent.click(within(bank).getByRole('button', { name: 'Добавить' }))
-    expect(within(bank).getByRole('button', { name: 'Агенты вместо отделов' })).toBeInTheDocument()
-    const topics = screen.getByRole('region', { name: 'Темы' })
-    const dataist = within(topics).getByRole('group', { name: 'Темы: Dataist' })
+    const dash = await openDash()
+    const dataist = within(within(dash).getByRole('region', { name: 'Темы' })).getByRole('group', { name: 'Темы: Dataist' })
     expect(within(dataist).getByRole('button', { name: /^#демо/ })).toBeInTheDocument()
     await userEvent.click(within(dataist).getByRole('button', { name: /^#тезисы/ }))
-    expect(await screen.findByRole('grid', { name: 'Неделя по времени' })).toBeInTheDocument()
-    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Снять фильтр: Только #тезисы' })).toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Дашборд' })).toBeNull()
+    const side = screen.getByRole('complementary', { name: 'Вид и фильтры' })
+    expect(within(side).getByRole('button', { name: '#тезисы' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(side).getByRole('button', { name: '#демо' })).toHaveAttribute('aria-pressed', 'false')
+    expect(within(day('2026-10-26')).queryByRole('button', { name: /^Демо/ })).toBeNull()
+  })
+})
+
+describe('T-CP-031 FR-CP-031 периодичность хэштега и планирование недели', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-24T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('дни недели у хэштега ставят слоты без темы в расписание; снятый день убирает пустые', async () => {
+    renderApp()
+    const dash = await openDash()
+    const topics = within(dash).getByRole('region', { name: 'Темы' })
+    await userEvent.click(within(topics).getByRole('button', { name: 'Править' }))
+    const period = within(topics).getByRole('group', { name: 'Периодичность: #тезисы · Тезис дня' })
+    expect(within(period).getByRole('button', { name: 'Сб' })).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(within(period).getByRole('button', { name: 'Сб' }))
+    expect(within(period).getByRole('button', { name: 'Сб' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('.cp-toast')).toHaveTextContent(/#тезисы · Тезис дня: ежедневно 11:00 · слотов без темы \+\d+/)
+    await userEvent.click(within(dash).getByRole('button', { name: 'Закрыть' }))
+    expect(within(day('2026-10-31')).getByRole('button', { name: /^Тезисы · Тезис дня: Нужна тема, 11:00/ })).toBeInTheDocument()
+    // снять субботу — пустой слот уходит
+    await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Дашборд' }))
+    const again = within(screen.getByRole('complementary', { name: 'Дашборд' })).getByRole('region', { name: 'Темы' })
+    await userEvent.click(within(again).getByRole('button', { name: 'Править' }))
+    await userEvent.click(within(within(again).getByRole('group', { name: 'Периодичность: #тезисы · Тезис дня' })).getByRole('button', { name: 'Сб' }))
+    expect(within(day('2026-10-31')).queryByRole('button', { name: /Нужна тема/ })).toBeNull()
+  })
+
+  it('новый хэштег в канал — с подсказками; периодичность у него задаётся днями', async () => {
+    renderApp()
+    const dash = await openDash()
+    const topics = within(dash).getByRole('region', { name: 'Темы' })
+    await userEvent.click(within(topics).getByRole('button', { name: 'Править' }))
+    const add = within(topics).getByRole('combobox', { name: 'Добавить хэштег: Andre AIT' })
+    await userEvent.type(add, 'тез')
+    expect(within(topics).getByRole('option', { name: '#тезисы' })).toBeInTheDocument()
+    await userEvent.clear(add)
+    await userEvent.type(add, 'агенты')
+    await userEvent.click(within(topics).getByRole('option', { name: 'Новый хэштег #агенты' }))
+    const andre = within(topics).getByRole('group', { name: 'Темы: Andre AIT' })
+    expect(within(andre).getByRole('group', { name: 'Периодичность: #агенты · Пост' })).toBeInTheDocument()
+  })
+
+  it('за неделю дашборд просит уточнить темы: вписать или взять ближайший черновик того же хэштега', async () => {
+    const p = smallPlan()
+    // черновик тезиса и ещё один пустой слот тезиса на следующей неделе
+    p.items.push({ ...p.items.find((x) => x.id === 'th-slot')!, id: 'draft1', date: null, title: 'Агенты вместо отделов', source: 'черновик' })
+    p.items.push({ ...p.items.find((x) => x.id === 'th-slot')!, id: 'th-slot2', date: '2026-10-29' })
+    renderApp(p)
+    const dash = await openDash()
+    const ask = within(dash).getByRole('region', { name: 'Планирование недели' })
+    expect(within(ask).getByText('Неделя 26 окт – 1 ноя: уточните темы')).toBeInTheDocument()
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Дашборд' }).querySelector('.cp-top__dot')).not.toBeNull()
+    await userEvent.click(within(ask).getByRole('button', { name: 'Уточнить' }))
+    const plan = screen.getByRole('complementary', { name: 'Планирование недели' })
+    // ближайший черновик — первому слоту по дате
+    await userEvent.click(within(plan).getByRole('button', { name: 'Из черновиков: Агенты вместо отделов' }))
+    await userEvent.type(within(plan).getByRole('textbox', { name: 'Тема: 29 окт, 11:00, #тезисы' }), 'Сколько стоит ИИ-сотрудник{Enter}')
+    expect(within(plan).getAllByRole('img', { name: 'Тема есть' })).toHaveLength(2)
+    expect(within(plan).getByText(/Все темы уточнены/)).toBeInTheDocument()
+    await userEvent.click(within(plan).getByRole('button', { name: 'Назад' }))
+    expect(within(screen.getByRole('complementary', { name: 'Дашборд' })).queryByRole('region', { name: 'Планирование недели' })).toBeNull()
+    expect(within(day('2026-10-27')).getByRole('button', { name: /^Тезисы · Тезис дня: Агенты вместо отделов/ })).toBeInTheDocument()
+    expect(within(day('2026-10-29')).getByRole('button', { name: /^Тезисы · Тезис дня: Сколько стоит ИИ-сотрудник/ })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-022 FR-CP-022 черновики — банк идей во вкладке «+»', () => {
+  it('«В черновики» из формы, вкладка «Черновики»: добавить списком, разложить по слотам', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    await userEvent.type(within(form).getByRole('combobox', { name: 'Хэштег' }), 'тез')
+    await userEvent.click(within(form).getByRole('option', { name: '#тезисы' }))
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'ИИ-бухгалтер')
+    await userEvent.click(within(form).getByRole('button', { name: 'В черновики' }))
+    expect(document.querySelector('.cp-toast')).toHaveTextContent('Сохранено в черновики')
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    await userEvent.click(screen.getByRole('tab', { name: /^Черновики/ }))
+    const drafts = screen.getByRole('complementary', { name: 'Черновики' })
+    await userEvent.click(within(within(drafts).getByRole('group', { name: 'Хэштеги черновиков' })).getByRole('button', { name: /^#тезисы/ }))
+    const col = within(drafts).getByRole('region', { name: 'Черновики: #тезисы · Тезис дня' })
+    expect(within(col).getByRole('button', { name: 'ИИ-бухгалтер' })).toBeInTheDocument()
+    await userEvent.type(within(col).getByLabelText('Новые черновики: #тезисы · Тезис дня'), 'Агенты вместо отделов')
+    await userEvent.click(within(col).getByRole('button', { name: 'Добавить' }))
+    expect(within(col).getByRole('button', { name: 'Агенты вместо отделов' })).toBeInTheDocument()
+    await userEvent.click(within(col).getByRole('button', { name: 'Разложить по слотам' }))
+    expect(within(col).getByRole('button', { name: 'Вернуть в черновики: ИИ-бухгалтер' })).toBeInTheDocument()
+    await userEvent.click(within(drafts).getByRole('tab', { name: 'Новый контент' }))
+    expect(screen.getByRole('complementary', { name: 'Новый контент' })).toBeInTheDocument()
   })
 })

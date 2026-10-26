@@ -8,25 +8,43 @@ import { initialState, reducer } from './model/store'
 import { labelOf, type ISODate, type Item, type Plan } from './model/types'
 import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
-import { PlanCtx, usePlan, type Ctx, type Drag, type ToastOpts, type View } from './ui/ctx'
+import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type ToastOpts } from './ui/ctx'
 import { Icon } from './ui/Icon'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
-import { DashboardView } from './views/DashboardView'
+import { AgendaView } from './views/AgendaView'
+import { DraftsSheet } from './views/BankView'
+import { DashboardSheet } from './views/DashboardView'
 import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
 import { ItemEditor } from './views/ItemEditor'
-import { MonthView } from './views/MonthView'
+import { PlanningSheet } from './views/PlanningSheet'
 import { TaskSheet } from './views/TaskSheet'
 import { WeekView } from './views/WeekView'
 
+/** Куда вернуться из формы или задачи: к дню, дашборду, черновикам или планированию. */
+type Back = { kind: 'day'; date: ISODate } | { kind: 'dashboard' } | { kind: 'drafts' } | { kind: 'planning' }
 type Sheet =
-  | { kind: 'day'; date: ISODate }
-  | { kind: 'item'; id: string; back?: ISODate }
-  | { kind: 'new'; draft: Partial<Item>; back?: ISODate }
-  | { kind: 'task'; id: string; back?: ISODate }
+  | Back
+  | { kind: 'item'; id: string; back?: Back }
+  | { kind: 'new'; draft: Partial<Item>; back?: Back }
+  | { kind: 'task'; id: string; back?: Back }
   | { kind: 'help' }
   | null
+
+/** Открыли форму или задачу поверх листа — «назад» ведёт к нему. */
+const backOf = (s: Sheet): Back | undefined =>
+  !s || s.kind === 'help' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
+
+const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
+const readMode = (): Mode => {
+  try {
+    const m = localStorage.getItem('cp:week-mode') as Mode
+    return MODES.includes(m) ? m : 'time'
+  } catch {
+    return 'time'
+  }
+}
 
 /** Отделы Neuronium на левой панели — как в nr (F20): SMM — это приложение, остальные пока не подключены. */
 const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
@@ -42,8 +60,6 @@ const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
   { id: 'engineering', label: 'Инжиниринг', icon: 'wrench' },
 ]
 const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
-
-const VIEWS: View[] = ['dashboard', 'week', 'month']
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -154,11 +170,8 @@ interface WorkspaceProps {
 }
 
 function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: WorkspaceProps) {
-  // SMM открывается дашбордом; календарь — неделей или месяцем, как оставили
-  const [view, setViewState] = useState<View>(() => {
-    const v = readLS<string>('cp:view', 'dashboard')
-    return VIEWS.includes(v as View) ? (v as View) : 'dashboard'
-  })
+  // SMM — это календарь: неделя по часам или дорожками, как оставили; дашборд открывается панелью справа
+  const [mode, setModeState] = useState<Mode>(readMode)
   // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
   const [anchor, setAnchorState] = useState<ISODate>(() => readLS('cp:anchor', today()))
   const [jump, setJump] = useState({ date: anchor, n: 0 })
@@ -167,20 +180,18 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)
   const narrow = useMedia('(max-width: 900px)')
   const phone = useMedia('(max-width: 600px)')
-  // фильтры — за кнопкой; на большом экране панель помнит, открыта ли, на узком — всегда поверх и закрыта
-  const [sideOpen, setSideState] = useState<boolean>(() => !narrow && readLS('cp:side', false))
-  const setSideOpen = (v: boolean | ((o: boolean) => boolean)) =>
-    setSideState((o) => {
-      const next = typeof v === 'function' ? v(o) : v
-      if (!narrow) writeLS('cp:side', next)
-      return next
-    })
+  // вид и фильтры — панелью слева: на большом экране всегда открыта, на узком — за кнопкой «Фильтры», поверх
+  const [sideOpen, setSideOpen] = useState(false)
   const [menu, setMenu] = useState(false)
   const theme = useTheme()
 
-  const setView = (v: View) => {
-    setViewState(v)
-    writeLS('cp:view', v)
+  const setMode = (m: Mode) => {
+    setModeState(m)
+    try {
+      localStorage.setItem('cp:week-mode', m)
+    } catch {
+      /* вид проживёт до перезагрузки */
+    }
   }
   const setAnchor = useCallback((d: ISODate) => {
     setAnchorState(d)
@@ -256,8 +267,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
       if (e.key === 'Escape') {
         setMenu(false)
-        if (narrow) setSideState(false)
-        setSheet((s) => (s && s.kind !== 'day' && s.kind !== 'help' && s.back ? { kind: 'day', date: s.back } : null))
+        if (narrow) setSideOpen(false)
+        setSheet((s) => (s && 'back' in s && s.back ? s.back : null))
       }
       if (typing || !(e.metaKey || e.ctrlKey)) return
       if (e.key.toLowerCase() === 'z') {
@@ -272,7 +283,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     return () => window.removeEventListener('keydown', onKey)
   }, [dispatch, narrow])
 
-  const openDayId = sheet?.kind === 'day' ? sheet.date : sheet && 'back' in sheet ? sheet.back ?? null : null
+  const under = backOf(sheet)
+  const openDayId = under?.kind === 'day' ? under.date : null
   const ctx: Ctx = {
     plan,
     dispatch,
@@ -293,15 +305,21 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     setAnchor,
     jump,
     jumpTo,
-    openItem: (id) => setSheet((s) => ({ kind: 'item', id, back: s?.kind === 'day' ? s.date : s && 'back' in s ? s.back : undefined })),
-    openNew: (draft) => setSheet((s) => ({ kind: 'new', draft, back: s?.kind === 'day' ? s.date : undefined })),
-    openTask: (id) => setSheet((s) => ({ kind: 'task', id, back: s?.kind === 'day' ? s.date : s && 'back' in s ? s.back : undefined })),
+    openItem: (id) => setSheet((s) => ({ kind: 'item', id, back: backOf(s) })),
+    // «+» поверх черновиков — вкладка, а не шаг вглубь: назад ведёт туда же, откуда открыли черновики
+    openNew: (draft) => setSheet((s) => ({ kind: 'new', draft, back: s?.kind === 'drafts' ? undefined : backOf(s) })),
+    openTask: (id) => setSheet((s) => ({ kind: 'task', id, back: backOf(s) })),
     openDay: (date) => setSheet({ kind: 'day', date }),
     openDayId,
-    goto: (v, date) => {
-      setView(v)
+    show: (date) => {
+      setSheet(null)
       if (date) jumpTo(date)
     },
+    mode: phone || mode !== 'feed' ? mode : 'time',
+    setMode,
+    openDashboard: () => setSheet({ kind: 'dashboard' }),
+    openDrafts: () => setSheet({ kind: 'drafts' }),
+    openPlanning: () => setSheet((s) => ({ kind: 'planning', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
     dropOn,
     setStatus: (unit, status) => {
       dispatch({ type: 'updateMany', ids: unit.items.map((x) => x.id), patch: { status } })
@@ -311,25 +329,25 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     toggleSide: () => setSideOpen((o) => !o),
     sideOpen,
     openHelp: () => setSheet({ kind: 'help' }),
-    view,
+    panel: sheet?.kind === 'dashboard' || sheet?.kind === 'drafts' || sheet?.kind === 'planning' ? sheet.kind : null,
     saved,
     phone,
+    narrow,
   }
 
   const closeSheet = () => setSheet(null)
-  const back = sheet && sheet.kind !== 'day' && sheet.kind !== 'help' && sheet.back ? () => setSheet({ kind: 'day', date: sheet.back! }) : undefined
-  const withSide = true // фильтры — и в дашборде, и в календаре
+  const back = sheet && 'back' in sheet && sheet.back ? () => setSheet(sheet.back!) : undefined
 
   return (
     <PlanCtx.Provider value={ctx}>
       <div className="nr-app">
         {phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
-            <button type="button" className="cp-tab" aria-current={view === 'dashboard' ? 'page' : undefined} onClick={() => setView('dashboard')}>
+            <button type="button" className="cp-tab" aria-current={sheet?.kind === 'dashboard' ? 'page' : undefined} onClick={() => setSheet({ kind: 'dashboard' })}>
               <Icon name="dashboard" size={22} />
               <span>Дашборд</span>
             </button>
-            <button type="button" className="cp-tab" aria-current={view !== 'dashboard' ? 'page' : undefined} onClick={() => view === 'dashboard' && setView('week')}>
+            <button type="button" className="cp-tab" aria-current={sheet?.kind !== 'dashboard' ? 'page' : undefined} onClick={() => setSheet(null)}>
               <Icon name="calendar" size={22} />
               <span>Календарь</span>
             </button>
@@ -344,7 +362,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
             <div className="nr-rail-brand" aria-hidden="true">Nr</div>
             {DEPARTMENTS.map((d) =>
               d.id === 'smm' ? (
-                <button key={d.id} type="button" className="nr-rail-item" aria-current="page" aria-label="SMM — контент-план" onClick={() => setView('dashboard')}>
+                <button key={d.id} type="button" className="nr-rail-item" aria-current="page" aria-label="SMM — контент-план" onClick={() => setSheet(null)}>
                   <Icon name={d.icon} size={22} />
                   <span className="cp-rail-tip" aria-hidden="true">SMM — контент-план</span>
                 </button>
@@ -363,17 +381,18 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
             {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} />}
           </nav>
         )}
-        {withSide && sideOpen && narrow && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {withSide && sideOpen && <Sidebar open={sideOpen} withBank={view !== 'dashboard'} onClose={() => setSideOpen(false)} />}
+        {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
+        {(!narrow || sideOpen) && <Sidebar onClose={narrow ? () => setSideOpen(false) : undefined} />}
         <main className="nr-main">
-          {view === 'dashboard' && <DashboardView />}
-          {view === 'month' && <MonthView />}
-          {view === 'week' && <WeekView />}
+          {ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
+          {sheet?.kind === 'dashboard' && <DashboardSheet onClose={closeSheet} />}
+          {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
+          {sheet?.kind === 'planning' && <PlanningSheet onClose={closeSheet} onBack={back} />}
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
-          {sheet?.kind === 'help' && <HelpSheet view={view} onClose={closeSheet} />}
+          {sheet?.kind === 'help' && <HelpSheet onClose={closeSheet} />}
           {!sheet && (
             <button type="button" className="cp-fab" aria-label="Новый контент" title="Запланировать контент" onClick={() => ctx.openNew({ date: anchor < today() ? today() : anchor })}>
               <Icon name="plus" size={26} />

@@ -5,8 +5,9 @@ import type { Action } from '../model/store'
 import type { Channel, ISODate, Item, Plan, Rubric, Rule, Status } from '../model/types'
 import type { Unit } from '../model/units'
 
-/** Экраны SMM: дашборд и календарь (неделей или месяцем). */
-export type View = 'dashboard' | 'week' | 'month'
+/** Что показывает календарь: неделю по часам или дорожками по каналам, площадкам, темам; на телефоне ещё — ленту по дням.
+ *  Выбирается в левой панели, как фильтр. */
+export type Mode = 'time' | 'channels' | 'platforms' | 'topics' | 'feed'
 
 export type Drag = { kind: 'item' | 'bank'; id: string }
 
@@ -46,7 +47,16 @@ export interface Ctx {
   openDay: (d: ISODate) => void
   openTask: (id: string) => void
   openDayId: ISODate | null
-  goto: (view: View, date?: ISODate) => void
+  /** Календарь, закрыв панели; с датой — к ней. */
+  show: (date?: ISODate) => void
+  mode: Mode
+  setMode: (m: Mode) => void
+  /** Дашборд — панелью справа. */
+  openDashboard: () => void
+  /** Черновики (банк идей) — во вкладке «+». */
+  openDrafts: () => void
+  /** Планирование недели: уточнить темы пустых слотов. */
+  openPlanning: () => void
   dropOn: (date: ISODate, drag: Drag, time?: string) => void
   /** Статус всей карточке; ▶ ещё и открывает задачу. */
   setStatus: (unit: Unit, status: Status) => void
@@ -54,9 +64,12 @@ export interface Ctx {
   toggleSide: () => void
   sideOpen: boolean
   openHelp: () => void
-  view: View
+  /** Что открыто справа: дашборд, черновики, планирование — чтобы кнопки знали, нажаты ли они. */
+  panel: 'dashboard' | 'drafts' | 'planning' | null
   saved: 'idle' | 'saving' | 'saved' | 'memory' | 'error'
   phone: boolean
+  /** Узкий экран: левая панель — за кнопкой «Фильтры». */
+  narrow: boolean
 }
 
 export const PlanCtx = createContext<Ctx | null>(null)

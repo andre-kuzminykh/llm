@@ -1,11 +1,16 @@
 import { byId, item, smallPlan } from '../test/fixtures'
+import { planningSlots } from './planning'
 import {
+  addChannel,
+  addPlatform,
+  addRubric,
   assignTopic,
   bankAdd,
   bankOf,
   bankReorder,
   createItem,
   createSlots,
+  draftsFor,
   duplicateItem,
   editItem,
   fillSlots,
@@ -14,6 +19,8 @@ import {
   planFill,
   reducer,
   removeItem,
+  setPeriod,
+  takeDraft,
   unassignTopic,
   updateItem,
   updateMany,
@@ -237,5 +244,63 @@ describe('T-CP-027 FR-CP-027 копия и версии для других пл
     expect(s.plan!.items.length).toBe(p.items.length + 2)
     s = reducer(s, { type: 'undo' })
     expect(s.plan!.items.length).toBe(p.items.length)
+  })
+})
+
+describe('T-CP-031 FR-CP-031 периодичность хэштега, планирование недели, черновики', () => {
+  const thesisSlots = (p: ReturnType<typeof smallPlan>) => p.items.filter((x) => x.ruleId === 'sh_thesis' && x.title === '…').map((x) => x.date).sort()
+  it('новый день недели ставит слоты без темы до конца плана; снятый — убирает пустые, тема остаётся', () => {
+    const p = smallPlan()
+    p.items = p.items.filter((x) => x.id !== 'th-slot')
+    const sat = [true, true, true, true, true, true, true]
+    const on = setPeriod(p, 'sh_thesis', sat, undefined, '2026-10-27')
+    expect(on.rules.find((r) => r.id === 'sh_thesis')!.days).toEqual(sat)
+    const slots = thesisSlots(on)
+    expect(slots[0]).toBe('2026-10-27')
+    expect(slots).toContain('2026-10-31')
+    expect(slots[slots.length - 1]).toBe('2026-11-30')
+    expect(slots).not.toContain('2026-10-26') // тут уже тезис с темой, а раньше from — не трогаем
+    const off = setPeriod(on, 'sh_thesis', [true, true, true, true, true, false, true], '10:00', '2026-10-27')
+    expect(thesisSlots(off)).not.toContain('2026-10-31')
+    expect(thesisSlots(off)).toContain('2026-11-01')
+    expect(off.rules.find((r) => r.id === 'sh_thesis')!.time).toBe('10:00')
+    expect(byId(off, 'thesis').title).toBe('Я устал от хайпа вокруг ИИ')
+  })
+  it('без дней — разово: пустые слоты уходят вместе с группой', () => {
+    const p = setPeriod(smallPlan(), 'f_demo', [false, false, false, false, false, false, false], undefined, '2026-10-27')
+    expect(p.items.some((x) => x.id === 'slot' || x.id === 'slot-teaser' || x.id === 'slot2')).toBe(false)
+    expect(byId(p, 'demo').title).toBe('Стратегия')
+  })
+  it('планирование — пустые слоты до конца следующей недели; ближайший черновик того же хэштега — по порядку дат', () => {
+    const p = smallPlan()
+    expect(planningSlots(p, '2026-10-24').map((x) => x.id)).toEqual(['th-slot'])
+    expect(planningSlots(p, '2026-10-27').map((x) => x.id)).toEqual(['th-slot', 'slot'])
+    const withDrafts = bankAdd(p, 'sh_thesis', ['Первая', 'Вторая'])
+    const sug = draftsFor(withDrafts, planningSlots(withDrafts, '2026-10-27'))
+    expect(sug.get('th-slot')!.title).toBe('Первая')
+    expect(sug.has('slot')).toBe(false) // черновиков #демо нет
+    const taken = takeDraft(withDrafts, 'th-slot', sug.get('th-slot')!.id)
+    expect(byId(taken, 'th-slot').title).toBe('Первая')
+    expect(bankOf(taken, 'sh_thesis').map((x) => x.title)).toEqual(['Вторая'])
+  })
+  it('черновик FULL встаёт в слот и даёт тему всей группе', () => {
+    const p = bankAdd(smallPlan(), 'f_demo', ['Агент продаж'])
+    const draft = bankOf(p, 'f_demo')[0]
+    const next = takeDraft(p, 'slot', draft.id)
+    expect(byId(next, 'slot').title).toBe('Агент продаж')
+    expect(byId(next, 'slot-teaser').title).toBe('Агент продаж')
+  })
+  it('новые площадка, канал и хэштег; повтор не заводится', () => {
+    const p = addPlatform(smallPlan(), 'VK')
+    expect(p.platforms).toContain('VK')
+    expect(p.channels.every((c) => c.platforms.includes('VK'))).toBe(true)
+    expect(addPlatform(p, 'vk')).toBe(p)
+    const c = addChannel(p, 'Антрополис', '2026-10-26', 'anthropolis')
+    expect(c.channels.find((x) => x.id === 'anthropolis')).toMatchObject({ name: 'Антрополис', platforms: p.platforms, sections: [] })
+    expect(addChannel(c, 'антрополис', '2026-10-26')).toBe(c)
+    const r = addRubric(c, '#Агенты', '', 'agents')
+    expect(r.rubrics.find((x) => x.id === 'agents')!.name).toBe('Агенты')
+    expect(addRubric(r, 'агенты')).toBe(r)
+    expect(addRubric(r, 'Тезисы')).toBe(r)
   })
 })

@@ -4,6 +4,7 @@ import { bankOf, planFill } from '../model/store'
 import { isSlot, tagOf, type ISODate, type Item, type Plan, type Rule } from '../model/types'
 import { IconButton, startDrag, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
+import { Icon } from '../ui/Icon'
 
 /** Форматы с банком тем: темы к ним придумывают заранее, или в банке уже что-то лежит. */
 export const bankRules = (plan: Plan) =>
@@ -16,29 +17,6 @@ export const bankTitle = (plan: Plan, rule: Rule) => {
 }
 export const bankLabel = (plan: Plan, rule: Rule) => `${bankTitle(plan, rule)}${rule.name !== 'FULL' && rule.name !== bankTitle(plan, rule) ? ` · ${rule.name}` : ''}`
 
-/** Какие банки выбраны галочками; пусто в хранилище — все. */
-export function useBankChoice(key: string, plan: Plan) {
-  const all = bankRules(plan).map((r) => r.id)
-  const [chosen, setChosen] = useState<string[] | null>(() => {
-    try {
-      const v = localStorage.getItem(key)
-      return v ? (JSON.parse(v) as string[]) : null
-    } catch {
-      return null
-    }
-  })
-  const list = chosen ?? all
-  const set = (next: string[]) => {
-    setChosen(next)
-    try {
-      localStorage.setItem(key, JSON.stringify(next))
-    } catch {
-      /* выбор живёт до перезагрузки */
-    }
-  }
-  return { list, toggle: (id: string) => set(list.includes(id) ? list.filter((x) => x !== id) : all.filter((x) => x === id || list.includes(x))), all: () => set(all), none: () => set([]) }
-}
-
 // куда недавно легли темы — до перезагрузки страницы
 const recent = new Map<string, { id: string; title: string; date: ISODate }[]>()
 
@@ -48,8 +26,28 @@ const range = (dates: ISODate[]) => {
   return s.length === 1 || s[0] === s[s.length - 1] ? shortDate(s[0]) : `${shortDate(s[0])} – ${shortDate(s[s.length - 1])} ${s[s.length - 1].slice(0, 4)}`
 }
 
-/** Банк идей на дашборде: хэштег — кнопками сверху, ниже темы выбранного, одно поле и «Разложить по слотам». */
-export function BankPanel() {
+/** Вкладки «+»: новый контент или черновики (банк идей). */
+export function CreateTabs({ current }: { current: 'new' | 'drafts' }) {
+  const { plan, anchor, openNew, openDrafts } = usePlan()
+  const n = plan.items.filter((x) => x.date === null).length
+  return (
+    <div className="cp-create-tabs" role="tablist" aria-label="Создание контента">
+      <button type="button" role="tab" aria-selected={current === 'new'} className="cp-create-tab" onClick={() => current !== 'new' && openNew({ date: anchor < today() ? today() : anchor })}>
+        <Icon name="plus" size={16} />
+        Новый контент
+      </button>
+      <button type="button" role="tab" aria-selected={current === 'drafts'} className="cp-create-tab" onClick={() => current !== 'drafts' && openDrafts()}>
+        <Icon name="draft" size={16} />
+        Черновики
+        {n > 0 && <span className="cp-muted">{n}</span>}
+      </button>
+    </div>
+  )
+}
+
+/** Черновики — банк идей во вкладке «+»: темы без даты по хэштегам. Добавить списком, «Разложить по слотам»,
+ *  поставить в ближайший слот, вернуть; при планировании недели они подставляются сами — ближайшие по хэштегу. */
+export function DraftsSheet({ onClose }: { onClose: () => void }) {
   const { plan } = usePlan()
   const from = today() < plan.start ? plan.start : today()
   const rules = bankRules(plan)
@@ -71,33 +69,39 @@ export function BankPanel() {
   const rule = rules.find((r) => r.id === sel) ?? rules[0]
   const slots = (r: Rule) => plan.items.filter((x) => x.ruleId === r.id && x.date && x.date >= from && !x.derive && isSlot(x)).length
   return (
-    <section className="cp-panel" aria-labelledby="bank-h">
-      <h2 className="cp-panel__title" id="bank-h">Банк идей</h2>
-      <div className="cp-tags" role="group" aria-label="Хэштеги банка">
-        {rules.map((r) => {
-          const n = bankOf(plan, r.id).length
-          return (
-            <button
-              key={r.id}
-              type="button"
-              className="nr-pill"
-              aria-pressed={r.id === rule?.id}
-              title={`Идей в банке: ${n} · пустых слотов: ${slots(r)}`}
-              onClick={() => pick(r.id)}
-            >
-              {bankLabel(plan, r)}
-              {n > 0 && <span className="cp-muted">{n}</span>}
-            </button>
-          )
-        })}
+    <aside className="cp-sheet" aria-label="Черновики">
+      <div className="cp-sheet__head">
+        <CreateTabs current="drafts" />
+        <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
-      {rule && <BankColumn key={rule.id} rule={rule} from={from} />}
-    </section>
+      <div className="cp-sheet__body nr-scroll">
+        <p className="cp-hint">Банк идей: темы без даты. Перетащите тему на день в календаре, разложите по слотам — или при планировании недели они подставятся сами.</p>
+        <div className="cp-tags" role="group" aria-label="Хэштеги черновиков">
+          {rules.map((r) => {
+            const n = bankOf(plan, r.id).length
+            return (
+              <button
+                key={r.id}
+                type="button"
+                className="nr-pill"
+                aria-pressed={r.id === rule?.id}
+                title={`Черновиков: ${n} · пустых слотов: ${slots(r)}`}
+                onClick={() => pick(r.id)}
+              >
+                {bankLabel(plan, r)}
+                {n > 0 && <span className="cp-muted">{n}</span>}
+              </button>
+            )
+          })}
+        </div>
+        {rule && <BankColumn key={rule.id} rule={rule} from={from} />}
+      </div>
+    </aside>
   )
 }
 
 function BankColumn({ rule, from }: { rule: Rule; from: string }) {
-  const { plan, dispatch, toast, goto } = usePlan()
+  const { plan, dispatch, toast, show } = usePlan()
   const [text, setText] = useState('')
   const [, rerender] = useState(0)
   const topics = bankOf(plan, rule.id)
@@ -120,7 +124,7 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
   }
   const slotWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'слот ждёт' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'слота ждут' : 'слотов ждут')
   return (
-    <section className="cp-bank__col" aria-label={`Банк: ${title}`}>
+    <section className="cp-bank__col" aria-label={`Черновики: ${title}`}>
       <div className="cp-bank__head">
         <h3 className="cp-bank__title">{title}</h3>
         <span className="cp-muted">
@@ -132,7 +136,7 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
           className="nr-field"
           rows={2}
           placeholder="Новые темы, по одной на строку"
-          aria-label={`Новые темы: ${title}`}
+          aria-label={`Новые черновики: ${title}`}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && add()}
@@ -153,7 +157,7 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
             }}
           />
         ))}
-        {topics.length === 0 && <p className="cp-hint">Тем пока нет.</p>}
+        {topics.length === 0 && <p className="cp-hint">Черновиков пока нет.</p>}
       </div>
       {topics.length > 0 && (
         <button
@@ -168,7 +172,7 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
             const first = pairs.map((p) => p.date).sort()[0]
             toast(`Разложено: ${pairs.length} · ${range(pairs.map((p) => p.date))}${fill.left ? `, не влезло: ${fill.left}` : ''}`, {
               undo: true,
-              actions: first ? [{ label: 'Показать', run: () => goto('week', first) }] : undefined,
+              actions: first ? [{ label: 'Показать', run: () => show(first) }] : undefined,
             })
           }}
         >
@@ -181,16 +185,16 @@ function BankColumn({ rule, from }: { rule: Rule; from: string }) {
           {placed.map((r) => (
             <div key={r.id} className="cp-topic cp-topic--placed">
               <span className="cp-topic__text">{r.title}</span>
-              <button type="button" className="cp-link cp-muted" onClick={() => goto('week', r.date)} title="Показать в календаре">
+              <button type="button" className="cp-link cp-muted" onClick={() => show(r.date)} title="Показать в календаре">
                 {shortDate(r.date)}
               </button>
               <IconButton
                 icon="undo"
                 size="sm"
-                label={`Вернуть в банк: ${r.title}`}
+                label={`Вернуть в черновики: ${r.title}`}
                 onClick={() => {
                   dispatch({ type: 'unassign', id: r.id })
-                  toast(`«${r.title}» снова в банке, слот ${shortDate(r.date)} свободен`, true)
+                  toast(`«${r.title}» снова в черновиках, слот ${shortDate(r.date)} свободен`, true)
                 }}
               />
             </div>
@@ -221,7 +225,7 @@ function Topic({ item, nextSlot, onPlaced }: { item: Item; nextSlot: string | nu
           }}
         />
       )}
-      <IconButton icon="trash" size="sm" label="Удалить тему" onClick={() => dispatch({ type: 'remove', id: item.id })} />
+      <IconButton icon="trash" size="sm" label={`Удалить черновик: ${item.title}`} onClick={() => dispatch({ type: 'remove', id: item.id })} />
     </div>
   )
 }

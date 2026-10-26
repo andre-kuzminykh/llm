@@ -1,9 +1,9 @@
+import { useState } from 'react'
+import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
-import { bankOf } from '../model/store'
 import { statusOf, tagOf } from '../model/types'
-import { bankLabel, bankRules, useBankChoice } from '../views/BankView'
-import { ChannelDot, Check, IconButton, startDrag, StatusFilter, Switch } from './bits'
-import { usePlan, type Ctx } from './ctx'
+import { ChannelDot, IconButton, StatusFilter, Switch } from './bits'
+import { usePlan, type Ctx, type Mode } from './ctx'
 import { Icon } from './Icon'
 
 /** Фильтры по умолчанию: видно всё, и ежедневные авто-публикации тоже. */
@@ -56,16 +56,89 @@ export function FilterChips() {
   )
 }
 
-/** Боковая панель за кнопкой «Фильтры»: каналы, площадки, статус, рубрики и банк тем под рукой — темы тянутся на день. */
-export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: boolean; onClose: () => void }) {
-  const { plan, filters, setFilters, goto } = usePlan()
-  const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
-  const banks = useBankChoice('cp:side-banks', plan)
-  const rules = bankRules(plan)
-  const chosen = rules.filter((r) => banks.list.includes(r.id))
-  const changed = activeFilters({ plan, filters, setFilters }).length > 0
+const MODES: { id: Mode; label: string; icon: string; phone?: boolean }[] = [
+  { id: 'time', label: 'Время', icon: 'clock' },
+  { id: 'channels', label: 'Каналы', icon: 'channels' },
+  { id: 'platforms', label: 'Площадки', icon: 'platforms' },
+  { id: 'topics', label: 'Темы', icon: 'hash' },
+  { id: 'feed', label: 'Лента по дням', icon: 'list', phone: true },
+]
+
+/** Поле «добавить» под заголовком блока: Enter — добавить, Esc — передумать. */
+function AddInline({ label, placeholder, onAdd, onDone }: { label: string; placeholder: string; onAdd: (v: string) => void; onDone: () => void }) {
+  const [v, setV] = useState('')
   return (
-    <aside className="cp-side nr-scroll" data-open={open} aria-label="Фильтры и банк тем">
+    <form
+      className="cp-side__add"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (v.trim()) onAdd(v.trim())
+        onDone()
+      }}
+    >
+      <input
+        className="nr-field nr-field--sm"
+        aria-label={label}
+        placeholder={placeholder}
+        value={v}
+        autoFocus
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), onDone())}
+      />
+      <button type="submit" className="nr-btn nr-btn--ghost nr-btn--sm" disabled={!v.trim()}>
+        Добавить
+      </button>
+    </form>
+  )
+}
+
+/** Заголовок блока фильтров с «+»: каналы, площадки и хэштеги можно добавлять прямо здесь. */
+function BlockHead({ label, add, adding, onAdd }: { label: string; add: string; adding: boolean; onAdd: () => void }) {
+  return (
+    <div className="cp-side__label">
+      <span className="nr-label">{label}</span>
+      <IconButton icon="plus" size="sm" label={add} pressed={adding} onClick={onAdd} />
+    </div>
+  )
+}
+
+/** Панель слева — рядом с отделами, на большом экране всегда открыта: «Показать» (время, каналы, площадки, темы —
+ *  выбирается как фильтр) и фильтры — каналы с разделами, площадки, хэштеги, статус. На узком экране — за кнопкой «Фильтры». */
+export function Sidebar({ onClose }: { onClose?: () => void }) {
+  const { plan, filters, setFilters, mode, setMode, phone, dispatch, toast } = usePlan()
+  const [adding, setAdding] = useState<'channel' | 'platform' | 'tag' | null>(null)
+  const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
+  const changed = activeFilters({ plan, filters, setFilters }).length > 0
+  const open = (k: typeof adding) => setAdding(adding === k ? null : k)
+  return (
+    <aside className="cp-side nr-scroll" aria-label="Вид и фильтры">
+      {onClose && (
+        <div className="cp-side__head">
+          <span className="cp-side__title">Вид и фильтры</span>
+          <IconButton icon="close" label="Закрыть фильтры" onClick={onClose} size="sm" />
+        </div>
+      )}
+      <div className="cp-side__block">
+        <span className="nr-label">Показать</span>
+        <div className="cp-modes" role="radiogroup" aria-label="Показать">
+          {MODES.filter((m) => !m.phone || phone).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="radio"
+              aria-checked={mode === m.id}
+              className="nr-row cp-mode"
+              onClick={() => {
+                setMode(m.id)
+                onClose?.()
+              }}
+            >
+              <Icon name={m.icon} size={18} />
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="cp-side__head">
         <span className="cp-side__title">Фильтры</span>
         {changed && (
@@ -73,10 +146,20 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
             Сбросить
           </button>
         )}
-        <IconButton icon="close" label="Закрыть фильтры" onClick={onClose} size="sm" />
       </div>
       <div className="cp-side__block">
-        <span className="nr-label">Каналы</span>
+        <BlockHead label="Каналы" add="Добавить канал" adding={adding === 'channel'} onAdd={() => open('channel')} />
+        {adding === 'channel' && (
+          <AddInline
+            label="Новый канал"
+            placeholder="Название канала"
+            onDone={() => setAdding(null)}
+            onAdd={(name) => {
+              dispatch({ type: 'addChannel', name, start: today() })
+              toast(`Канал «${name}» добавлен`, true)
+            }}
+          />
+        )}
         {plan.channels.map((c) => {
           const off = filters.hiddenChannels.includes(c.id)
           return (
@@ -109,19 +192,18 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
         })}
       </div>
       <div className="cp-side__block">
-        <span className="nr-label">Статус</span>
-        <StatusFilter value={filters.statuses} onChange={(statuses) => setFilters({ ...filters, statuses })} />
-      </div>
-      <div className="cp-side__block cp-side__block--pad">
-        <Switch checked={!filters.hideAuto} onChange={(v) => setFilters({ ...filters, hideAuto: !v })}>
-          Ежедневные авто-публикации
-        </Switch>
-        <Switch checked={filters.onlySlots} onChange={(v) => setFilters({ ...filters, onlySlots: v })}>
-          Только без темы
-        </Switch>
-      </div>
-      <div className="cp-side__block">
-        <span className="nr-label">Площадки</span>
+        <BlockHead label="Площадки" add="Добавить площадку" adding={adding === 'platform'} onAdd={() => open('platform')} />
+        {adding === 'platform' && (
+          <AddInline
+            label="Новая площадка"
+            placeholder="Например, VK"
+            onDone={() => setAdding(null)}
+            onAdd={(name) => {
+              dispatch({ type: 'addPlatform', name })
+              toast(`Площадка «${name}» добавлена`, true)
+            }}
+          />
+        )}
         <div className="cp-pills">
           {plan.platforms.map((p) => (
             <button
@@ -137,7 +219,18 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
         </div>
       </div>
       <div className="cp-side__block">
-        <span className="nr-label">Хэштеги</span>
+        <BlockHead label="Хэштеги" add="Добавить хэштег" adding={adding === 'tag'} onAdd={() => open('tag')} />
+        {adding === 'tag' && (
+          <AddInline
+            label="Новый хэштег"
+            placeholder="#хэштег"
+            onDone={() => setAdding(null)}
+            onAdd={(name) => {
+              dispatch({ type: 'addRubric', name })
+              toast(`Хэштег ${tagOf(name.replace(/^#/, ''))} добавлен — периодичность в канале задаётся в дашборде, в «Темах»`, true)
+            }}
+          />
+        )}
         <div className="cp-pills">
           {plan.rubrics.map((r) => (
             <button
@@ -152,39 +245,18 @@ export function Sidebar({ open, withBank, onClose }: { open: boolean; withBank: 
           ))}
         </div>
       </div>
-      {withBank && rules.length > 0 && (
-        <div className="cp-side__block cp-side__block--pad">
-          <span className="nr-label">Банк идей</span>
-          <div className="cp-side__banks" role="group" aria-label="Рубрики банка">
-            {rules.map((r) => (
-              <Check key={r.id} checked={banks.list.includes(r.id)} onChange={() => banks.toggle(r.id)}>
-                {bankLabel(plan, r)} <span className="cp-muted">{bankOf(plan, r.id).length}</span>
-              </Check>
-            ))}
-          </div>
-          <div className="cp-list" style={{ marginTop: 6 }}>
-            {chosen.map((r) => {
-              const topics = bankOf(plan, r.id)
-              if (!topics.length) return null
-              return (
-                <div key={r.id} className="cp-list" aria-label={`Темы: ${bankLabel(plan, r)}`} role="group">
-                  {chosen.length > 1 && <span className="cp-side__sub">{bankLabel(plan, r)}</span>}
-                  {topics.slice(0, 12).map((t) => (
-                    <div key={t.id} className="cp-topic" draggable onDragStart={(e) => startDrag(e, { kind: 'bank', id: t.id })} title="Перетащите на день">
-                      <span className="cp-topic__text">{t.title}</span>
-                    </div>
-                  ))}
-                  {topics.length > 12 && <span className="cp-hint">и ещё {topics.length - 12}</span>}
-                </div>
-              )
-            })}
-            {chosen.every((r) => !bankOf(plan, r.id).length) && <span className="cp-hint">{chosen.length ? 'В отмеченных рубриках тем нет.' : 'Отметьте рубрики галочками.'}</span>}
-          </div>
-          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" style={{ alignSelf: 'flex-start' }} onClick={() => goto('dashboard')}>
-            Банк идей на дашборде
-          </button>
-        </div>
-      )}
+      <div className="cp-side__block">
+        <span className="nr-label">Статус</span>
+        <StatusFilter value={filters.statuses} onChange={(statuses) => setFilters({ ...filters, statuses })} />
+      </div>
+      <div className="cp-side__block cp-side__block--pad">
+        <Switch checked={!filters.hideAuto} onChange={(v) => setFilters({ ...filters, hideAuto: !v })}>
+          Ежедневные авто-публикации
+        </Switch>
+        <Switch checked={filters.onlySlots} onChange={(v) => setFilters({ ...filters, onlySlots: v })}>
+          Только без темы
+        </Switch>
+      </div>
     </aside>
   )
 }

@@ -1,5 +1,6 @@
-// Видеодемо SMM: дашборд, календарь (неделя и месяц), от пустого слота до «Вышло», перенос и растягивание на шкале,
-// «Поменять местами», банк идей и темы, «+» с версией для другой площадки по триггеру. Пишет webm в $OUT (по умолчанию e2e/shots/demo);
+// Видеодемо SMM: календарь с панелью слева («Показать» и фильтры), перенос и растягивание на шкале, «Поменять местами»,
+// от пустого слота до «Вышло», черновики во вкладке «+», периодичность хэштега и планирование недели, дашборд справа,
+// хэштег с подсказками и версия для другой площадки по триггеру, поиск вверху. Пишет webm в $OUT (по умолчанию e2e/shots/demo);
 // в mp4: ffmpeg -i <файл>.webm -c:v libx264 -pix_fmt yuv420p -crf 24 -movflags +faststart demo.mp4
 // Запуск — как у smoke.mjs: npm run build && npm run preview, затем node e2e/demo.mjs
 import { mkdirSync } from 'node:fs'
@@ -15,7 +16,6 @@ const browser = await chromium.launch({ executablePath: CHROME })
 const ctx = await browser.newContext({ viewport: size, recordVideo: { dir: OUT, size } })
 // курсор и подписи — в самой странице, чтобы попали в запись
 await ctx.addInitScript(() => {
-  localStorage.setItem('cp:view', JSON.stringify('dashboard'))
   localStorage.setItem('cp:theme', 'light')
   addEventListener('DOMContentLoaded', () => {
     const css = document.createElement('style')
@@ -84,72 +84,27 @@ const jump = async (date) => {
 }
 
 await page.goto(BASE)
-await page.getByRole('heading', { name: 'Дашборд' }).waitFor()
+await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 await page.mouse.move(720, 450)
 await wait(600)
+const side = page.getByRole('complementary', { name: 'Вид и фильтры' })
+const top = page.locator('.cp-top')
 
-// 1. Дашборд
-await cap('SMM в Neuronium: слева — отделы, открыт SMM', 2600)
-await cap('Дашборд: что делать на две недели, банк идей и темы-хэштеги по каналам', 3200)
-await page.mouse.wheel(0, 420)
-await wait(1200)
-await page.mouse.wheel(0, -420)
-await cap('Строка — время, #хэштег и тема; ▶ — начать', 2600)
+// 1. Календарь и панель слева
+await cap('SMM в Neuronium: слева — отделы, рядом — что показать и фильтры', 2800)
+await moveTo(side.getByRole('radiogroup', { name: 'Показать' }))
+await cap('Показать: время, каналы, площадки, темы — выбирается как фильтр', 2600)
+await moveTo(top.getByRole('searchbox', { name: 'Поиск по плану' }))
+await cap('Вверху — поиск темы и значок дашборда', 2200)
 
-// 2. Календарь без конца и переход к дате
-await click(page.locator('.cp-top').getByRole('button', { name: 'Календарь' }))
-await cap('Календарь открывается неделей: по часам, как в Google Календаре', 2600)
-await click(page.getByRole('radio', { name: 'Месяц' }), 600)
-await cap('Месяц: все материалы строками — время, рубрика, тема; цвет полоски — канал', 2600)
-await cap('Листается без конца — неделя за неделей')
-for (let i = 0; i < 4; i++) {
-  await page.mouse.move(900, 500)
-  await page.mouse.wheel(0, 520)
-  await wait(650)
-}
-await cap('Нажать на заголовок — и сразу к нужной дате', 900)
-await jump('2027-03-15')
-await page.getByRole('heading', { name: 'Март 2027' }).waitFor()
-await moveTo(page.locator('[data-date="2027-03-15"] .cp-card--slot').first())
-await cap('Пунктир — слот без темы', 2000)
-
-// 3. Пустой слот → задача → готово → вышло
-await click(page.getByRole('button', { name: 'Открыть день 2027-03-15' }), 700)
-await cap('День: по каналам и по времени, под каждой площадкой — что выходит', 3400)
-const day = page.getByRole('complementary', { name: /15 марта 2027/ })
-await cap('▶ — начать: открывается задача по созданию контента', 900)
-await click(day.locator('.cp-card').filter({ has: page.getByRole('button', { name: /^Демо · FULL: Нужна тема/ }) }).getByRole('button', { name: /^Начать/ }), 900)
-const task = page.getByRole('complementary', { name: 'Задача' })
-await cap('Пустой слот: вписываю тему — тизер и анонсы получат её же')
-await type(task.getByLabel('Тема'), 'ИИ-бухгалтер')
-await page.keyboard.press('Enter')
-await wait(500)
-await cap('Кто делает и к какому дню подготовить')
-await type(task.getByLabel('Кто делает'), 'Андрей')
-await page.keyboard.press('Tab')
-await wait(900)
-await cap('Отмечаю, что готово на каждой площадке')
-for (const part of await task.locator('.cp-task__part').all()) await click(part, 260)
-await wait(400)
-await cap('Всё сделано — «Готово» одной кнопкой', 700)
-await click(task.getByRole('button', { name: /Всё сделано/ }), 900)
-await cap('Вышло — ●', 600)
-await click(task.getByRole('group', { name: 'Статус задачи' }).getByRole('button', { name: 'Вышло' }), 900)
-await click(task.getByRole('button', { name: 'Закрыть' }), 600)
-await cap('На карточке — тема и статус значком', 2800)
-await page.keyboard.press('Escape')
-await wait(400)
-
-// 4. Неделя по времени
-await click(page.getByRole('radio', { name: 'Время' }), 600)
+// 2. Неделя по времени: перенос, край, лист
 await jump('2026-11-09')
-await cap('Календарь как в менеджере: день, три дня или неделя; совпадающие — рядом, все видны', 3400)
 const col = page.locator('.cp-tg__col[data-date="2026-11-10"]')
 const thesis = col.locator('.cp-card', { hasText: 'Тезисы' }).first()
 const t = await center(thesis)
 await cap('Взять и вести: карточка встаёт по 15 минутам, время на ней — куда встанет', 600)
 await drag(thesis, t.x + t.b.width, t.y + 3 * 64)
-await wait(2200)
+await wait(2000)
 const moved = page.locator('.cp-tg__col[data-date="2026-11-11"] .cp-card', { hasText: 'Тезисы' }).first()
 const grip = await center(moved.locator('.cp-tg__grip'))
 await cap('Нижний край — длительность', 600)
@@ -165,47 +120,91 @@ await page.mouse.down()
 await page.mouse.move(sheet.x + sheet.width - 330, sheet.y + sheet.height / 2 - 80, { steps: 30 })
 await page.mouse.up()
 await wait(1200)
-await cap('Или дорожками по каналам — как в исходной таблице', 300)
-await click(page.getByRole('radio', { name: 'Каналы' }), 2800)
-await cap('')
+await click(side.getByRole('radio', { name: 'Каналы' }), 600)
+await cap('Или дорожками по каналам — как в исходной таблице', 2600)
+await click(side.getByRole('radio', { name: 'Время' }), 600)
 
-// 5. Поменять местами
-await click(page.getByRole('radio', { name: 'Месяц' }), 400)
+// 3. Поменять местами
 await jump('2026-11-02')
 await cap('FULL на день, где уже есть FULL: одно нарушение и «Поменять местами»', 1200)
-const target = await center(page.locator('[data-date="2026-11-03"]'))
-await drag(page.locator('[data-date="2026-11-02"] .cp-card--main').first(), target.x, target.y + 30)
+const landao = page.locator('.cp-tg__col[data-date="2026-11-02"] .cp-card--main', { hasText: 'Landao' }).first()
+const l = await center(landao)
+await drag(landao, l.x + (await page.locator('.cp-tg__col[data-date="2026-11-02"]').boundingBox()).width, l.y)
 await wait(1600)
 await click(page.locator('.cp-toast').getByRole('button', { name: 'Поменять местами' }), 2200)
 
-// 6. Банк идей на дашборде
-await click(page.locator('.cp-top').getByRole('button', { name: 'Дашборд' }), 500)
-await cap('Банк идей: хэштег — кнопкой, темы — списком', 900)
-await click(page.getByRole('group', { name: 'Хэштеги банка' }).getByRole('button', { name: /^#тезисы/ }), 900)
-await type(page.getByLabel('Новые темы: #тезисы · Тезис дня'), 'Агенты вместо отделов\nИИ не отнимет работу\nСколько стоит ИИ-сотрудник')
-const bank = page.getByRole('region', { name: 'Банк: #тезисы · Тезис дня' })
-await click(bank.getByRole('button', { name: 'Добавить' }), 700)
-await cap('«Разложить по слотам» — и сразу видно, куда легли', 600)
-await click(bank.getByRole('button', { name: 'Разложить по слотам' }), 2600)
-await cap('Любую тему можно вернуть в банк', 600)
-await click(bank.getByRole('button', { name: 'Вернуть в банк: ИИ не отнимет работу' }), 2000)
+// 4. Пустой слот → задача → готово → вышло
+await jump('2027-03-15')
+await click(page.getByRole('button', { name: 'Открыть день 2027-03-15' }), 700)
+await cap('День: по каналам, под каждой площадкой — что выходит', 3000)
+const day = page.getByRole('complementary', { name: /15 марта 2027/ })
+await cap('▶ — начать: открывается задача по созданию контента', 900)
+await click(day.locator('.cp-card').filter({ has: page.getByRole('button', { name: /^Демо · FULL: Нужна тема/ }) }).getByRole('button', { name: /^Начать/ }), 900)
+const task = page.getByRole('complementary', { name: 'Задача' })
+await cap('Пустой слот: вписываю тему — тизер и анонсы получат её же')
+await type(task.getByLabel('Тема'), 'ИИ-бухгалтер')
+await page.keyboard.press('Enter')
+await wait(500)
+await cap('Отмечаю, что готово на каждой площадке')
+for (const part of await task.locator('.cp-task__part').all()) await click(part, 260)
+await cap('Всё сделано — «Готово» одной кнопкой', 700)
+await click(task.getByRole('button', { name: /Всё сделано/ }), 900)
+await click(task.getByRole('group', { name: 'Статус задачи' }).getByRole('button', { name: 'Вышло' }), 900)
+await click(task.getByRole('button', { name: 'Закрыть' }), 600)
+await page.keyboard.press('Escape')
+await wait(300)
 
-// 7. Темы и «+»
-await moveTo(page.getByRole('region', { name: 'Темы' }))
-await cap('Темы-хэштеги каждого канала и его разделов: Лаборатория, Академия', 2600)
-await cap('«+» справа внизу — запланировать новый контент', 600)
+// 5. Черновики во вкладке «+»
+await cap('«+» справа внизу: новый контент — или черновики, банк идей', 600)
+await click(page.getByRole('button', { name: 'Новый контент' }), 700)
+await click(page.getByRole('tab', { name: /^Черновики/ }), 700)
+const drafts = page.getByRole('complementary', { name: 'Черновики' })
+await click(drafts.getByRole('group', { name: 'Хэштеги черновиков' }).getByRole('button', { name: /^#технологии/ }), 700)
+await type(drafts.getByLabel('Новые черновики: #технологии', { exact: true }), 'Агенты вместо отделов\nСколько стоит ИИ-сотрудник')
+await click(drafts.getByRole('button', { name: 'Добавить' }), 1400)
+await click(drafts.getByRole('button', { name: 'Закрыть' }), 500)
+
+// 6. Дашборд справа: периодичность хэштега и планирование недели
+await cap('Дашборд — значок справа вверху, открывается панелью', 600)
+await click(top.getByRole('button', { name: 'Дашборд' }), 1400)
+const dash = page.getByRole('complementary', { name: 'Дашборд' })
+const topics = dash.getByRole('region', { name: 'Темы' })
+await topics.scrollIntoViewIfNeeded()
+await click(topics.getByRole('button', { name: 'Править' }), 800)
+await cap('Периодичность хэштега в канале: дни недели и время — слоты встают в расписание', 600)
+await click(topics.getByRole('group', { name: 'Периодичность: #технологии · FULL' }).getByRole('button', { name: 'Чт' }), 2200)
+await click(topics.getByRole('button', { name: 'Готово' }), 600)
+const ask = dash.getByRole('region', { name: 'Планирование недели' })
+await ask.scrollIntoViewIfNeeded()
+await cap('За неделю дашборд просит уточнить темы', 1800)
+await click(ask.getByRole('button', { name: 'Уточнить' }), 900)
+const planning = page.getByRole('complementary', { name: 'Планирование недели' })
+await cap('Ближайшие черновики того же хэштега — одной кнопкой', 600)
+await click(planning.getByRole('button', { name: /^Подставить из черновиков/ }), 2400)
+await click(planning.getByRole('button', { name: 'Закрыть' }), 600)
+
+// 7. «+»: хэштег с подсказками и версия по триггеру
 await click(page.getByRole('button', { name: 'Новый контент' }), 700)
 const form = page.getByRole('complementary', { name: 'Новый контент' })
+await cap('Хэштег подсказывается при вводе, как Т9', 300)
+await type(form.getByRole('combobox', { name: 'Хэштег' }), 'тех')
+await wait(900)
+await click(form.getByRole('option', { name: '#технологии' }), 600)
 await type(form.getByRole('textbox', { name: 'Тема' }), 'Как мы собрали ИИ-отдел продаж')
-await moveTo(form.getByRole('button', { name: 'Версия для Instagram' }))
 await cap('Пересоздать для других площадок — вместе или автоматически, когда выйдет оригинал', 600)
 await click(form.getByRole('button', { name: 'Версия для Instagram' }), 400)
-await click(form.getByRole('button', { name: 'Версия для TikTok' }), 400)
-await click(form.getByRole('radio', { name: 'Автоматически после выхода' }), 1600)
-await click(form.getByRole('button', { name: 'Создать' }), 2400)
+await click(form.getByRole('radio', { name: 'Автоматически после выхода' }), 1400)
+await click(form.getByRole('button', { name: 'Создать' }), 2200)
 
-// 8. Конец
-await cap('Контент-план SMM — дашборд и календарь, без таблиц', 3000)
+// 8. Поиск вверху
+await cap('Поиск — вверху: нажать — и материал открыт', 300)
+await type(top.getByRole('searchbox', { name: 'Поиск по плану' }), 'агент')
+await wait(1800)
+await click(page.getByRole('region', { name: 'Найдено' }).getByRole('button').first(), 1600)
+await page.keyboard.press('Escape')
+
+// 9. Конец
+await cap('Контент-план SMM — календарь, дашборд и черновики под рукой', 3000)
 await cap('')
 await wait(500)
 

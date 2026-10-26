@@ -32,24 +32,6 @@ export const today = (): ISODate => {
 
 export const monthKey = (d: ISODate) => d.slice(0, 7)
 
-export const addMonths = (month: string, n: number) => {
-  const [y, m] = month.split('-').map(Number)
-  const x = new Date(Date.UTC(y, m - 1 + n, 1))
-  return fromDate(x).slice(0, 7)
-}
-
-/** Сетка месяца: недели Пн–Вс, от понедельника первой недели до воскресенья последней. */
-export const monthGrid = (month: string): ISODate[][] => {
-  const first = `${month}-01`
-  const weeks: ISODate[][] = []
-  let d = mondayOf(first)
-  while (weeks.length === 0 || monthKey(d) === month) {
-    weeks.push(Array.from({ length: 7 }, (_, i) => addDays(d, i)))
-    d = addDays(d, 7)
-  }
-  return weeks
-}
-
 export const weekDays = (d: ISODate): ISODate[] => {
   const m = mondayOf(d)
   return Array.from({ length: 7 }, (_, i) => addDays(m, i))

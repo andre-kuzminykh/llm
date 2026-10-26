@@ -135,7 +135,7 @@ export const mainChannelId = (plan: Plan) =>
   [...plan.channels].sort((x, y) => plan.rules.filter((r) => r.channelId === y.id).length - plan.rules.filter((r) => r.channelId === x.id).length)[0]?.id
 
 /** Карточка материала — тихая строка: полоска слева — цвет канала, рубрика словом, тема.
- *  chip — месяц (одной строкой: время, рубрика, тема), compact — шкала времени и лента, line — дорожки недели (время и тема),
+ *  chip — строка «24/7» над шкалой (время, рубрика, тема одной строкой), compact — шкала времени и лента, line — дорожки недели (время и тема),
  *  full — панель дня: под темой площадки и что на каждой выходит. ▶ в углу — задача. */
 export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, kind, when, onGrab, className, children }: {
   unit: Unit
@@ -158,7 +158,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const color = channels.get(unit.channelId)?.color
   const slot = isSlot(head)
   const title = shownTitle(head)
-  // в месяце стоят только FULL — подпись «FULL» там лишняя
+  // в мини-карточке стоят только FULL — подпись «FULL» там лишняя
   const format = rule && rule.name !== rubric?.name && !titleIsFormat(head.title, rule) && !(variant === 'mini' && rule.full) ? rule.name : ''
   const plats = platformTypes(unit, rules, plan.platforms)
   const bad = unit.items.some((it) => badIds.has(it.id))

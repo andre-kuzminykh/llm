@@ -3,8 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { renderApp } from '../test/renderApp'
 
 const day = (date: string) => document.querySelector(`[data-date="${date}"]`) as HTMLElement
-// карточка FULL «Демо: Стратегия» в дне месяца (рядом стоит анонс Andre AIT с той же темой)
+// карточка FULL «Демо: Стратегия» в дне недели (рядом стоит анонс Andre AIT с той же темой)
 const full = (date = '2026-10-26') => within(day(date)).getByRole('button', { name: /^Демо · FULL: Стратегия/ }).closest('.cp-card') as HTMLElement
+/** Хэштег — с подсказками при вводе: набрать начало и выбрать подсказку. */
+const pickTag = async (form: HTMLElement, tag: string) => {
+  const input = within(form).getByRole('combobox', { name: 'Хэштег' })
+  await userEvent.clear(input)
+  await userEvent.type(input, tag.slice(1, 4))
+  await userEvent.click(within(form).getByRole('option', { name: tag }))
+}
 
 describe('T-CP-005 FR-CP-005 форма материала', () => {
   it('правка заголовка FULL пересобирает тизер; отмена возвращает', async () => {
@@ -20,16 +27,16 @@ describe('T-CP-005 FR-CP-005 форма материала', () => {
     const panel = screen.getByRole('complementary', { name: /26 октября 2026/ })
     expect(within(panel).getByRole('button', { name: /^Демо · Анонс от Andre AIT: Агент продаж/ })).toBeInTheDocument()
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Отменить (⌘Z)' })[0])
+    await userEvent.keyboard('{Control>}z{/Control}')
     expect(within(panel).getByRole('button', { name: /^Демо · Анонс от Andre AIT: Стратегия/ })).toBeInTheDocument()
   })
 
   it('новый материал из шапки появляется на своей дате', async () => {
     renderApp()
-    await screen.findByRole('heading', { name: 'Октябрь 2026' })
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
+    await pickTag(form, '#тезисы')
     expect(within(form).getByRole('combobox', { name: 'Формат' })).toHaveDisplayValue('Тезис дня')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'ИИ не заменит вас')
     const date = within(form).getByLabelText('Дата')
@@ -87,13 +94,13 @@ describe('T-CP-016 FR-CP-016 статус значком в панели дня'
     expect(play).toHaveAttribute('aria-pressed', 'true')
     await userEvent.click(play)
     expect(play).toHaveAttribute('aria-pressed', 'false')
-    await userEvent.click(within(task).getByRole('button', { name: 'Назад к дню' }))
+    await userEvent.click(within(task).getByRole('button', { name: 'Назад' }))
     expect(within(panel()).getAllByRole('button', { name: 'Начать: Стратегия' })).toHaveLength(2)
     expect(within(full()).getByRole('button', { name: 'Начать: Стратегия' })).toBeInTheDocument()
   })
   it('в задаче галочки по площадкам; когда всё сделано — «Готово» одной кнопкой', async () => {
     renderApp()
-    await screen.findByRole('heading', { name: 'Октябрь 2026' })
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(within(full()).getByRole('button', { name: 'Начать: Стратегия' }))
     const task = screen.getByRole('complementary', { name: 'Задача' })
     for (const box of within(task).getAllByRole('checkbox')) await userEvent.click(box)
@@ -105,10 +112,10 @@ describe('T-CP-016 FR-CP-016 статус значком в панели дня'
 describe('T-CP-019 FR-CP-019 разовый материал и форматы рубрики', () => {
   it('материал на «чужой» день сразу вне сетки — проверка его не трогает', async () => {
     renderApp()
-    await screen.findByRole('heading', { name: 'Октябрь 2026' })
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
+    await pickTag(form, '#тезисы')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Разовый тезис')
     const date = within(form).getByLabelText('Дата')
     await userEvent.clear(date)
@@ -119,13 +126,13 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
   })
   it('общие форматы FULL предлагаются только рубрикам, у которых есть FULL', async () => {
     renderApp()
-    await screen.findByRole('heading', { name: 'Октябрь 2026' })
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
     const formats = () => within(within(form).getByRole('combobox', { name: 'Формат' })).getAllByRole('option').map((o) => o.textContent)
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#демо')
+    await pickTag(form, '#демо')
     expect(formats()).toContain('Тизер FULL (с FULL)')
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
+    await pickTag(form, '#тезисы')
     expect(formats()).toEqual(['Тезис дня'])
   })
 })
@@ -133,12 +140,12 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
 describe('T-CP-027 FR-CP-027 «+»: новый контент, копии и версии для площадок', () => {
   it('копия на другую дату и версия для Instagram — автоматически, когда оригинал выйдет', async () => {
     renderApp()
-    await screen.findByRole('heading', { name: 'Октябрь 2026' })
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
     // у нового контента все поля открыты сразу
     expect(within(form).getByRole('button', { name: 'Подробнее' })).toHaveAttribute('aria-expanded', 'true')
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Хэштег' }), '#тезисы')
+    await pickTag(form, '#тезисы')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Агенты вместо отделов')
     const date = within(form).getByLabelText('Дата')
     await userEvent.clear(date)

@@ -57,7 +57,7 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
   return (
     <aside className="cp-sheet cp-task" aria-label="Задача" style={{ '--cp-c': channel?.color } as CSSProperties}>
       <div className="cp-sheet__head">
-        {onBack && <IconButton icon="chev-left" label="Назад к дню" onClick={onBack} size="sm" />}
+        {onBack && <IconButton icon="chev-left" label="Назад" onClick={onBack} size="sm" />}
         <input
           className="cp-task__title"
           aria-label="Тема"

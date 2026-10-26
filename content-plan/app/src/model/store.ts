@@ -1,7 +1,7 @@
 // Все изменения плана — чистые функции Plan → Plan; reducer добавляет к ним историю
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
 import { addDays, daysBetween, fromMin, toMin, weekday } from './dates'
-import { isSlot, PLACEHOLDER, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
+import { isSlot, PLACEHOLDER, tagOf, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
 export const newId = (prefix = 'n') => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`
@@ -276,6 +276,45 @@ export function createSlots(plan: Plan, ruleId: string, from: ISODate, to: ISODa
   return next
 }
 
+/** Периодичность хэштега в канале: дни недели и время формата. С from слоты без темы встают на новые дни
+ *  (до конца плана), а пустые слоты на днях, которые сняли, уходят; материалы с темой остаются на местах. */
+export function setPeriod(plan: Plan, ruleId: string, days: boolean[], time: string | undefined, from: ISODate): Plan {
+  const rule = ruleOf(plan, ruleId)
+  if (!rule) return plan
+  const next = updateRule(plan, ruleId, { days, ...(time ? { time } : {}) })
+  const gone = next.items.filter(
+    (x) => x.ruleId === ruleId && x.date && x.date >= from && !x.derive && isSlot(x) && x.status === 'planned' && !days[weekday(x.date)],
+  )
+  const cleared = gone.reduce((p, x) => removeItem(p, x.id, true), next)
+  return createSlots(cleared, ruleId, from, next.end)
+}
+
+/** Взять тему из черновиков в слот: слот получает тему (и вся его группа), черновик уходит из банка. */
+export function takeDraft(plan: Plan, slotId: string, draftId: string): Plan {
+  const draft = plan.items.find((x) => x.id === draftId && x.date === null)
+  const slot = plan.items.find((x) => x.id === slotId && x.date)
+  if (!draft || !slot) return plan
+  const next = updateItem(plan, slotId, { title: draft.title, source: 'черновик', ...(draft.note && !slot.note ? { note: draft.note } : {}) })
+  return { ...next, items: next.items.filter((x) => x.id !== draftId) }
+}
+
+/** Ближайшие черновики для слотов — по тегу: сначала того же формата, потом того же хэштега в том же канале.
+ *  Каждый черновик предлагается одному слоту; слоты — по порядку дат. */
+export function draftsFor(plan: Plan, slots: Item[]): Map<string, Item> {
+  const used = new Set<string>()
+  const out = new Map<string, Item>()
+  const drafts = plan.items.filter((x) => x.date === null)
+  for (const s of [...slots].sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0))) {
+    const pick =
+      drafts.find((d) => !used.has(d.id) && d.ruleId === s.ruleId) ??
+      drafts.find((d) => !used.has(d.id) && d.rubricId && d.rubricId === s.rubricId && d.channelId === s.channelId)
+    if (!pick) continue
+    used.add(pick.id)
+    out.set(s.id, pick)
+  }
+  return out
+}
+
 // ── рубрики, правила, каналы ─────────────────────────────────────────────────
 
 export const updateRule = (plan: Plan, id: string, patch: Partial<Rule>): Plan => ({
@@ -283,11 +322,13 @@ export const updateRule = (plan: Plan, id: string, patch: Partial<Rule>): Plan =
   rules: plan.rules.map((r) => (r.id === id ? { ...r, ...patch } : r)),
 })
 
-export const addRule = (plan: Plan, rubricId: string | null, channelId: string, name: string): Plan => {
+/** Новый формат хэштега в канале; без дней — разовый: периодичность задаётся потом. */
+export const addRule = (plan: Plan, rubricId: string | null, channelId: string, name: string, id = newId('r'), days?: boolean[], sectionId?: string): Plan => {
   const channel = plan.channels.find((c) => c.id === channelId)
-  if (!channel || !name.trim()) return plan
+  if (!channel || !name.trim() || plan.rules.some((r) => r.id === id)) return plan
   const rule: Rule = {
-    id: newId('r'),
+    id,
+    ...(sectionId ? { sectionId } : {}),
     rubricId,
     name: name.trim(),
     channelId,
@@ -295,7 +336,7 @@ export const addRule = (plan: Plan, rubricId: string | null, channelId: string, 
     what: '',
     format: 'Пост',
     platforms: channel.platforms.slice(0, 1),
-    days: [true, true, true, true, true, false, true],
+    days: days ?? [true, true, true, true, true, false, true],
     dayNotes: ['', '', '', '', '', '', ''],
     freq: '',
     source: 'новый формат',
@@ -312,18 +353,34 @@ export const updateRubric = (plan: Plan, id: string, patch: Partial<Rubric>): Pl
   rubrics: plan.rubrics.map((r) => (r.id === id ? { ...r, ...patch } : r)),
 })
 
-export const addRubric = (plan: Plan, name: string, what = ''): Plan =>
-  name.trim() ? { ...plan, rubrics: [...plan.rubrics, { id: newId('k'), name: name.trim(), what }] } : plan
+/** Новый хэштег; такой уже есть (без «#», без учёта регистра) — план не меняется. */
+export const addRubric = (plan: Plan, name: string, what = '', id = newId('k')): Plan => {
+  const n = name.trim().replace(/^#/, '')
+  if (!n || plan.rubrics.some((r) => r.id === id || tagOf(r.name) === tagOf(n))) return plan
+  return { ...plan, rubrics: [...plan.rubrics, { id, name: n, what }] }
+}
 
 export const updateChannel = (plan: Plan, id: string, patch: Partial<Channel>): Plan => ({
   ...plan,
   channels: plan.channels.map((c) => (c.id === id ? { ...c, ...patch } : c)),
 })
 
-export const addChannel = (plan: Plan, name: string, start: ISODate): Plan => {
-  if (!name.trim()) return plan
-  const channel: Channel = { id: newId('c'), name: name.trim(), color: '#8854f3', start, platforms: ['Telegram'], sections: [] }
+const COLORS = ['#8854f3', '#0a84ff', '#30b0c7', '#34c759', '#ff9f0a', '#ff375f', '#5e5ce6', '#a2845e']
+
+/** Новый канал: на всех площадках плана (лишние снимаются в форме), цвет — следующий свободный. */
+export const addChannel = (plan: Plan, name: string, start: ISODate, id = newId('c')): Plan => {
+  const n = name.trim()
+  if (!n || plan.channels.some((c) => c.name.toLowerCase() === n.toLowerCase())) return plan
+  const color = COLORS.find((c) => !plan.channels.some((x) => x.color.toLowerCase() === c)) ?? COLORS[plan.channels.length % COLORS.length]
+  const channel: Channel = { id, name: n, color, start, platforms: [...plan.platforms], sections: [] }
   return { ...plan, channels: [...plan.channels, channel] }
+}
+
+/** Новая площадка: в плане и у всех каналов — выбирают её в форме. */
+export const addPlatform = (plan: Plan, name: string): Plan => {
+  const n = name.trim()
+  if (!n || plan.platforms.some((p) => p.toLowerCase() === n.toLowerCase())) return plan
+  return { ...plan, platforms: [...plan.platforms, n], channels: plan.channels.map((c) => ({ ...c, platforms: [...c.platforms, n] })) }
 }
 
 // ── reducer с историей ───────────────────────────────────────────────────────
@@ -347,11 +404,14 @@ export type Action =
   | { type: 'fillSlots'; ruleId: string; from: ISODate }
   | { type: 'createSlots'; ruleId: string; from: ISODate; to: ISODate }
   | { type: 'rule'; id: string; patch: Partial<Rule> }
-  | { type: 'addRule'; rubricId: string | null; channelId: string; name: string }
+  | { type: 'addRule'; rubricId: string | null; channelId: string; name: string; id?: string; days?: boolean[]; sectionId?: string }
   | { type: 'rubric'; id: string; patch: Partial<Rubric> }
-  | { type: 'addRubric'; name: string; what?: string }
+  | { type: 'addRubric'; name: string; what?: string; id?: string }
   | { type: 'channel'; id: string; patch: Partial<Channel> }
-  | { type: 'addChannel'; name: string; start: ISODate }
+  | { type: 'addChannel'; name: string; start: ISODate; id?: string }
+  | { type: 'addPlatform'; name: string }
+  | { type: 'setPeriod'; ruleId: string; days: boolean[]; time?: string; from: ISODate }
+  | { type: 'takeDraft'; slotId: string; draftId: string }
   | { type: 'undo' }
   | { type: 'redo' }
 
@@ -383,11 +443,14 @@ function apply(plan: Plan, a: Action): Plan {
     case 'fillSlots': return fillSlots(plan, a.ruleId, a.from)
     case 'createSlots': return createSlots(plan, a.ruleId, a.from, a.to)
     case 'rule': return updateRule(plan, a.id, a.patch)
-    case 'addRule': return addRule(plan, a.rubricId, a.channelId, a.name)
+    case 'addRule': return addRule(plan, a.rubricId, a.channelId, a.name, a.id, a.days, a.sectionId)
     case 'rubric': return updateRubric(plan, a.id, a.patch)
-    case 'addRubric': return addRubric(plan, a.name, a.what)
+    case 'addRubric': return addRubric(plan, a.name, a.what, a.id)
     case 'channel': return updateChannel(plan, a.id, a.patch)
-    case 'addChannel': return addChannel(plan, a.name, a.start)
+    case 'addChannel': return addChannel(plan, a.name, a.start, a.id)
+    case 'addPlatform': return addPlatform(plan, a.name)
+    case 'setPeriod': return setPeriod(plan, a.ruleId, a.days, a.time, a.from)
+    case 'takeDraft': return takeDraft(plan, a.slotId, a.draftId)
     default: return plan
   }
 }

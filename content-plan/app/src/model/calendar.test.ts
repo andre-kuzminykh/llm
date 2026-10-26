@@ -1,9 +1,8 @@
 // T-CP-029 FR-CP-029 — календарь по времени, перенесённый из nr_management (T-MCL-001…016):
-// дни окна, геометрия блоков, колонки пересечений, линия «сейчас», шаг окна, лента дней,
+// дни окна, геометрия блоков, колонки пересечений, линия «сейчас», шаг окна,
 // привязка к 15 минутам при переносе и растягивании, панорамирование листа, конец жеста.
-import { addDays } from './dates'
 import {
-  applyPan, blockGeometry, calendarDays, centerScrollLeft, dayStripRange, gestureEnd, layoutBlocks, minutesFromMidnight, minutesToClock,
+  applyPan, blockGeometry, calendarDays, gestureEnd, layoutBlocks, minutesFromMidnight, minutesToClock,
   nowLine, reschedule, resizeEnd, shiftAnchor, snapMin, type GestureState,
 } from './calendar'
 
@@ -85,27 +84,6 @@ describe('T-CP-029 шаг окна и линия «сейчас» (T-MCL-004/005
     expect(nowLine('2026-11-12', { date: '2026-11-11', minutes: 615 }).show).toBe(false)
     expect(nowLine('2026-11-11', { date: '2026-11-11', minutes: 5000 }).topMin).toBe(1440)
     expect(nowLine('2026-11-11', { date: '2026-11-11', minutes: -30 }).topMin).toBe(0)
-  })
-})
-
-describe('T-CP-029 лента дней (T-MCL-006/015)', () => {
-  it('по порядку, без пропусков, якорь внутри; по умолчанию 21 день назад и 28 вперёд', () => {
-    expect(dayStripRange('2026-11-11', 2, 3)).toEqual(['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14'])
-    const wide = dayStripRange('2026-11-11')
-    expect(wide).toHaveLength(50)
-    expect(wide[0]).toBe('2026-10-21')
-    expect(wide.every((d, i) => i === 0 || addDays(wide[i - 1], 1) === d)).toBe(true)
-    expect(dayStripRange('2026-11-11', 0, 0)).toEqual(['2026-11-11'])
-  })
-  it('день — посередине ленты; у краёв — сколько лента позволяет; мусор — к началу', () => {
-    expect(centerScrollLeft(1000, 46, 460, 2622)).toBe(793)
-    expect(centerScrollLeft(10, 46, 460, 2622)).toBe(0)
-    expect(centerScrollLeft(2562, 46, 460, 2622)).toBe(2162)
-    expect(centerScrollLeft(120, 46, 4000, 2622)).toBe(0)
-    expect(centerScrollLeft(NaN, NaN, NaN, NaN)).toBe(0)
-    expect(centerScrollLeft(-500, -46, -460, -2622)).toBe(0)
-    // уже посередине — повторный расчёт ленту не двигает
-    expect(centerScrollLeft(1000, 46, 460, 2622)).toBe(centerScrollLeft(1000, 46, 460, 2622))
   })
 })
 

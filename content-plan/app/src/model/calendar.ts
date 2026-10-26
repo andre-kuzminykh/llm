@@ -1,6 +1,6 @@
 // Календарь по времени — перенос логики календаря из nr_management (M3 / MCL, core/logic/calendar.ts):
 // дни окна, геометрия блоков, колонки пересечений, линия «сейчас», 15-минутная привязка при переносе
-// и растягивании, панорамирование листа, лента дней и правило конца жеста. Чистые функции:
+// и растягивании, панорамирование листа и правило конца жеста. Чистые функции:
 // «сегодня» и «сейчас» передаются снаружи. Отличие одно — вместо задач здесь блоки: начало и конец.
 import { addDays, mondayOf } from './dates'
 import type { ISODate } from './types'
@@ -121,23 +121,6 @@ export interface ScrollPos {
 }
 export function applyPan(scroll: ScrollPos, dx: number, dy: number): ScrollPos {
   return { left: Math.max(0, scroll.left - dx), top: Math.max(0, scroll.top - dy) }
-}
-
-/** Лента дней: back дней до якоря … якорь … forward после. */
-export function dayStripRange(center: ISODate, back = 21, forward = 28): ISODate[] {
-  const out: ISODate[] = []
-  for (let i = -back; i <= forward; i++) out.push(addDays(center, i))
-  return out
-}
-
-const measured = (px: number) => (Number.isFinite(px) ? Math.max(0, px) : 0)
-
-/** Прокрутка ленты дней, при которой день-якорь посередине; у краёв — сколько лента позволяет. */
-export function centerScrollLeft(chipOffsetLeft: number, chipWidth: number, viewportWidth: number, contentWidth: number): number {
-  const viewport = measured(viewportWidth)
-  const chipCentre = measured(chipOffsetLeft) + measured(chipWidth) / 2
-  const maxScroll = Math.max(0, measured(contentWidth) - viewport)
-  return Math.max(0, Math.min(chipCentre - viewport / 2, maxScroll))
 }
 
 // ── конец жеста: что записать, когда палец поднят или ушёл с листа ──

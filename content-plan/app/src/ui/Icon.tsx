@@ -182,6 +182,33 @@ const P: Record<string, ReactElement> = {
       <circle cx="12" cy="14.5" r="1.6" fill="currentColor" stroke="none" />
     </>
   ),
+  search: (
+    <>
+      <circle cx="10.8" cy="10.8" r="6.3" />
+      <path d="M15.5 15.5l4.5 4.5" />
+    </>
+  ),
+  // виды календаря: каналы — вещание, площадки — приложения
+  channels: (
+    <>
+      <circle cx="12" cy="12" r="1.8" />
+      <path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.4 18.6a9.3 9.3 0 0 1 0-13.2M18.6 5.4a9.3 9.3 0 0 1 0 13.2" />
+    </>
+  ),
+  platforms: (
+    <>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.8" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
+    </>
+  ),
+  draft: (
+    <>
+      <path d="M7 3.5h7l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z" />
+      <path d="M13.5 3.5V8.5h5M9 13h6M9 16.5h4" />
+    </>
+  ),
 }
 
 export function Icon({ name, size = 20 }: { name: keyof typeof P | string; size?: number }) {

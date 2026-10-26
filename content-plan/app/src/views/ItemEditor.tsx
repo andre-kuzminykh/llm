@@ -6,6 +6,8 @@ import { dueOf, leadOf } from '../model/units'
 import { IconButton, PickText, Seg, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
+import { TagInput, type TagPick } from '../ui/TagInput'
+import { CreateTabs } from './BankView'
 
 interface Props {
   id?: string
@@ -54,10 +56,13 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [copies, setCopies] = useState<ISODate[]>([]) // копии на другие даты
   const [versions, setVersions] = useState<string[]>([]) // пересоздать для этих площадок
   const [after, setAfter] = useState(false) // версии — автоматически, когда оригинал выйдет
+  const [newTag, setNewTag] = useState('') // хэштег, которого ещё нет: заведётся при сохранении
 
   const channel = channels.get(channelId)
   const rule = rules.get(ruleId)
   const rubric = rubricId ? rubrics.get(rubricId) : undefined
+  // у хэштега в этом канале ещё нет формата — при сохранении заведётся «Пост», разовый (периодичность — в «Темах»)
+  const needRule = !rule || rule.channelId !== channelId || (rule.rubricId !== null && rule.rubricId !== rubricId) || !!newTag
   const members = useMemo(
     () => (existing?.group && existing.date ? plan.items.filter((x) => x.group === existing.group && x.date === existing.date && x.id !== existing.id) : []),
     [plan.items, existing],
@@ -85,59 +90,79 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   }
   const pickRubric = (rb: string) => {
     setRubricId(rb)
+    setNewTag('')
     if (rule?.rubricId !== null) takeRule(rulesFor(channelId, rb)[0])
+  }
+  /** Хэштег из подсказок или новый: у такого в канале может не быть формата — тогда он заведётся при сохранении. */
+  const pickTag = (p: TagPick) => {
+    if ('rubric' in p) return pickRubric(p.rubric.id)
+    setNewTag(p.name)
+    setRubricId(null)
+    setRuleId('')
   }
   const togglePlatform = (p: string) => setPlatforms((list) => (list.includes(p) ? list.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || list.includes(x))))
 
-  const save = () => {
+  const save = (toDrafts = false) => {
     const t = title.trim() || PLACEHOLDER
+    const day = toDrafts ? '' : date
     if (!platforms.length) {
       setMore(true)
       return setError('Выберите хотя бы одну площадку')
     }
-    if (!rule) return setError('Выберите формат')
+    if (toDrafts && t === PLACEHOLDER) return setError('Для черновика нужна тема')
+    // новый хэштег или хэштег без формата в канале: заводим их тем же шагом истории
+    const setup: Action[] = []
+    let ruleNow: Rule | undefined = rule
+    if (needRule) {
+      const rb = newTag ? newId('k') : rubricId
+      if (newTag) setup.push({ type: 'addRubric', name: newTag, id: rb! })
+      const id = newId('r')
+      setup.push({ type: 'addRule', rubricId: rb, channelId, sectionId, name: 'Пост', id, days: [false, false, false, false, false, false, false] })
+      ruleNow = { ...(rule ?? plan.rules[0]), id, rubricId: rb, channelId, sectionId, name: 'Пост', format: 'Пост', days: [false, false, false, false, false, false, false], time: rule?.time ?? '12:00' }
+    }
+    if (!ruleNow) return setError('Выберите формат')
     const patch: Partial<Item> = {
       title: t,
       channelId,
       sectionId,
-      ruleId,
-      rubricId,
+      ruleId: ruleNow.id,
+      rubricId: ruleNow.rubricId ?? rubricId,
       platforms,
       status,
       note: note || undefined,
-      format: existing?.format ?? rule.format,
-      time: time && time !== rule.time ? time : undefined,
+      format: existing?.format ?? ruleNow.format,
+      time: time && time !== ruleNow.time ? time : undefined,
       owner: owner.trim() || undefined,
       due: due || undefined,
-      offGrid: isOffGrid || undefined,
+      offGrid: (isOffGrid || (needRule && !!day)) || undefined,
     }
     // копии и версии — в том же шаге истории, что и сам материал
     const extra = (id: string): Action[] => [
       ...copies.map((d): Action => ({ type: 'duplicate', id, date: d })),
-      ...(versions.length && date ? [{ type: 'versions', id, platforms: versions, after } as Action] : []),
+      ...(versions.length && day ? [{ type: 'versions', id, platforms: versions, after } as Action] : []),
     ]
-    const also = [copies.length && `копий: ${copies.length}`, versions.length && date && `версий: ${versions.length}${after ? ', после выхода' : ''}`].filter(Boolean).join(', ')
+    const also = [copies.length && !!day && `копий: ${copies.length}`, versions.length && day && `версий: ${versions.length}${after ? ', после выхода' : ''}`].filter(Boolean).join(', ')
     const run = (actions: Action[]) => dispatch(actions.length > 1 ? { type: 'batch', actions } : actions[0])
     if (existing && isBank && date) {
-      run([{ type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }, ...extra(existing.id)])
+      run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }, ...extra(existing.id)])
       toast(`Тема поставлена на ${date}${also ? ` · ${also}` : ''}`, true)
     } else if (existing) {
-      run([{ type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }, ...extra(existing.id)])
+      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }, ...extra(existing.id)])
       toast(`Сохранено${also ? ` · ${also}` : ''}`, true)
     } else {
-      const sample = plan.items.find((x) => x.ruleId === ruleId && x.date && !x.derive)
+      const sample = plan.items.find((x) => x.ruleId === ruleNow!.id && x.date && !x.derive)
       const item: Item = {
         id: newId(),
-        date: date || null,
+        date: day || null,
         channelId,
         sectionId,
-        ruleId,
-        rubricId,
+        ruleId: ruleNow.id,
+        rubricId: patch.rubricId ?? null,
         title: t,
-        format: rule.format,
+        format: ruleNow.format,
         platforms,
         status,
-        source: t === PLACEHOLDER ? 'нужна тема' : date ? 'вручную' : 'банк тем',
+        source: t === PLACEHOLDER ? 'нужна тема' : day ? 'вручную' : 'черновик',
         rank: sample?.rank ?? 50,
         note: patch.note,
         time: patch.time,
@@ -146,8 +171,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         offGrid: patch.offGrid,
       }
       for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
-      run([{ type: 'create', item, withFamily: withFamily && !!date }, ...(date ? extra(item.id) : [])])
-      toast(date ? `Создано на ${shortDate(date)}${also ? ` · ${also}` : ''}` : 'Тема добавлена в банк идей', true)
+      run([...setup, { type: 'create', item, withFamily: withFamily && !!day && !needRule }, ...(day ? extra(item.id) : [])])
+      toast(day ? `Создано на ${shortDate(day)}${also ? ` · ${also}` : ''}` : 'Сохранено в черновики', true)
     }
     onClose()
   }
@@ -159,7 +184,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     onClose()
   }
 
-  const heading = existing ? (isBank ? 'Тема в банке' : 'Материал') : 'Новый контент'
+  const heading = existing ? (isBank ? 'Черновик' : 'Материал') : 'Новый контент'
   const offGridField = (
     <div className="cp-field">
       <Switch checked={isOffGrid} onChange={setOffGrid}>Вне сетки — разовый, проверка его не трогает</Switch>
@@ -169,8 +194,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   return (
     <aside className="cp-sheet" aria-label={heading} onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && save()}>
       <div className="cp-sheet__head">
-        {onBack && <IconButton icon="chev-left" label="Назад к дню" onClick={onBack} size="sm" />}
-        <h2 className="cp-sheet__title">{heading}</h2>
+        {onBack && <IconButton icon="chev-left" label="Назад" onClick={onBack} size="sm" />}
+        {existing ? <h2 className="cp-sheet__title">{heading}</h2> : <CreateTabs current="new" />}
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
       <div className="cp-sheet__body nr-scroll">
@@ -188,7 +213,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         </div>
 
         <div className="cp-form__when">
-          <PickText type="date" label="Дата" value={date} text={date ? dayTitle(date) : ''} placeholder="Без даты — в банк тем" onChange={setDate} />
+          <PickText type="date" label="Дата" value={date} text={date ? dayTitle(date) : ''} placeholder="Без даты — в черновики" onChange={setDate} />
           {date && (
             <>
               <span className="cp-task__sep" aria-hidden="true">·</span>
@@ -202,21 +227,28 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         </div>
 
         <div className="cp-field__row">
-          <label className="cp-field" title={rubric?.what || undefined}>
+          <div className="cp-field" title={rubric?.what || undefined}>
             <span className="nr-label">Хэштег</span>
-            <select className="nr-field" value={rubricId ?? ''} onChange={(e) => pickRubric(e.target.value)} disabled={fromFull}>
-              {rubricsFor(channelId, rubricId).map((r) => (
-                <option key={r.id} value={r.id}>{tagOf(r.name)}</option>
-              ))}
-            </select>
-          </label>
+            <TagInput
+              label="Хэштег"
+              value={newTag ? tagOf(newTag) : rubric ? tagOf(rubric.name) : ''}
+              // хэштеги этого канала — первыми, потом остальные
+              options={[...rubricsFor(channelId, rubricId), ...plan.rubrics.filter((r) => !rubricsFor(channelId, rubricId).includes(r))]}
+              onPick={pickTag}
+              disabled={fromFull}
+            />
+          </div>
           <label className="cp-field" title={rule?.what || undefined}>
             <span className="nr-label">Формат</span>
-            <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
-              {rulesFor(channelId, rubricId).map((r) => (
-                <option key={r.id} value={r.id}>{r.rubricId ? r.name : `${r.name} (с FULL)`}</option>
-              ))}
-            </select>
+            {needRule ? (
+              <span className="cp-field__note" title="У хэштега в этом канале формата ещё нет: заведётся «Пост», разовый">Пост · новый</span>
+            ) : (
+              <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
+                {rulesFor(channelId, rubricId).map((r) => (
+                  <option key={r.id} value={r.id}>{r.rubricId ? r.name : `${r.name} (с FULL)`}</option>
+                ))}
+              </select>
+            )}
           </label>
         </div>
 
@@ -393,8 +425,15 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           </>
         )}
         <span className="cp-top__spacer" />
-        <button type="button" className="nr-btn nr-btn--ghost" onClick={onClose}>Отмена</button>
-        <button type="button" className="nr-btn nr-btn--primary" onClick={save}>
+        {existing ? (
+          <button type="button" className="nr-btn nr-btn--ghost" onClick={onClose}>Отмена</button>
+        ) : (
+          <button type="button" className="nr-btn nr-btn--ghost" onClick={() => save(true)} title="Без даты — в банк идей">
+            <Icon name="draft" size={16} />
+            В черновики
+          </button>
+        )}
+        <button type="button" className="nr-btn nr-btn--primary" onClick={() => save()}>
           {existing ? 'Сохранить' : 'Создать'}
         </button>
       </div>
