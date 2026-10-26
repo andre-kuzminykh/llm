@@ -32,10 +32,10 @@ type Sheet =
   | { kind: 'help' }
   | null
 
-const NAV: { id: View; label: string; icon: string; main?: boolean }[] = [
+// «Календарь» один: неделя (по умолчанию) и месяц — виды внутри него
+const NAV: { id: View; label: string; icon: string; main?: boolean; also?: View }[] = [
   { id: 'now', label: 'Сейчас', icon: 'now', main: true },
-  { id: 'month', label: 'Календарь', icon: 'calendar', main: true },
-  { id: 'week', label: 'Неделя', icon: 'week' },
+  { id: 'week', label: 'Календарь', icon: 'calendar', main: true, also: 'month' },
   { id: 'plan', label: 'План', icon: 'list', main: true },
   { id: 'bank', label: 'Банк тем', icon: 'bank', main: true },
   { id: 'rules', label: 'Сетка', icon: 'grid' },
@@ -151,7 +151,7 @@ interface WorkspaceProps {
 }
 
 function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: WorkspaceProps) {
-  const [view, setViewState] = useState<View>(() => readLS<View>('cp:view', 'month'))
+  const [view, setViewState] = useState<View>(() => readLS<View>('cp:view', 'week'))
   // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
   const [anchor, setAnchorState] = useState<ISODate>(() => readLS('cp:anchor', today()))
   const [jump, setJump] = useState({ date: anchor, n: 0 })
@@ -320,7 +320,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
         {phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
             {NAV.filter((n) => n.main).map((n) => (
-              <button key={n.id} type="button" className="cp-tab" aria-current={view === n.id ? 'page' : undefined} onClick={() => setView(n.id)}>
+              <button key={n.id} type="button" className="cp-tab" aria-current={view === n.id || view === n.also ? 'page' : undefined} onClick={() => view !== n.also && setView(n.id)}>
                 <Icon name={n.icon} size={22} />
                 <span>{n.id === 'bank' ? 'Банк' : n.label}</span>
               </button>
@@ -358,7 +358,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           <nav className="nr-rail" aria-label="Разделы">
             <div className="nr-rail-brand" aria-hidden="true">КП</div>
             {NAV.map((n) => (
-              <button key={n.id} type="button" className="nr-rail-item" aria-current={view === n.id ? 'page' : undefined} aria-label={n.label} onClick={() => setView(n.id)}>
+              <button key={n.id} type="button" className="nr-rail-item" aria-current={view === n.id || view === n.also ? 'page' : undefined} aria-label={n.label} onClick={() => view !== n.also && setView(n.id)}>
                 <Icon name={n.icon} size={22} />
                 <span className="cp-rail-tip" aria-hidden="true">{n.label}</span>
                 {n.id === 'checks' && violations.length > 0 && <span className="cp-rail-badge">{violations.length > 99 ? '99+' : violations.length}</span>}

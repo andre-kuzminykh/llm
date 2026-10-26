@@ -6,8 +6,8 @@ import { ChannelDot, Check, IconButton, startDrag, StatusFilter, Switch } from '
 import { usePlan, type Ctx } from './ctx'
 import { Icon } from './Icon'
 
-/** Фильтры по умолчанию: всё видно, кроме ежедневных авто-публикаций. */
-export const DEFAULT_FILTERS: Filters = { ...NO_FILTERS, hideAuto: true }
+/** Фильтры по умолчанию: видно всё, и ежедневные авто-публикации тоже. */
+export const DEFAULT_FILTERS: Filters = { ...NO_FILTERS }
 
 const names = (list: string[], max = 2) => (list.length <= max ? list.join(', ') : `${list.slice(0, max).join(', ')} и ещё ${list.length - max}`)
 
@@ -26,7 +26,7 @@ export function activeFilters({ plan, filters: f, setFilters }: Pick<Ctx, 'plan'
     })
   if (f.statuses.length) out.push({ id: 'st', label: `Только «${f.statuses.map((s) => statusOf(s).label).join('», «')}»`, clear: () => set({ statuses: [] }) })
   if (f.onlySlots) out.push({ id: 'slots', label: 'Только без темы', clear: () => set({ onlySlots: false }) })
-  if (!f.hideAuto) out.push({ id: 'auto', label: 'С авто-публикациями', clear: () => set({ hideAuto: true }) })
+  if (f.hideAuto) out.push({ id: 'auto', label: 'Без авто-публикаций', clear: () => set({ hideAuto: false }) })
   return out
 }
 

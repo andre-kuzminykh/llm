@@ -6,7 +6,7 @@ export interface Filters {
   hiddenRubrics: string[]
   hiddenPlatforms: string[]
   onlySlots: boolean
-  hideAuto: boolean // ежедневные авто-рубрики в неделе и в дне
+  hideAuto: boolean // скрыть ежедневные авто-рубрики (по умолчанию видны)
   statuses: Status[] // показывать только эти статусы; пусто — все
 }
 

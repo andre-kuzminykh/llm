@@ -54,23 +54,37 @@ const readMode = (): Mode => {
   }
 }
 
-const MODES: { id: Mode; label: string }[] = [
-  { id: 'time', label: 'Время' },
-  { id: 'channels', label: 'Каналы' },
-  { id: 'platforms', label: 'Площадки' },
-]
+/** Запомнить вид недели: «Время», «Каналы» или «Площадки». */
+export const writeWeekMode = (m: Mode) => {
+  try {
+    localStorage.setItem('cp:week-mode', m)
+  } catch {
+    /* только на эту сессию */
+  }
+}
 
-/** На телефоне вид недели — в меню «Вид», чтобы шапка была в одну строку. */
-function ModeMenu({ value, onChange }: { value: Mode; onChange: (m: Mode) => void }) {
+/** Вид календаря: неделя по времени, дорожками по каналам или площадкам — или месяц (на телефоне — лента по дням). */
+export type CalendarMode = Mode | 'month'
+
+/** Переключатель вида календаря — в шапке и недели, и месяца. На телефоне — меню «Вид», чтобы шапка была в одну строку. */
+export function CalendarSwitch({ value, onChange }: { value: CalendarMode; onChange: (m: CalendarMode) => void }) {
+  const { phone } = usePlan()
+  const modes: { id: CalendarMode; label: string }[] = [
+    { id: 'time', label: 'Время' },
+    { id: 'channels', label: 'Каналы' },
+    { id: 'platforms', label: 'Площадки' },
+    { id: 'month', label: phone ? 'Лента' : 'Месяц' },
+  ]
   const [open, setOpen] = useState(false)
+  if (!phone) return <Seg value={value} onChange={onChange} label="Вид календаря" options={modes} />
   return (
     <span className="cp-pop">
       <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}>
         Вид
       </button>
       {open && (
-        <span className="cp-pop__menu nr-glass" role="menu" aria-label="Вид недели">
-          {MODES.map((m) => (
+        <span className="cp-pop__menu nr-glass" role="menu" aria-label="Вид календаря">
+          {modes.map((m) => (
             <button
               key={m.id}
               type="button"
@@ -97,18 +111,14 @@ const DUR = 60 // сколько минут карточка занимает н
 const HEAD = 52 // высота шапки дней
 const GUT = 56 // колонка часов
 
-/** Неделя: дни листаются вбок без конца. «Время» — по часам, совпадающие стоят рядом, как в Google Календаре;
+/** Календарь по неделям — вид по умолчанию: дни листаются вбок без конца. «Время» — по часам, совпадающие стоят рядом, как в Google Календаре;
  *  «Каналы» и «Площадки» — дорожками, как в исходной таблице. */
 export function WeekView() {
-  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn } = usePlan()
+  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn, goto } = usePlan()
   const [mode, setModeState] = useState<Mode>(readMode)
   const setMode = (m: Mode) => {
     setModeState(m)
-    try {
-      localStorage.setItem('cp:week-mode', m)
-    } catch {
-      /* только на эту сессию */
-    }
+    writeWeekMode(m)
   }
   const gutter = mode === 'time' ? GUT : phone ? 96 : 132
   // неделя целиком по ширине экрана: колонка дня — седьмая часть (на телефоне — два дня)
@@ -176,7 +186,7 @@ export function WeekView() {
           )}
           <IconButton icon="chev-right" label="Следующая неделя" onClick={() => jumpTo(addDays(firstDay, 7))} />
         </nav>
-        {phone ? <ModeMenu value={mode} onChange={setMode} /> : <Seg value={mode} onChange={setMode} label="Вид недели" options={MODES} />}
+        <CalendarSwitch value={mode} onChange={(m) => (m === 'month' ? goto('month') : setMode(m))} />
       </TopBar>
       <div className="cp-body nr-scroll" ref={inf.ref} onScroll={inf.onScroll}>
         {mode === 'time' ? (
@@ -277,7 +287,7 @@ function TimeGrid({ days, count, col }: { days: { date: ISODate; i: number }[]; 
             {rows > 0 && (
               <div className="cp-tg__allday" aria-label={`Круглосуточно, ${date}`}>
                 {streams.get(date)!.map((u) => (
-                  <UnitCard key={u.key} unit={u} variant="line" />
+                  <UnitCard key={u.key} unit={u} variant="chip" />
                 ))}
               </div>
             )}

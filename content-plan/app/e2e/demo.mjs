@@ -97,7 +97,9 @@ await cap('Строка — время, рубрика словом и тема;
 
 // 2. Календарь без конца и переход к дате
 await click(page.getByRole('button', { name: 'Календарь', exact: true }))
-await cap('Календарь: FULL дня карточкой, цвет полоски — канал', 2600)
+await cap('Календарь открывается неделей: по часам, как в Google Календаре', 2600)
+await click(page.getByRole('radio', { name: 'Месяц' }), 600)
+await cap('Месяц: все материалы строками — время, рубрика, тема; цвет полоски — канал', 2600)
 await cap('Листается без конца — неделя за неделей')
 for (let i = 0; i < 4; i++) {
   await page.mouse.move(900, 500)
@@ -107,8 +109,8 @@ for (let i = 0; i < 4; i++) {
 await cap('Нажать на заголовок — и сразу к нужной дате', 900)
 await jump('2027-03-15')
 await page.getByRole('heading', { name: 'Март 2027' }).waitFor()
-await moveTo(page.locator('[data-date="2027-03-15"] .cp-day__more'))
-await cap('«ещё N» — остальное в дне; «без темы» — каким рубрикам нужна тема', 2600)
+await moveTo(page.locator('[data-date="2027-03-15"] .cp-card--slot').first())
+await cap('Пунктир — слот без темы', 2000)
 
 // 3. Пустой слот → задача → готово → вышло
 await click(page.getByRole('button', { name: 'Открыть день 2027-03-15' }), 700)
@@ -138,7 +140,7 @@ await page.keyboard.press('Escape')
 await wait(400)
 
 // 4. Неделя по времени
-await click(page.getByRole('button', { name: 'Неделя', exact: true }), 600)
+await click(page.getByRole('radio', { name: 'Время' }), 600)
 await jump('2026-11-09')
 await cap('Неделя по времени: совпадающие — рядом, как в Google Календаре', 3400)
 const col = page.locator('.cp-tg__col[data-date="2026-11-10"]')
@@ -146,19 +148,18 @@ const thesis = col.locator('.cp-card', { hasText: 'Тезисы' }).first()
 const t = await center(thesis)
 const colBox = await col.boundingBox()
 await cap('Перетащить на другой час — время меняется', 600)
-await drag(thesis, t.x, colBox.y + 16 * 64 + (t.y - t.b.y))
+await drag(thesis, t.x, colBox.y + 17 * 64 + (t.y - t.b.y))
 await wait(2200)
 await cap('Или дорожками по каналам — как в исходной таблице', 300)
 await click(page.getByRole('radio', { name: 'Каналы' }), 2800)
 await cap('')
-await click(page.getByRole('radio', { name: 'Время' }), 400)
 
 // 5. Поменять местами
-await click(page.getByRole('button', { name: 'Календарь', exact: true }), 400)
+await click(page.getByRole('radio', { name: 'Месяц' }), 400)
 await jump('2026-11-02')
 await cap('FULL на день, где уже есть FULL: одно нарушение и «Поменять местами»', 1200)
 const target = await center(page.locator('[data-date="2026-11-03"]'))
-await drag(page.locator('[data-date="2026-11-02"] .cp-card').first(), target.x, target.y + 30)
+await drag(page.locator('[data-date="2026-11-02"] .cp-card--main').first(), target.x, target.y + 30)
 await wait(1600)
 await click(page.locator('.cp-toast').getByRole('button', { name: 'Поменять местами' }), 2200)
 

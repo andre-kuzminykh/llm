@@ -25,13 +25,16 @@ const cell = (d) => page.locator(`[data-date="${d}"]`)
 const toast = () => page.getByRole('status').filter({ has: page.locator('.cp-toast__msg') })
 
 await page.goto(BASE)
-await page.getByRole('grid').first().waitFor()
+await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
+check(!(await page.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Неделя' }).count()), '«Календарь» один, открывается неделей', 'в меню отдельная «Неделя»')
+await page.getByRole('radio', { name: 'Месяц' }).click()
 await page.getByRole('button', { name: 'Следующий месяц' }).click()
 await page.getByRole('heading', { name: 'Ноябрь 2026' }).waitFor()
 await page.waitForTimeout(700) // плавная прокрутка
 await page.screenshot({ path: `${SHOTS}/1-month.png` })
 ok('месяц открылся')
-const card = cell('2026-11-02').locator('.cp-card').first()
+const card = cell('2026-11-02').locator('.cp-card--main').first()
+check((await cell('2026-11-02').locator('.cp-card').count()) > 5 && !(await cell('2026-11-02').getByText(/^ещё/).count()), 'месяц: в дне все единицы контента, без «ещё N»', 'месяц показывает не всё')
 check(
   (await card.getByLabel('Рубрика: Демо').count()) && (await card.locator('.cp-card__title').textContent()) === 'Landao',
   'карточка: рубрика меткой, название — только тема',
@@ -41,7 +44,7 @@ check(
 // перенос FULL «Демо: Landao» со 2.11 на 3.11, где уже стоит FULL «Кейсы: Сбер»: группа едет вместе,
 // нарушение одно, а «Поменять местами» ставит Сбер на 2.11
 await card.dragTo(cell('2026-11-03'))
-check(await cell('2026-11-03').locator('.cp-card', { hasText: 'Landao' }).count(), 'перенос мышью', 'карточка не переехала')
+check(await cell('2026-11-03').locator('.cp-card--main', { hasText: 'Landao' }).count(), 'перенос мышью', 'карточка не переехала')
 check((await cell('2026-11-03').locator('.cp-viol').count()) === 1, 'нарушение отмечено', 'нет отметки нарушения')
 await toast().filter({ hasText: 'вместе с группой' }).waitFor()
 await page.screenshot({ path: `${SHOTS}/2-moved.png` })
@@ -49,13 +52,13 @@ const v = await page.getByRole('button', { name: 'Проверка' }).locator('
 check(v === '1', 'два FULL в день — одно нарушение, а не шесть', `нарушений после переноса: ${v}`)
 await toast().getByRole('button', { name: 'Поменять местами' }).click()
 check(
-  (await cell('2026-11-02').locator('.cp-card', { hasText: 'Сбер' }).count()) && (await cell('2026-11-03').locator('.cp-card', { hasText: 'Landao' }).count()),
+  (await cell('2026-11-02').locator('.cp-card--main', { hasText: 'Сбер' }).count()) && (await cell('2026-11-03').locator('.cp-card--main', { hasText: 'Landao' }).count()),
   '«Поменять местами»',
   'FULL не поменялись местами',
 )
 await page.keyboard.press('Control+z')
 await page.keyboard.press('Control+z')
-check(await cell('2026-11-02').locator('.cp-card', { hasText: 'Landao' }).count(), 'отмена вернула', 'отмена не сработала')
+check(await cell('2026-11-02').locator('.cp-card--main', { hasText: 'Landao' }).count(), 'отмена вернула', 'отмена не сработала')
 
 // бесконечный месяц и переход к дате
 await page.getByLabel('Перейти к дате').fill('2029-03-14')
@@ -101,7 +104,7 @@ ok('форма материала')
 await page.keyboard.press('Escape')
 
 // неделя по времени: перенос на другой час
-await page.getByRole('button', { name: 'Неделя', exact: true }).click()
+await page.getByRole('button', { name: 'Календарь', exact: true }).click()
 await page.getByRole('radio', { name: 'Время' }).click()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 await page.getByLabel('Перейти к дате').fill('2026-11-09')
@@ -112,21 +115,22 @@ const thesis = col.locator('.cp-card', { hasText: 'Тезисы' }).first()
 const box = await col.boundingBox()
 // карточку берут за середину; встаёт она верхним краем туда, куда опустили
 const grabY = (await thesis.boundingBox()).height / 2
-await thesis.dragTo(col, { targetPosition: { x: 40, y: 16 * 64 + grabY } })
-check(await col.locator('.cp-card', { hasText: '16:00' }).count(), 'перенос на другой час', 'время не поменялось')
+await thesis.dragTo(col, { targetPosition: { x: 40, y: 17 * 64 + grabY } })
+check(await col.getByRole('button', { name: /^Тезисы · Тезис дня: .*, 17:00/ }).count(), 'перенос на другой час', 'время не поменялось')
 await page.keyboard.press('Control+z')
 const top = await page.locator('.cp-body').evaluate((el) => el.scrollTop)
-check(top > 9 * 64 && top < 12 * 64, 'шкала открыта за полчаса до первого материала недели', `шкала прокручена на ${top}px`)
+check(top > 0 && Math.round(top) % 64 === 32, 'шкала открыта за полчаса до часа первого материала недели', `шкала прокручена на ${top}px`)
 check(await page.getByRole('button', { name: /^Ещё 1 в это время/ }).count(), 'совпавшие по времени — одной карточкой с «+1»', 'нет «+N» у совпавших')
-// лента Neuronium — поток 24/7: строкой над шкалой, без времени
-await page.getByRole('button', { name: 'Фильтры' }).click()
-await page.getByRole('switch', { name: 'Ежедневные авто-публикации' }).click()
+// лента Neuronium — поток 24/7: строкой над шкалой, без времени; авто-публикации видны по умолчанию и скрываются фильтром
 const allday = page.getByLabel('Круглосуточно, 2026-11-10')
 check(
   (await allday.getByRole('button', { name: /^Новости: Все новости, 24\/7/ }).count()) && !(await col.getByRole('button', { name: /Все новости/ }).count()),
   'лента Neuronium — «24/7» над шкалой, не в часах',
   'лента Neuronium стоит на шкале времени',
 )
+await page.getByRole('button', { name: 'Фильтры' }).click()
+await page.getByRole('switch', { name: 'Ежедневные авто-публикации' }).click()
+check(!(await allday.count()) && (await page.getByRole('button', { name: 'Снять фильтр: Без авто-публикаций' }).count()), 'фильтр скрывает авто-публикации', 'авто-публикации не скрылись')
 await page.getByRole('switch', { name: 'Ежедневные авто-публикации' }).click()
 await page.getByRole('button', { name: 'Закрыть фильтры' }).click()
 check(box && box.width > 120, 'неделя по ширине экрана', 'колонки дней узкие')
@@ -173,9 +177,10 @@ check(!wide, 'сетка помещается по ширине', 'сетка ш
 
 // проверка: нарушение с готовым действием «Перенести … на …»
 await page.getByRole('button', { name: 'Календарь', exact: true }).click()
+await page.getByRole('radio', { name: 'Месяц' }).click()
 await page.getByLabel('Перейти к дате').fill('2026-11-02')
 await page.waitForTimeout(900)
-await cell('2026-11-02').locator('.cp-card').first().dragTo(cell('2026-11-03'))
+await cell('2026-11-02').locator('.cp-card--main').first().dragTo(cell('2026-11-03'))
 await page.getByRole('button', { name: 'Проверка' }).click()
 const fix = page.getByRole('button', { name: /^Перенести «/ })
 check(await fix.count(), `проверка: ${await fix.first().textContent()}`, 'у нарушения нет действия')
@@ -220,14 +225,17 @@ check(await page.getByRole('button', { name: 'Агент продаж' }).count(
 // телефон: лента по дням
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 await phone.goto(BASE)
+await phone.getByRole('button', { name: 'Вид', exact: true }).click()
+await phone.getByRole('menuitemradio', { name: 'Лента' }).click()
 await phone.getByRole('feed', { name: 'Лента по дням' }).waitFor()
 check(!(await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), 'телефон: лента по дням без горизонтального скролла', 'на телефоне страница шире экрана')
 await phone.waitForTimeout(500)
 await phone.screenshot({ path: `${SHOTS}/12-phone.png` })
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
 check(tabs.join('|') === 'Сейчас|Календарь|План|Банк|Ещё', 'телефон: внизу четыре раздела с подписями и «Ещё»', `телефон: внизу ${tabs.join(', ')}`)
-await phone.getByRole('button', { name: 'Ещё', exact: true }).click()
-await phone.getByRole('menuitem', { name: 'Неделя' }).click()
+await phone.getByRole('button', { name: 'Вид', exact: true }).click()
+await phone.getByRole('menuitemradio', { name: 'Время' }).click()
+await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка недели в одну строку, вид — в меню «Вид»', `телефон: шапка недели ${head?.height}px`)
 await phone.getByRole('button', { name: 'Календарь', exact: true }).click()

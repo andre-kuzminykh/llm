@@ -130,14 +130,14 @@ export function TaskButton({ unit }: { unit: Unit }) {
   )
 }
 
-export type CardVariant = 'mini' | 'compact' | 'line' | 'full'
+export type CardVariant = 'mini' | 'compact' | 'line' | 'chip' | 'full'
 
 /** Главный канал плана — у кого больше всего форматов (Dataist): его имя в строках не повторяется. */
 export const mainChannelId = (plan: Plan) =>
   [...plan.channels].sort((x, y) => plan.rules.filter((r) => r.channelId === y.id).length - plan.rules.filter((r) => r.channelId === x.id).length)[0]?.id
 
 /** Карточка материала — тихая строка: полоска слева — цвет канала, рубрика словом, тема.
- *  mini — месяц (рубрика и тема), compact — шкала времени и лента, line — дорожки недели (время и тема),
+ *  chip — месяц (одной строкой: время, рубрика, тема), compact — шкала времени и лента, line — дорожки недели (время и тема),
  *  full — панель дня: под темой площадки и что на каждой выходит. ▶ в углу — задача. */
 export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, kind, children }: { unit: Unit; variant?: CardVariant; style?: CSSProperties; showTime?: boolean; narrow?: boolean; kind?: string; children?: ReactNode }) {
   const { plan, channels, rubrics, rules, badIds, openItem } = usePlan()
@@ -153,13 +153,13 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const plats = platformTypes(unit, rules, plan.platforms)
   const bad = unit.items.some((it) => badIds.has(it.id))
   const full = !!rule?.full && !head.derive
-  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--full', dragging && 'cp-card--dragging']
+  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', dragging && 'cp-card--dragging']
     .filter(Boolean)
     .join(' ')
   const st = statusOf(head.status)
   const label = `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
   const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
-  const line = variant === 'line'
+  const line = variant === 'line' || variant === 'chip'
   return (
     <div
       className={cls}

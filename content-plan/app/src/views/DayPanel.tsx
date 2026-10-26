@@ -59,7 +59,7 @@ export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void
         </button>
         <span className="cp-top__spacer" />
         <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => goto('week', date)}>
-          Открыть неделю
+          Неделя этого дня
         </button>
       </div>
     </aside>

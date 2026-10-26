@@ -4,10 +4,11 @@ import type { ISODate } from '../model/types'
 import { UnitCard } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { DateJump, TopBar } from '../ui/TopBar'
+import { CalendarSwitch, writeWeekMode } from './WeekView'
 
 /** Календарь на телефоне: лента по дням, листается без конца вверх и вниз; ▶ на карточке — задача. */
 export function AgendaView() {
-  const { anchor, setAnchor, jump, jumpTo } = usePlan()
+  const { anchor, setAnchor, jump, jumpTo, goto } = usePlan()
   const [win, setWin] = useState({ from: addDays(anchor, -2), to: addDays(anchor, 21) })
   const body = useRef<HTMLDivElement>(null)
   const top = useRef<HTMLDivElement>(null)
@@ -80,6 +81,7 @@ export function AgendaView() {
         <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => jumpTo(today())}>
           Сегодня
         </button>
+        <CalendarSwitch value="month" onChange={(m) => m !== 'month' && (writeWeekMode(m), goto('week'))} />
       </TopBar>
       <div className="cp-body nr-scroll cp-agenda" ref={body} onScroll={onScroll} role="feed" aria-label="Лента по дням">
         <div ref={top} className="cp-agenda__edge" />

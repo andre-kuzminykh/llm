@@ -5,21 +5,28 @@ import { renderApp } from '../test/renderApp'
 
 const day = (date: string) => document.querySelector(`[data-date="${date}"]`) as HTMLElement
 
-describe('T-CP-001 FR-CP-001 месяц', () => {
-  it('FULL дня, «ещё N» и слоты без темы', async () => {
+describe('T-CP-001 FR-CP-001 календарь месяцем', () => {
+  it('в дне — все единицы контента строками; фильтры убирают лишнее', async () => {
     renderApp()
     await screen.findByRole('heading', { name: 'Октябрь 2026' })
-    // рубрика — словом, название — только тема, значков площадок в месяце нет
-    const card = within(day('2026-10-26')).getByRole('button', { name: /^Демо: Стратегия/ })
+    // все карточки дня: тезис, FULL с тизером и анонсом (одна карточка), анонс Andre AIT; рубрика — словом, значков площадок нет
+    const cards = [...day('2026-10-26').querySelectorAll('.cp-card__open')].map((b) => b.getAttribute('aria-label'))
+    expect(cards).toEqual(['Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ, 11:00', 'Демо · FULL: Стратегия, 12:00', 'Демо · Анонс от Andre AIT: Стратегия, 13:00'])
+    const card = within(day('2026-10-26')).getByRole('button', { name: /^Демо · FULL: Стратегия/ })
     expect(within(card).getByLabelText('Рубрика: Демо')).toBeInTheDocument()
+    expect(card.closest('.cp-card')).toHaveClass('cp-card--main')
     expect(day('2026-10-26').querySelector('.cp-pi')).toBeNull()
-    // остальное в дне — одним числом: тезис и анонс Andre AIT
-    expect(within(day('2026-10-26')).getByText('ещё 2')).toBeInTheDocument()
-    expect(within(day('2026-10-27')).getByText('1 без темы')).toHaveAttribute('title', 'Нужна тема: Тезисы')
+    expect(within(day('2026-10-26')).queryByText(/^ещё/)).toBeNull()
+    // слот без темы — пунктирной строкой «Нужна тема»
+    expect(within(day('2026-10-27')).getByRole('button', { name: /^Тезисы · Тезис дня: Нужна тема/ }).closest('.cp-card')).toHaveClass('cp-card--slot')
+    // фильтр по каналу убирает анонс Andre AIT
+    await userEvent.click(screen.getByRole('button', { name: 'Фильтры' }))
+    await userEvent.click(within(screen.getByRole('complementary', { name: 'Фильтры и банк тем' })).getByRole('button', { name: 'Andre AIT' }))
+    expect(within(day('2026-10-26')).queryByRole('button', { name: /Andre AIT/ })).toBeNull()
+    expect(day('2026-10-26').querySelectorAll('.cp-card')).toHaveLength(2)
     await userEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }))
     await screen.findByRole('heading', { name: 'Ноябрь 2026' })
-    // пустой FULL — пунктирной карточкой «Нужна тема»
-    expect(within(day('2026-11-02')).getByRole('button', { name: /^Демо: Нужна тема/ }).closest('.cp-card')).toHaveClass('cp-card--slot')
+    expect(within(day('2026-11-02')).getByRole('button', { name: /^Демо · FULL: Нужна тема/ }).closest('.cp-card')).toHaveClass('cp-card--slot')
   })
   it('день открывает панель со всеми материалами по каналам', async () => {
     renderApp()
@@ -39,5 +46,17 @@ describe('T-CP-001 FR-CP-001 месяц', () => {
     renderApp(p)
     await screen.findByRole('heading', { name: 'Октябрь 2026' })
     expect(within(day('2026-10-31')).getByRole('img', { name: 'Нарушений: 1' })).toBeInTheDocument()
+  })
+  it('«Календарь» один: неделя и месяц — виды в его шапке', async () => {
+    renderApp()
+    await screen.findByRole('heading', { name: 'Октябрь 2026' })
+    const nav = screen.getByRole('navigation', { name: 'Разделы' })
+    expect(within(nav).queryByRole('button', { name: 'Неделя' })).toBeNull()
+    expect(within(nav).getByRole('button', { name: 'Календарь' })).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(screen.getByRole('radio', { name: 'Время' }))
+    expect(await screen.findByRole('grid', { name: 'Неделя по времени' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Календарь' })).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(screen.getByRole('radio', { name: 'Месяц' }))
+    expect(await screen.findByRole('heading', { name: 'Октябрь 2026' })).toBeInTheDocument()
   })
 })

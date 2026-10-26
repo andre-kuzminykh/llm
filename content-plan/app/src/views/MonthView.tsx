@@ -1,26 +1,37 @@
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { addDays, addMonths, monthKey, monthTitle, SAT, shortDate, today, WEEKDAYS, weekday } from '../model/dates'
-import { isSlot, type ISODate } from '../model/types'
-import type { Unit } from '../model/units'
+import type { ISODate } from '../model/types'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { useInfinite } from '../ui/infinite'
 import { DateJump, TopBar } from '../ui/TopBar'
 import { AgendaView } from './AgendaView'
+import { CalendarSwitch, writeWeekMode } from './WeekView'
 
-const ROW = 156 // высота недели
+// высота недели: шапка дня и строка на каждую единицу контента самого загруженного дня (с учётом фильтров)
+const HEAD_H = 40
+const CHIP_H = 21
+const MIN_ROW = 140
 
 /** Первая неделя месяца — та, чей четверг уже в нём (как в ISO): к ней ведут стрелки месяцев. */
 const firstWeekOf = (month: string) => addDays(`${month}-01`, 3)
 
-/** Календарь: на телефоне — лента по дням, на большом экране — месяц, который листается неделями без конца. */
+/** Календарь месяцем: на телефоне — лента по дням, на большом экране — месяц, который листается неделями без конца. */
 export function MonthView() {
   const { phone } = usePlan()
   return phone ? <AgendaView /> : <MonthGrid />
 }
 
 function MonthGrid() {
-  const { plan, anchor, setAnchor, jump, jumpTo } = usePlan()
+  const { plan, anchor, setAnchor, jump, jumpTo, unitsOn, filters, goto } = usePlan()
   const month = monthKey(anchor)
+  // все материалы дня видны строками, поэтому неделя высотой с самый загруженный день плана
+  const most = useMemo(() => {
+    let n = 1
+    for (let d = plan.start; d <= plan.end; d = addDays(d, 1)) n = Math.max(n, unitsOn(d).length)
+    return n
+  }, [plan, filters]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ROW = Math.max(MIN_ROW, HEAD_H + most * CHIP_H + 6)
   const inf = useInfinite({
     axis: 'y',
     step: 7,
@@ -33,6 +44,15 @@ function MonthGrid() {
     // дата в фокусе — четверг верхней недели: по нему и месяц в заголовке (как в ISO), и неделя при переходе в «Неделю»
     onFocus: (monday) => setAnchor(addDays(monday, 3)),
   })
+  // фильтры поменяли высоту недели — остаться на той же неделе
+  const lastRow = useRef(ROW)
+  useLayoutEffect(() => {
+    const old = lastRow.current
+    if (old === ROW) return
+    lastRow.current = ROW
+    const el = inf.ref.current
+    inf.scrollTo(el ? inf.dateAt(Math.round(el.scrollTop / old)) : anchor, false)
+  }, [ROW]) // eslint-disable-line react-hooks/exhaustive-deps
   const rows: number[] = []
   for (let i = inf.first; i <= inf.last; i++) rows.push(i)
   return (
@@ -45,6 +65,7 @@ function MonthGrid() {
           </button>
           <IconButton icon="chev-right" label="Следующий месяц" onClick={() => jumpTo(firstWeekOf(addMonths(month, 1)))} />
         </nav>
+        <CalendarSwitch value="month" onChange={(m) => m !== 'month' && (writeWeekMode(m), goto('week'))} />
       </TopBar>
       <div className="cp-body nr-scroll" ref={inf.ref} onScroll={inf.onScroll}>
         <div className="cp-month" role="grid" aria-label={monthTitle(month)} style={{ height: inf.range.count * ROW + 36 }}>
@@ -71,31 +92,10 @@ function MonthGrid() {
   )
 }
 
-/** Чего не хватает в день: рубрики слотов без темы. */
-export function missingOf(units: Unit[], rubricName: (id: string | null) => string) {
-  const names = [...new Set(units.filter((u) => isSlot(u.head)).map((u) => rubricName(u.head.rubricId)))]
-  return names
-}
-
-/** «2 без темы» — тихо, рубрики — в подсказке. */
-export function SlotsTag({ units }: { units: Unit[] }) {
-  const { rubrics } = usePlan()
-  const names = missingOf(units, (id) => rubrics.get(id ?? '')?.name ?? 'без рубрики')
-  const n = units.filter((u) => isSlot(u.head)).length
-  if (!n) return null
-  return (
-    <span className="cp-slots" title={`Нужна тема: ${names.join(', ')}`}>
-      {n} без темы
-    </span>
-  )
-}
-
 function MonthDay({ date, current }: { date: ISODate; current: boolean }) {
-  const { plan, unitsOn, rules, violByDate, openDay, openDayId, dropOn } = usePlan()
+  const { plan, unitsOn, violByDate, openDay, openDayId, dropOn } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const units = unitsOn(date)
-  const fulls = units.filter((u) => rules.get(u.head.ruleId)?.full && !u.head.derive)
-  const others = units.filter((u) => !fulls.includes(u))
   const viol = violByDate.get(date)?.length ?? 0
   const inPlan = date >= plan.start && date <= plan.end
   const day = Number(date.slice(8))
@@ -126,15 +126,9 @@ function MonthDay({ date, current }: { date: ISODate; current: boolean }) {
         </button>
         {viol > 0 && <span className="cp-viol" title={`Нарушений: ${viol}`} aria-label={`Нарушений: ${viol}`} role="img" />}
       </div>
-      {fulls.map((u) => (
-        <UnitCard key={u.key} unit={u} variant="mini" showTime={false} />
+      {units.map((u) => (
+        <UnitCard key={u.key} unit={u} variant="chip" />
       ))}
-      {others.length > 0 && (
-        <span className="cp-day__more">
-          ещё {others.length}
-          <SlotsTag units={others} />
-        </span>
-      )}
     </div>
   )
 }

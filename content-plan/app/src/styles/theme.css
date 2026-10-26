@@ -311,7 +311,7 @@ select.nr-field {
 .cp-month__wd { padding: 10px 12px 8px; }
 .cp-month__week { position: absolute; left: 0; right: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cp-day {
-  position: relative; display: flex; flex-direction: column; gap: 5px; min-width: 0; overflow: hidden; padding: 6px 7px;
+  position: relative; display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow: hidden; padding: 6px 5px;
   border-right: 1px solid var(--nr-sep-soft); border-bottom: 1px solid var(--nr-sep-soft);
   background: transparent; text-align: left; cursor: pointer;
   transition: background-color var(--nr-dur-1) var(--nr-ease), box-shadow var(--nr-dur-1) var(--nr-ease);
@@ -323,12 +323,9 @@ select.nr-field {
 .cp-day--today .cp-day__num { background: var(--nr-accent); color: #fff; }
 .cp-day--drop { box-shadow: inset 0 0 0 2px var(--nr-accent); background: var(--nr-accent-soft); }
 .cp-day--open { box-shadow: inset 0 0 0 2px var(--nr-accent-line); }
-.cp-day__head { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.cp-day__head { display: flex; align-items: center; gap: 5px; min-width: 0; margin-bottom: 3px; }
 .cp-day__head .nr-tag { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 20px; }
 .cp-day__num { flex: none; border: 0; background: transparent; color: inherit; cursor: pointer; display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; font-weight: var(--nr-fw-semibold); font-size: var(--nr-fs-md); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cp-day__more { display: flex; flex-wrap: wrap; gap: 2px 6px; margin-top: auto; padding: 0 2px; font-size: var(--nr-fs-xs); color: var(--nr-text-3); font-variant-numeric: tabular-nums; }
-.cp-slots { color: var(--nr-text-3); font-size: var(--nr-fs-xs); white-space: nowrap; }
-.cp-day__more .cp-slots::before { content: '· '; }
 .cp-viol { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--nr-danger); margin-left: auto; flex: none; }
 
 /* ── карточка материала: тихая строка — полоска канала, рубрика словом, тема ── */
@@ -348,12 +345,20 @@ select.nr-field {
 .cp-card__fmt::before { content: '· '; }
 .cp-card__time { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; color: var(--nr-text-2); }
 .cp-card__title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: var(--nr-fw-medium); overflow-wrap: break-word; hyphens: auto; }
-.cp-card--full .cp-card__title { font-weight: var(--nr-fw-semibold); }
+.cp-card--main .cp-card__title { font-weight: var(--nr-fw-semibold); } /* FULL — жирным */
 .cp-card--slot { border-left-style: dashed; }
 .cp-card--slot .cp-card__title { color: var(--nr-text-3); font-style: italic; font-weight: var(--nr-fw-regular); }
 .cp-card--dragging { opacity: 0.45; }
 .cp-card__bad { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--nr-danger); align-self: center; }
 /* строка: время и тема в одну линию — в дорожках недели */
+/* строка месяца: время, рубрика и тема одной строкой */
+.cp-card--chip { flex: none; height: 20px; border-radius: 4px; }
+.cp-card--chip .cp-card__open { flex-direction: row; align-items: center; gap: 5px; padding: 0 20px 0 6px; white-space: nowrap; font-size: 12px; }
+.cp-card--chip .cp-card__rub { flex: none; gap: 5px; font-size: 11.5px; overflow: visible; }
+.cp-card--chip .cp-card__time { order: -1; margin: 0; color: var(--nr-text-3); }
+.cp-card--chip .cp-card__title { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-card--chip .cp-card__bad { order: 1; }
+.cp-card--chip .cp-task-btn { top: 1px; right: 1px; width: 18px; height: 18px; }
 /* строка дорожки: время и рубрика (или что выходит на площадке) — мелко, под ними тема */
 .cp-card--line .cp-card__time { order: -1; margin: 0; color: var(--nr-text-3); }
 .cp-card--line .cp-rub { font-weight: var(--nr-fw-medium); color: var(--nr-text-3); }
@@ -432,10 +437,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 /* поток 24/7 — строкой над шкалой, как событие на весь день */
 .cp-tg__allday { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 4px; }
 .cp-tg__allday .cp-card { height: 24px; }
-.cp-tg__allday .cp-card__open { flex-direction: row; align-items: center; gap: 6px; padding: 0 22px 0 8px; white-space: nowrap; }
-.cp-tg__allday .cp-card__rub { flex: none; }
 .cp-tg__allday .cp-rub { display: none; }
-.cp-tg__allday .cp-card__title { -webkit-line-clamp: 1; }
 .cp-tg__alllabel { position: absolute; right: 8px; bottom: 9px; font-size: var(--nr-fs-xs); color: var(--nr-text-3); font-variant-numeric: tabular-nums; }
 .cp-task__stream { color: var(--nr-text-2); font-weight: var(--nr-fw-medium); white-space: nowrap; }
 .cp-tg__day--rest { background: var(--cp-rest); }
