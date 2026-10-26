@@ -61,6 +61,7 @@ export interface Item {
   ruleId: string
   rubricId: string | null
   title: string // тема: «Стратегия»; «…» — слот, тема ещё не задана
+  theme?: string // общая тема над несколькими материалами разных форматов: «ИИ-агенты в продажах»
   format: string
   platforms: string[]
   status: Status

@@ -184,3 +184,50 @@ describe('T-CP-037 FR-CP-037 расписание в дашборде', () => {
     expect(within(screen.getByRole('complementary', { name: 'Дашборд' })).getByRole('radio', { name: 'Расписание' })).toHaveAttribute('aria-checked', 'true')
   })
 })
+
+describe('T-CP-039 FR-CP-039 общая тема в программе', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-24T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('отметили строки разных форматов → общая тема; «Темы» показывают их вместе; переименовать и снять', async () => {
+    renderApp()
+    const dash = await openDash()
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Расписание' }))
+    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: Пн, 26 окт, 11:00: Я устал от хайпа вокруг ИИ' }))
+    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: Пн, 26 окт, 12:00: Стратегия' }))
+    const bar = within(dash).getByRole('toolbar', { name: 'Выбранные строки' })
+    expect(within(bar).getByText('Выбрано: 2')).toBeInTheDocument()
+    await userEvent.type(within(bar).getByRole('combobox', { name: 'Общая тема выбранных' }), 'ИИ-стратегия{Enter}')
+    expect(screen.getByText('Тема «ИИ-стратегия»: 2 материала')).toBeInTheDocument()
+    expect(within(dash).queryByRole('toolbar', { name: 'Выбранные строки' })).toBeNull()
+    expect(within(dash).getAllByText('Тема: ИИ-стратегия')).toHaveLength(2)
+
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Темы' }))
+    const theme = within(dash).getByRole('region', { name: 'Тема: ИИ-стратегия' })
+    const rows = within(theme).getAllByRole('button', { name: /^Пн, 26 окт/ }).map((b) => b.getAttribute('aria-label'))
+    expect(rows).toEqual(['Пн, 26 окт, 11:00: Я устал от хайпа вокруг ИИ', 'Пн, 26 окт, 12:00: Стратегия'])
+    expect(within(theme).getByText('Короткое видео')).toBeInTheDocument()
+    expect(within(theme).getByText('Полное видео')).toBeInTheDocument()
+    // без темы — свёрнуто, по нажатию — список
+    const rest = within(dash).getByRole('region', { name: 'Без темы' })
+    expect(within(rest).queryByRole('checkbox')).toBeNull()
+    await userEvent.click(within(rest).getByRole('button', { name: /Без темы/ }))
+    expect(within(rest).getAllByRole('checkbox').length).toBeGreaterThan(0)
+
+    await userEvent.click(within(theme).getByRole('button', { name: 'Переименовать' }))
+    const input = within(theme).getByRole('textbox', { name: 'Новое название темы «ИИ-стратегия»' })
+    await userEvent.clear(input)
+    await userEvent.type(input, 'Стратегия с ИИ{Enter}')
+    const renamed = within(dash).getByRole('region', { name: 'Тема: Стратегия с ИИ' })
+    await userEvent.click(within(renamed).getByRole('button', { name: 'Снять тему «Стратегия с ИИ»' }))
+    expect(within(dash).queryByRole('region', { name: /^Тема:/ })).toBeNull()
+    // ⌘Z возвращает тему
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }))
+    expect(within(dash).getByRole('region', { name: 'Тема: Стратегия с ИИ' })).toBeInTheDocument()
+  })
+})

@@ -178,3 +178,46 @@ describe('T-CP-027 FR-CP-027 «+»: новый контент, копии и в�
     expect(within(version()).getByRole('button', { name: 'Задача: Агенты вместо отделов (в работе)' })).toBeInTheDocument()
   })
 })
+
+describe('T-CP-039 FR-CP-039 общая тема в форме', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-24T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('новому контенту — общая тема с подсказкой уже заведённых; в «Расписании → Темы» он под ней вместе с FULL всей карточкой', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    // FULL «Стратегия»: общая тема из формы — всей карточке (и тизеру с анонсом)
+    await userEvent.click(within(full()).getByRole('button', { name: /^Демо · FULL: Стратегия/ }))
+    const edit = screen.getByRole('complementary', { name: 'Материал' })
+    await userEvent.type(within(edit).getByRole('combobox', { name: 'Общая тема' }), 'ИИ-стратегия')
+    await userEvent.click(within(edit).getByRole('button', { name: 'Сохранить' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    await pickTag(form, '#тезисы')
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Стратегия за 5 минут')
+    const date = within(form).getByLabelText('Дата')
+    await userEvent.clear(date)
+    await userEvent.type(date, '2026-10-28')
+    const theme = within(form).getByRole('combobox', { name: 'Общая тема' })
+    expect([...document.querySelectorAll(`#${CSS.escape(theme.getAttribute('list')!)} option`)].map((o) => o.getAttribute('value'))).toEqual(['ИИ-стратегия'])
+    await userEvent.type(theme, 'ИИ-стратегия')
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
+
+    await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Дашборд' }))
+    const dash = screen.getByRole('complementary', { name: 'Дашборд' })
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Расписание' }))
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Темы' }))
+    const group = within(dash).getByRole('region', { name: 'Тема: ИИ-стратегия' })
+    expect(within(group).getAllByRole('button', { name: /окт, \d\d:\d\d:/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Пн, 26 окт, 12:00: Стратегия',
+      'Пн, 26 окт, 13:00: Стратегия',
+      'Ср, 28 окт, 11:00: Стратегия за 5 минут',
+    ])
+  })
+})

@@ -340,6 +340,23 @@ check(
   'нет расписания в дашборде',
 )
 await page.screenshot({ path: `${SHOTS}/8b-schedule.png` })
+// общая тема над несколькими материалами разных форматов: отметить строки → тема → «Темы» показывают их вместе
+const thesisRow = schedDataist.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('checkbox').first()
+const fullRow = schedDataist.getByRole('group', { name: 'Офис Датаиста: #демо' }).getByRole('checkbox').first()
+await thesisRow.check()
+await fullRow.check()
+await dash.getByRole('combobox', { name: 'Общая тема выбранных' }).fill('ИИ-агенты в продажах')
+await dash.getByRole('button', { name: 'Поставить тему' }).click()
+await dash.getByRole('radio', { name: 'Темы' }).click()
+const themeBlock = dash.getByRole('region', { name: 'Тема: ИИ-агенты в продажах' })
+const themeFmts = new Set(await themeBlock.locator('.cp-sched__fmt').allTextContents())
+check(
+  (await themeBlock.getByRole('checkbox').count()) === 2 && themeFmts.has('Полное видео') && themeFmts.has('Короткое видео'),
+  'общая тема: у материалов разных форматов одна тема — в «Расписании → Темы» вместе',
+  `общая тема не собрала материалы: ${[...themeFmts].join(', ')}`,
+)
+await page.screenshot({ path: `${SHOTS}/8c-themes.png` })
+await dash.getByRole('radio', { name: 'Хэштеги' }).click()
 await dash.getByRole('radio', { name: 'Сводка' }).click()
 const topics = dash.getByRole('region', { name: 'Темы' })
 check(

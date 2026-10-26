@@ -1,18 +1,19 @@
 import { item, smallPlan } from '../test/fixtures'
 import { addDays } from './dates'
 import { indexByDate } from './filters'
-import { daysText, scheduleOf, timesText } from './schedule'
+import { daysText, scheduleOf, themesOf, timesText } from './schedule'
 import { GRAY } from './types'
 import { unitsOf } from './units'
 
-const build = (p = smallPlan(), from = '2026-10-24', n = 14) => {
+const parts = (p = smallPlan(), from = '2026-10-24', n = 14) => {
   const rules = new Map(p.rules.map((r) => [r.id, r]))
   const rubrics = new Map(p.rubrics.map((r) => [r.id, r]))
   const byDate = indexByDate(p)
   const order = p.channels.map((c) => c.id)
   const units = Array.from({ length: n }, (_, i) => addDays(from, i)).flatMap((d) => unitsOf(byDate.get(d) ?? [], rules, order))
-  return scheduleOf(p.channels, units, rules, rubrics)
+  return [p.channels, units, rules, rubrics] as const
 }
+const build = (p = smallPlan(), from = '2026-10-24', n = 14) => scheduleOf(...parts(p, from, n))
 
 describe('T-CP-037 FR-CP-037 расписание — план повествования', () => {
   it('каналы → хэштеги → что и когда выходит, по порядку; пустой слот — «Нужна тема»', () => {
@@ -48,3 +49,28 @@ describe('T-CP-037 FR-CP-037 расписание — план повество�
     expect(timesText(['2026-10-26', '2026-10-28'], 7)).toBe('')
   })
 })
+
+describe('T-CP-039 FR-CP-039 общая тема над несколькими материалами', () => {
+  it('по темам: у материалов разных форматов и каналов одна тема — они вместе, по порядку; остальное — «без темы»', () => {
+    const p = smallPlan()
+    for (const it of p.items) if (it.id === 'demo' || it.id === 'thesis' || it.id === 'ait') it.theme = 'ИИ-стратегия'
+    const { themes, none } = themesOf(...parts(p))
+    expect(themes.map((t) => t.theme)).toEqual(['ИИ-стратегия'])
+    expect(themes[0].rows.map((r) => `${r.time} ${r.channel} ${r.tag} ${r.format} ${r.title}`)).toEqual([
+      '11:00 Dataist #тезисы Короткое вертикальное видео Я устал от хайпа вокруг ИИ',
+      '12:00 Dataist #демо Полное горизонтальное видео Стратегия',
+      '13:00 Andre AIT #демо Текст с картинкой Стратегия',
+    ])
+    expect(none.map((r) => r.title)).toEqual(['Нужна тема', 'Нужна тема'])
+  })
+  it('строка знает все материалы карточки — тема ставится и тизеру с анонсами', () => {
+    const row = build()[0].tags.find((t) => t.tag === '#демо')!.rows[0]
+    expect(row.ids.sort()).toEqual(['demo', 'office', 'teaser'])
+  })
+  it('тема у карточки — у главного или у любого её материала; в «по хэштегам» видна у строки', () => {
+    const p = smallPlan()
+    p.items.find((it) => it.id === 'teaser')!.theme = 'Стратегия ИИ'
+    expect(build(p)[0].tags.find((t) => t.tag === '#демо')!.rows[0].theme).toBe('Стратегия ИИ')
+  })
+})
+

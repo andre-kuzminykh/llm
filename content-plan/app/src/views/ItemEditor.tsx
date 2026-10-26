@@ -48,6 +48,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [time, setTime] = useState(base.time ?? '')
   const [owner, setOwner] = useState(base.owner ?? '')
   const [due, setDue] = useState(base.due ?? '')
+  const [theme, setTheme] = useState(base.theme ?? '') // общая тема над несколькими материалами
+  const themesId = useId()
   const [offGrid, setOffGrid] = useState<boolean | null>(base.offGrid ?? (existing ? false : null))
   const [withGroup, setWithGroup] = useState(true)
   const [withFamily, setWithFamily] = useState(true)
@@ -152,6 +154,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       time: time && time !== ruleNow.time ? time : undefined,
       owner: owner.trim() || undefined,
       due: due || undefined,
+      theme: theme.trim().replace(/\s+/g, ' ') || undefined,
       offGrid: (isOffGrid || (needRule && !!day)) || undefined,
     }
     // копии и версии — в том же шаге истории, что и сам материал
@@ -165,7 +168,9 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }, ...extra(existing.id)])
       toast(`Тема поставлена на ${date}${also ? ` · ${also}` : ''}`, true)
     } else if (existing) {
-      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }, ...extra(existing.id)])
+      // общая тема — всей карточке: тизеру, анонсам и письмам группы тоже
+      const themed: Action[] = patch.theme !== existing.theme && members.length ? [{ type: 'updateMany', ids: members.map((x) => x.id), patch: { theme: patch.theme } }] : []
+      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }, ...themed, ...extra(existing.id)])
       toast(`Сохранено${also ? ` · ${also}` : ''}`, true)
     } else {
       const sample = plan.items.find((x) => x.ruleId === ruleNow!.id && x.date && !x.derive)
@@ -186,6 +191,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         time: patch.time,
         owner: patch.owner,
         due: patch.due,
+        theme: patch.theme,
         offGrid: patch.offGrid,
       }
       for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
@@ -279,6 +285,22 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             </select>
           </label>
         )}
+
+        <label className="cp-field" title="Одна тема у нескольких материалов разных форматов — по ней их видно в «Расписании»">
+          <span className="nr-label">Общая тема</span>
+          <input
+            className="nr-field"
+            list={themesId}
+            value={theme}
+            placeholder="Например, «ИИ-агенты в продажах» — объединит видео, шортсы и тексты"
+            onChange={(e) => setTheme(e.target.value)}
+          />
+          <datalist id={themesId}>
+            {[...new Set(plan.items.map((x) => x.theme).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'ru')).map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+        </label>
 
         {date && offDay && offGridField}
 
