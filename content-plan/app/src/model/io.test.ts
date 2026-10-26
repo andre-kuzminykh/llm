@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { loadSeed, smallPlan } from '../test/fixtures'
-import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, renameAndFormats, upgradePlan, type PlanV1, type PlanV2 } from './io'
+import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, renameAndFormats, splitDataist, upgradePlan, type PlanV1, type PlanV2 } from './io'
 import { FULL_VIDEO, GRAY, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Plan } from './types'
 
 describe('T-CP-013 FR-CP-013 выгрузка и загрузка', () => {
@@ -111,5 +111,46 @@ describe('T-CP-035/036 FR-CP-035/036 разделы Датаиста и четы
     const o = old()
     o.channels[0].sections[0].color = '#34c759'
     expect(renameAndFormats(o).channels[0].sections[0].color).toBe('#34c759')
+  })
+})
+
+describe('T-CP-038 FR-CP-038 Датаист — три отдельных канала', () => {
+  // план, сохранённый с Dataist и разделами: у Dataist три раздела, FULL Демо и тезис — без раздела
+  const old = (): Plan => {
+    const p = smallPlan()
+    p.channels[0].sections = [
+      { id: 'lab', name: 'Dataist Lab', web: 'Лаборатория Датаиста', color: GRAY },
+      { id: 'academy', name: 'Dataist Academy', web: 'Академия Датаиста', color: '#34c759' },
+      { id: 'office', name: 'Dataist Office', web: 'Офис Датаиста', color: GRAY },
+    ]
+    p.rubrics.push({ id: 'research', name: 'Исследования', what: '' })
+    p.rules.push({ ...p.rules.find((r) => r.id === 'f_demo')!, id: 'f_res', rubricId: 'research' })
+    p.items.push({ ...p.items.find((it) => it.id === 'slot2')!, id: 'res', ruleId: 'f_res', rubricId: 'research', group: undefined })
+    return p
+  }
+  it('вместо Dataist с разделами — три серых канала; формат и материал — в канале своего раздела или рубрики', () => {
+    const p = splitDataist(old())
+    expect(p.channels.map((c) => c.name)).toEqual(['Лаборатория Датаиста', 'Академия Датаиста', 'Офис Датаиста', 'Andre AIT', 'Landao'])
+    expect(p.channels.every((c) => !c.sections.length)).toBe(true)
+    expect(p.channels.find((c) => c.id === 'dataist-academy')!.color).toBe('#34c759') // свой цвет раздела остаётся
+    const ch = (id: string) => p.items.find((it) => it.id === id)!
+    expect(ch('demo').channelId).toBe('dataist-office')
+    expect(ch('office')).toMatchObject({ channelId: 'dataist-office' })
+    expect(ch('office').sectionId).toBeUndefined()
+    expect(ch('thesis').channelId).toBe('dataist-office')
+    expect(ch('res').channelId).toBe('dataist-lab')
+    expect(p.rules.find((r) => r.id === 'f_res')!.channelId).toBe('dataist-lab')
+    expect(p.rules.every((r) => r.channelId !== 'dataist' && !r.sectionId)).toBe(true)
+  })
+  it('план без Dataist не трогается; исходный план уже из трёх каналов', () => {
+    const p = splitDataist(old())
+    expect(splitDataist(p)).toBe(p)
+    const seed = loadSeed()
+    expect(seed.channels.filter((c) => c.id.startsWith('dataist-')).map((c) => [c.name, c.color])).toEqual([
+      ['Лаборатория Датаиста', GRAY],
+      ['Академия Датаиста', GRAY],
+      ['Офис Датаиста', GRAY],
+    ])
+    expect(seed.channels.some((c) => c.sections.length)).toBe(false)
   })
 })

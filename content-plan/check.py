@@ -71,10 +71,14 @@ check('Площадки материала — только площадки е�
       [f"{it['date']} {it['ruleId']}: {p}" for it in ITEMS for p in it['platforms']
        if p not in CH[it['channelId']]['platforms'] or p not in RULES[it['ruleId']]['platforms']][:5])
 check('Andre AIT — только LinkedIn и почта', [p for it in ITEMS if it['channelId'] == 'andre' for p in it['platforms'] if p not in ('LinkedIn', 'Mail')][:5])
-check('Web — только Dataist, и всегда в своём разделе (Лаборатория, Академия, Офис Датаиста)',
-      [f"{it['date']} {it['ruleId']}" for it in ITEMS if 'Web' in it['platforms'] and (it['channelId'] != 'dataist' or not it.get('sectionId'))][:5])
-check('Telegram Dataist — только Dataist Lab, Academy или Office',
-      [f"{it['date']} {it['ruleId']}" for it in ITEMS if 'Telegram' in it['platforms'] and it['channelId'] == 'dataist' and not it.get('sectionId')][:5])
+check('Web — только каналы Датаиста (Лаборатория, Академия, Офис Датаиста)',
+      [f"{it['date']} {it['ruleId']}" for it in ITEMS if 'Web' in it['platforms'] and not it['channelId'].startswith('dataist-')][:5])
+check('Датаист — три канала: исследования в Лаборатории, Академия в Академии, остальное в Офисе; материал — в канале своего формата',
+      [f"{r['id']} → {r['channelId']}" for r in RULES.values() if r['channelId'].startswith('dataist-')
+       and r['channelId'] != {'research': 'dataist-lab', 'academy': 'dataist-academy'}.get(r['rubricId'], 'dataist-office')
+       and r['id'] not in ('lab_day', 'lab_day_v', 'lab_month', 'aca_lesson', 'office')][:5]
+      + [f"{it['date']} {it['ruleId']}" for it in ITEMS if it['channelId'] != RULES[it['ruleId']]['channelId']
+         and it['ruleId'] not in ('lan_launch', 'ant_launch')][:5])  # анонс запуска нового канала — в письме Датаиста
 
 # ── сетка FULL ───────────────────────────────────────────────────────────────
 per_day = Counter(it['date'] for it in FULLS)

@@ -30,7 +30,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       .sort((x, y) => Number(x.rubricId === null) - Number(y.rubricId === null))
   const rubricsFor = (cid: string, keep?: string | null) =>
     plan.rubrics.filter((rb) => rb.id === keep || plan.rules.some((r) => r.channelId === cid && r.rubricId === rb.id))
-  // по умолчанию — канал, у которого больше всего форматов (Dataist)
+  // по умолчанию — канал, у которого больше всего форматов (Офис Датаиста)
   const busiest = [...plan.channels].sort((x, y) => plan.rules.filter((r) => r.channelId === y.id).length - plan.rules.filter((r) => r.channelId === x.id).length)[0]
   const firstChannel = base.channelId ?? busiest?.id ?? plan.channels[0].id
   const firstRule = base.ruleId ?? rulesFor(firstChannel, base.rubricId ?? rubricsFor(firstChannel)[0]?.id ?? null)[0]?.id ?? plan.rules[0].id

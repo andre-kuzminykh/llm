@@ -331,9 +331,9 @@ check((await dash.getByRole('region', { name: 'Что делать' }).count()) 
 await page.screenshot({ path: `${SHOTS}/8-dashboard.png` })
 // «Расписание» переворачивает дашборд: каналы → хэштеги → что и когда выходит, время подписью
 await dash.getByRole('radio', { name: 'Расписание' }).click()
-const schedDataist = dash.getByRole('region', { name: 'Расписание: Dataist' })
+const schedDataist = dash.getByRole('region', { name: 'Расписание: Офис Датаиста' })
 check(
-  (await schedDataist.getByRole('group', { name: 'Dataist: #тезисы' }).getByRole('button').count()) >= 5 &&
+  (await schedDataist.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('button').count()) >= 5 &&
     (await dash.getByRole('region', { name: 'Расписание: Лаборатория Датаиста' }).count()) &&
     !(await dash.getByRole('region', { name: 'Что делать' }).count()),
   'дашборд → «Расписание»: каналы, в них хэштеги, по каждому — когда что выходит',
@@ -368,7 +368,7 @@ if (await rest.count()) {
 }
 await page.screenshot({ path: `${SHOTS}/10b-planning.png` })
 await planning.getByRole('button', { name: 'Назад' }).click()
-await dash.getByRole('region', { name: 'Темы' }).getByRole('group', { name: 'Темы: Dataist' }).getByRole('button', { name: /^#демо/ }).first().click()
+await dash.getByRole('region', { name: 'Темы' }).getByRole('group', { name: 'Темы: Офис Датаиста' }).getByRole('button', { name: /^#демо/ }).first().click()
 check(
   !(await dash.count()) && (await side.getByRole('button', { name: '#демо', exact: true }).getAttribute('aria-pressed')) === 'true' && (await side.getByRole('button', { name: '#тезисы', exact: true }).getAttribute('aria-pressed')) === 'false',
   'хэштег в «Темах» — календарь только по этой теме',
@@ -410,15 +410,17 @@ await side.getByRole('textbox', { name: 'Новая площадка' }).press('
 check(await side.getByRole('button', { name: 'VK', exact: true }).count(), 'площадка добавляется в панели слева', 'площадка не добавилась')
 await page.keyboard.press('Control+z')
 await side.getByRole('button', { name: 'Лаборатория Датаиста', exact: true }).click()
-check((await side.getByRole('button', { name: 'Лаборатория Датаиста', exact: true }).getAttribute('aria-pressed')) === 'false', 'фильтр по разделу канала (Лаборатория Датаиста)', 'разделы канала не фильтруются')
+check((await side.getByRole('button', { name: 'Лаборатория Датаиста', exact: true }).getAttribute('aria-pressed')) === 'false', 'фильтр по каналу (Лаборатория Датаиста)', 'каналы Датаиста не фильтруются')
 await side.getByRole('button', { name: 'Сбросить' }).click()
 
-// разделы Датаиста — полными названиями и серые; цвет канала меняется палитрой; у площадок — иконки
+// Датаист — три отдельных серых канала, без вложенности; цвет канала меняется палитрой; у площадок — иконки
 const dotBg = (name) => side.getByRole('button', { name }).locator('.cp-colorpick__dot').evaluate((el) => getComputedStyle(el).backgroundColor)
+const dataist = ['Лаборатория Датаиста', 'Академия Датаиста', 'Офис Датаиста']
+const grays = await Promise.all(dataist.map((n) => dotBg(`Цвет: ${n}`)))
 check(
-  (await side.getByRole('button', { name: 'Офис Датаиста', exact: true }).count()) && (await dotBg('Цвет: Академия Датаиста')) === 'rgb(142, 142, 147)',
-  'разделы: Лаборатория / Академия / Офис Датаиста — серые',
-  `разделы не те: ${await dotBg('Цвет: Академия Датаиста').catch(() => '—')}`,
+  grays.every((c) => c === 'rgb(142, 142, 147)') && !(await side.getByRole('button', { name: 'Dataist', exact: true }).count()) && !(await side.locator('.cp-side__row--sec').count()),
+  'Датаист — три отдельных серых канала: Лаборатория, Академия, Офис, без вложенности',
+  `каналы Датаиста не те: ${grays.join(', ')}`,
 )
 const neuCard = () => page.locator('.cp-card').filter({ has: page.getByRole('button', { name: /^Новости: Все новости/ }) }).first()
 await side.getByRole('button', { name: 'Цвет: Neuronium' }).click()

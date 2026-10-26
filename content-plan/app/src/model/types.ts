@@ -9,7 +9,7 @@ export type ISODate = string // 'YYYY-MM-DD'
 
 export interface Section {
   id: string
-  name: string // как в Telegram: «Dataist Lab»
+  name: string // как в Telegram
   web: string // как на сайте и в плане: «Лаборатория Датаиста»
   color?: string // свой цвет раздела; без него — цвет канала
 }

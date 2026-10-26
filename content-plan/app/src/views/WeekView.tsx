@@ -22,7 +22,7 @@ interface Lane {
   match: (it: Item) => boolean
 }
 
-/** Дорожки по каналам; у Dataist — по разделам и форматам, чтобы не было одной огромной строки. */
+/** Дорожки по каналам; у канала с разделами — по разделам и форматам, чтобы не было одной огромной строки. */
 export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
   const out: Lane[] = []
   for (const c of plan.channels) {

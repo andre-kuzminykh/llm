@@ -39,12 +39,12 @@ MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май'
 MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
               'сентября', 'октября', 'ноября', 'декабря']
 
-# Порядок заголовков внутри ячейки календаря
-HEADERS = ['Neuronium', 'Dataist', 'Dataist Lab', 'Dataist Academy', 'Dataist Office',
-           'Лаборатория Датаиста', 'Академия Датаиста', 'Офис Датаиста', 'Andre AIT', 'Landao', 'Antropolis']
-# Разделы Dataist на сайте и в плане (в исходнике — «Лаборатория», «Академия», «Кабинет»)
+# Порядок брендов в исходнике и порядок заголовков (каналов) внутри ячейки календаря
+BRANDS = ['Neuronium', 'Dataist', 'Andre AIT', 'Landao', 'Antropolis']
+HEADERS = ['Neuronium', 'Лаборатория Датаиста', 'Академия Датаиста', 'Офис Датаиста', 'Andre AIT', 'Landao', 'Antropolis']
+# Датаист в плане — три отдельных канала (в исходнике — Dataist с разделами «Лаборатория», «Академия», «Кабинет»)
 WEB_SECTIONS = {'Lab': 'Лаборатория Датаиста', 'Academy': 'Академия Датаиста', 'Office': 'Офис Датаиста'}
-SECTION_COLOR = '#8e8e93'  # разделы — серые; цвет меняют в приложении
+DATAIST_COLOR = '#8e8e93'  # каналы Датаиста — серые; цвет меняют в приложении
 BRAND_COLORS = {'Neuronium': '#7B2CBF', 'Dataist': '#1A56B8', 'Andre AIT': '#0B7A75',
                 'Landao': '#C2185B', 'Antropolis': '#D35400'}
 
@@ -683,7 +683,7 @@ def build():
             add(d, 'Antropolis', None, 'ant_diary', 'Пост + Shorts', 'Antropolis',
                 ['Telegram', 'YouTube', 'TikTok'], 'правило', 20)
 
-    UNITS.sort(key=lambda u: (u.day, HEADERS.index(u.brand), u.rank))
+    UNITS.sort(key=lambda u: (u.day, BRANDS.index(u.brand), u.rank))
     check(slots)
 
 
@@ -710,12 +710,21 @@ def check(slots):
 
 # ---------------------------------------------------------------- вывод
 
+def dataist_part(rid, sections={}):
+    """Канал Датаиста у формата: раздел его материалов, а без раздела — по рубрике: исследования — Лаборатория,
+    Академия — Академия, остальное (FULL, шортсы, тексты, письма) — Офис."""
+    if not sections:
+        sections.update({u.rubric: u.section for u in UNITS if u.brand == 'Dataist' and u.section})
+    return sections.get(rid) or {'research': 'Lab', 'academy': 'Academy'}.get(RUBRICS[rid]['cat'], 'Office')
+
+
+def brand_name(u):
+    """Канал материала в плане: у Датаиста — один из трёх."""
+    return WEB_SECTIONS[dataist_part(u.rubric)] if u.brand == 'Dataist' else u.brand
+
+
 def header_of(u, platform):
-    if platform == 'Web':
-        return WEB_SECTIONS[u.section]
-    if platform == 'Telegram' and u.brand == 'Dataist':
-        return f'Dataist {u.section}'
-    return u.brand
+    return brand_name(u)
 
 
 def brand_of_header(h):
@@ -780,7 +789,8 @@ def tables():
                 'Старт', 'Откуда материалы']]
     for i, rid in enumerate(RUBRIC_ORDER, 1):
         r = RUBRICS[rid]
-        rubrics.append([i, cat_name(r['cat']), r['fmt_name'], r['brand'], r['channel'], r['platforms'],
+        brand = WEB_SECTIONS[dataist_part(rid)] if r['brand'] == 'Dataist' else r['brand']
+        rubrics.append([i, cat_name(r['cat']), r['fmt_name'], brand, r['channel'], r['platforms'],
                         *r['days'], r['freq'], r['what'], r['start'], r['source']])
 
     # Типовая неделя: всё, что встречается в этот день недели, с подсказками частоты
@@ -809,7 +819,7 @@ def tables():
     plan = [['Дата', 'День', 'Канал', 'Раздел', 'Рубрика', 'Формат', 'Материал', 'Площадки',
              'Источник', 'Дата в исходнике']]
     for u in UNITS:
-        plan.append([u.day.isoformat(), WD[u.day.weekday()], u.brand, channel_of(u),
+        plan.append([u.day.isoformat(), WD[u.day.weekday()], brand_name(u), channel_of(u),
                      cat_name(cat_of(u)), RUBRICS[u.rubric]['fmt_name'], u.text, ', '.join(u.platforms),
                      u.source, u.orig.isoformat() if u.orig else ''])
 
@@ -893,7 +903,7 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
             if c == 1:
                 ws.write(r, c, v, C['rubric'])
             elif c == 3:
-                ws.write(r, c, v, C['brand:' + v])
+                ws.write(r, c, v, C['brand:' + brand_of_header(v)])
             elif 6 <= c <= 12:
                 ws.write(r, c, v, C['center_sat'] if c == 11 else C['center'])
             else:
@@ -926,7 +936,7 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
         ph = row[8] == 'нужна тема'
         for c, v in enumerate(row):
             if c == 2:
-                ws.write(r, c, v, C['brand:' + v])
+                ws.write(r, c, v, C['brand:' + brand_of_header(v)])
             elif c == 8 and ph:
                 ws.write(r, c, v, C['need'])
             else:
@@ -957,9 +967,13 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
 # ---------------------------------------------------------------- данные для приложения
 
 APP_SEED = ROOT / 'app' / 'public' / 'seed.json'
-CHANNEL_IDS = {'Neuronium': 'neuronium', 'Dataist': 'dataist', 'Andre AIT': 'andre',
-               'Landao': 'landao', 'Antropolis': 'antropolis'}
-SECTION_IDS = {'Lab': 'lab', 'Academy': 'academy', 'Office': 'office'}
+CHANNEL_IDS = {'Neuronium': 'neuronium', 'Andre AIT': 'andre', 'Landao': 'landao', 'Antropolis': 'antropolis'}
+DATAIST_IDS = {'Lab': 'dataist-lab', 'Academy': 'dataist-academy', 'Office': 'dataist-office'}
+
+
+def channel_id(rid):
+    brand = RUBRICS[rid]['brand']
+    return DATAIST_IDS[dataist_part(rid)] if brand == 'Dataist' else CHANNEL_IDS[brand]
 # Форматы в приложении: видео — полное горизонтальное и короткое вертикальное, текст — страница на сайте
 # и текст с картинкой. Что именно выходит на площадке (Reels, строка письма) — в типах правила.
 FULL_VIDEO, SHORT_VIDEO = 'Полное горизонтальное видео', 'Короткое вертикальное видео'
@@ -980,12 +994,18 @@ BANK = {'f_demo', 'f_tech', 'f_case', 'f_dev', 'f_res', 'f_think', 'f_aca', 'sh_
 
 def write_seed():
     import json
+    # у каждого канала Датаиста — площадки его форматов
+    used = {}
+    for rid in RUBRIC_ORDER:
+        if RUBRICS[rid]['brand'] == 'Dataist':
+            names = {re.sub(r'\s*\(.*?\)', '', t).strip() for t in RUBRICS[rid]['platforms'].split(',')}
+            used.setdefault(dataist_part(rid), set()).update(names)
     channels = [
         dict(id='neuronium', name='Neuronium', start=START, platforms=['Telegram', 'YouTube'],
              sections=[]),
-        dict(id='dataist', name='Dataist', start=START, platforms=PLATFORMS,
-             sections=[dict(id=SECTION_IDS[k], name=f'Dataist {k}', web=v, color=SECTION_COLOR)
-                       for k, v in WEB_SECTIONS.items()]),
+        *[dict(id=DATAIST_IDS[k], name=v, color=DATAIST_COLOR, start=START,
+               platforms=[p for p in PLATFORMS if p in used.get(k, ())], sections=[])
+          for k, v in WEB_SECTIONS.items()],
         dict(id='andre', name='Andre AIT', start=START, platforms=['LinkedIn', 'Mail'], sections=[]),
         dict(id='landao', name='Landao', start=LANDAO_START,
              platforms=['Telegram', 'Instagram', 'TikTok'], sections=[]),
@@ -993,14 +1013,14 @@ def write_seed():
              platforms=['Telegram', 'YouTube', 'TikTok'], sections=[]),
     ]
     for c in channels:
-        c['color'] = BRAND_COLORS[c['name']]
+        c.setdefault('color', BRAND_COLORS.get(c['name']))
         c['start'] = c['start'].isoformat()
     rubrics = [dict(id=cid, name=name, what=what) for cid, (name, what) in CATS.items()]
     rules = []
     for rid in RUBRIC_ORDER:
         r = RUBRICS[rid]
         names = [re.sub(r'\s*\(.*?\)', '', t).strip() for t in r['platforms'].split(',')]
-        rule = dict(id=rid, rubricId=r['cat'], name=r['fmt_name'], channelId=CHANNEL_IDS[r['brand']],
+        rule = dict(id=rid, rubricId=r['cat'], name=r['fmt_name'], channelId=channel_id(rid),
                     channel=r['channel'], what=r['what'],
                     platforms=[p for p in PLATFORMS if p in names], days=[bool(c) for c in r['days']],
                     dayNotes=['' if c == '●' else c for c in r['days']], freq=r['freq'],
@@ -1009,17 +1029,14 @@ def write_seed():
         rule['format'] = app_format(r['fmt'], rule['platforms'])
         if rid in BANK:
             rule['bank'] = True
-        section = next((u.section for u in UNITS if u.rubric == rid and u.brand == r['brand']), None)
-        if section:
-            rule['sectionId'] = SECTION_IDS[section]
         rules.append(rule)
     items = []
     for n, u in enumerate(UNITS, 1):
-        it = dict(id=f'i{n}', date=u.day.isoformat(), channelId=CHANNEL_IDS[u.brand], ruleId=u.rubric,
+        # канал — по бренду материала: анонс запуска Antropolis в письме Dataist остаётся у Датаиста
+        cid = DATAIST_IDS[dataist_part(u.rubric)] if u.brand == 'Dataist' else CHANNEL_IDS[u.brand]
+        it = dict(id=f'i{n}', date=u.day.isoformat(), channelId=cid, ruleId=u.rubric,
                   rubricId=cat_of(u), title=u.text, format=app_format(u.fmt, u.platforms), platforms=list(u.platforms),
                   status='planned', source=u.source, rank=u.rank)
-        if u.section:
-            it['sectionId'] = SECTION_IDS[u.section]
         if u.group:
             it['group'] = u.group
         if u.derive:

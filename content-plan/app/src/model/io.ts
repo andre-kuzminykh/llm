@@ -1,6 +1,6 @@
 // Выгрузка и загрузка: JSON целиком и CSV-календарь в формате out/4_calendar.csv.
 import { addDays, MONTHS, WEEKDAYS, weekday } from './dates'
-import { formatOf, GRAY, isFormat, lineOf, PLACEHOLDER, timeOf, type ISODate, type Item, type Plan, type Rule } from './types'
+import { formatOf, GRAY, isFormat, lineOf, PLACEHOLDER, timeOf, type Channel, type ISODate, type Item, type Plan, type Rule } from './types'
 
 export const exportJSON = (plan: Plan) => JSON.stringify(plan)
 
@@ -136,9 +136,9 @@ export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
 
 /** Любая версия → текущая. Для старых нужен новый исходный план: из него берутся новые поля правил. */
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
-  if (isV1(p)) return renameAndFormats(migrateV1(p, await seed()))
-  if (isV2(p)) return renameAndFormats(migrateV2(p, await seed()))
-  return renameAndFormats(await addStreams(p, seed))
+  if (isV1(p)) return splitDataist(renameAndFormats(migrateV1(p, await seed())))
+  if (isV2(p)) return splitDataist(renameAndFormats(migrateV2(p, await seed())))
+  return splitDataist(renameAndFormats(await addStreams(p, seed)))
 }
 
 // Разделы Dataist теперь называются полностью и по умолчанию серые; «Кабинет» стал «Офисом Датаиста»
@@ -192,6 +192,39 @@ async function addStreams(p: Plan, seed: () => Promise<Plan>): Promise<Plan> {
       return s?.stream ? { ...r, stream: true, time: s.time, freq: s.freq } : { ...r, stream: false }
     }),
   }
+}
+
+/** Датаист — три отдельных канала вместо Dataist с разделами: у формата — канал его раздела, без раздела — по рубрике
+ *  (исследования — Лаборатория, Академия — Академия, остальное — Офис). Материал — в канале своего формата.
+ *  Свой цвет раздела остаётся; план без Dataist возвращается как есть. */
+export function splitDataist(p: Plan): Plan {
+  const old = p.channels.find((c) => c.id === 'dataist' && c.sections.length)
+  if (!old) return p
+  const ids = new Set(old.sections.map((s) => s.id))
+  const part = (sectionId: string | undefined, rubricId: string | null) => {
+    const want = sectionId && ids.has(sectionId) ? sectionId : rubricId === 'research' ? 'lab' : rubricId === 'academy' ? 'academy' : 'office'
+    return `dataist-${ids.has(want) ? want : old.sections[old.sections.length - 1].id}`
+  }
+  const ruleChannel = new Map<string, string>()
+  const rules = p.rules.map((r) => {
+    if (r.channelId !== old.id) return r
+    const { sectionId, ...rest } = r
+    const channelId = part(sectionId, r.rubricId)
+    ruleChannel.set(r.id, channelId)
+    return { ...rest, channelId }
+  })
+  const items = p.items.map((it) => {
+    if (it.channelId !== old.id) return it
+    const { sectionId, ...rest } = it
+    return { ...rest, channelId: ruleChannel.get(it.ruleId) ?? part(sectionId, it.rubricId) }
+  })
+  const made: Channel[] = old.sections.map((s) => {
+    const id = `dataist-${s.id}`
+    const used = new Set(rules.filter((r) => r.channelId === id).flatMap((r) => r.platforms))
+    const platforms = old.platforms.filter((x) => used.has(x))
+    return { id, name: s.web, color: s.color ?? GRAY, start: old.start, platforms: platforms.length ? platforms : old.platforms, sections: [] }
+  })
+  return { ...p, channels: p.channels.flatMap((c) => (c === old ? made : [c])), rules, items }
 }
 
 /** Порядок заголовков в ячейке: канал, его разделы в Telegram, его разделы на сайте. */

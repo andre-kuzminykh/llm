@@ -132,7 +132,7 @@ export function TaskButton({ unit }: { unit: Unit }) {
 
 export type CardVariant = 'mini' | 'compact' | 'line' | 'chip' | 'full'
 
-/** Главный канал плана — у кого больше всего форматов (Dataist): его имя в строках не повторяется. */
+/** Главный канал плана — у кого больше всего форматов (Офис Датаиста): его имя в строках не повторяется. */
 export const mainChannelId = (plan: Plan) =>
   [...plan.channels].sort((x, y) => plan.rules.filter((r) => r.channelId === y.id).length - plan.rules.filter((r) => r.channelId === x.id).length)[0]?.id
 

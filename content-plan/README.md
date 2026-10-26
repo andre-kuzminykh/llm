@@ -44,7 +44,7 @@
 
 | Канал | Площадки | Старт |
 |---|---|---|
-| **Dataist** | Web (на сайте только Dataist: разделы Лаборатория Датаиста, Академия Датаиста, Офис Датаиста; в исходной таблице — Лаборатория, Академия, Кабинет), YouTube, Instagram, TikTok, Threads, X, LinkedIn, Mail; в Telegram три канала: **Dataist Lab**, **Dataist Academy**, **Dataist Office** | 25.10.2026 |
+| **Dataist** — в плане три канала: **Лаборатория Датаиста** (исследования), **Академия Датаиста** (Академия), **Офис Датаиста** (всё остальное: FULL, шортсы, тексты, письма) | Web (на сайте только Датаист; в исходной таблице — разделы Лаборатория, Академия, Кабинет), YouTube, Instagram, TikTok, Threads, X, LinkedIn, Mail; в Telegram — Dataist Lab, Dataist Academy, Dataist Office | 25.10.2026 |
 | **Neuronium** | Telegram (Все новости), YouTube (Избранные новости) | 25.10.2026 |
 | **Andre AIT** | LinkedIn, Mail | 25.10.2026 |
 | **Landao** | Telegram, Instagram, TikTok | 02.11.2026, день анонса Landao |

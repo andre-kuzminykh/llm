@@ -53,7 +53,7 @@ describe('T-CP-008 FR-CP-008 типовая неделя', () => {
     expect(t.get('0|YouTube')!.map((l) => l.label)).toContain('Демо · FULL')
     expect(t.get('6|YouTube')!.map((l) => l.label)).toContain('Академия · FULL')
     expect(t.get('5|YouTube')!.map((l) => l.label)).not.toContain('Тезисы · Тезис дня')
-    expect(t.get('0|Telegram')!.map((l) => l.header)).toContain('Dataist Office')
+    expect(t.get('0|Telegram')!.map((l) => l.header)).toContain('Офис Датаиста')
     expect(t.get('0|Web')!.map((l) => l.header)).toContain('Офис Датаиста')
   })
   it('разовые рубрики не попадают в неделю', () => {
