@@ -15,8 +15,8 @@ const SAVED: Record<string, string> = {
   error: 'Не сохранилось',
 }
 
-/** Шапка календаря: «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки; справа — поиск,
- *  вид календаря (время, каналы, площадки, темы) и значок дашборда в углу (открывается панелью справа).
+/** Шапка календаря: «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки, сразу за ними —
+ *  поиск и вид календаря (время, каналы, площадки, темы); справа в углу — значок дашборда (открывается панелью справа).
  *  «+» — круглая кнопка справа внизу. Отмена — ⌘Z и кнопкой во всплывашке после правки. */
 export function TopBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
   const ctx = usePlan()
@@ -41,15 +41,16 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
       </button>
       {typeof title === 'string' ? <h1 className="nr-title">{title}</h1> : title}
       {children}
-      <span className="cp-top__spacer" />
+      {/* поиск и вид — сразу за датой, слева; справа в углу — только дашборд */}
+      <Search />
+      <ViewSwitch />
       {!sideOpen && <FilterChips />}
+      <span className="cp-top__spacer" />
       {SAVED[saved] && (
         <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню профиля' : undefined}>
           {SAVED[saved]}
         </span>
       )}
-      <Search />
-      <ViewSwitch />
       {!phone && (
         <button
           type="button"

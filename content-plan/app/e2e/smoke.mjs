@@ -56,10 +56,16 @@ check(
 )
 const right = await page.evaluate(() => {
   const x = (sel) => document.querySelector(`.cp-top ${sel}`)?.getBoundingClientRect()
-  const [s, v, d] = [x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]')]
-  return s && v && d && s.right <= v.left && v.right <= d.left && Math.abs(s.top - v.top) < 12 && d.right > window.innerWidth - 40
+  const [n, s, v, d] = [x('.cp-top__nav'), x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]')]
+  return n && s && v && d && s.left - n.right < 30 && s.right <= v.left && v.left - s.right < 20 && v.right + 100 < d.left && Math.abs(s.top - v.top) < 12 && d.right > window.innerWidth - 40
 })
-check(right, 'справа от поиска — вид календаря, в самом углу — дашборд, в одну строку', 'поиск, вид и дашборд стоят не так')
+check(right, 'поиск и вид — сразу за датой, слева; в самом углу — дашборд, в одну строку', 'поиск, вид и дашборд стоят не так')
+const bw = await modes.getByRole('radio', { checked: true }).evaluate((el) => {
+  const c = getComputedStyle(el)
+  const lum = (rgb) => rgb.match(/\d+/g).slice(0, 3).reduce((a, b) => a + Number(b), 0) / 3
+  return Math.abs(lum(c.backgroundColor) - lum(c.color)) > 200
+})
+check(bw, 'выбранный вид — чёрно-белый', 'выбранный вид не чёрно-белый')
 check(
   !(await top.getByRole('radio', { name: 'Месяц' }).count()) && !(await page.getByRole('radiogroup', { name: /Сколько дней/ }).count()) && !(await page.getByRole('group', { name: 'Лента дней' }).count()),
   'нет «Месяца», «День · 3 дня · Неделя» и ленты дней',

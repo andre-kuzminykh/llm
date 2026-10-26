@@ -823,6 +823,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 /* ── поиск вверху: поле и найденное под ним ─────────────────────────────── */
 .cp-search { position: relative; display: flex; align-items: center; gap: 6px; flex: 0 1 240px; min-width: 130px; height: var(--nr-ctl-sm); padding: 0 10px;
   border-radius: var(--nr-r-full); background: var(--nr-fill-3); color: var(--nr-text-3); }
+.cp-search { margin-left: 6px; background: transparent; box-shadow: inset 0 0 0 1px var(--nr-sep); }
 .cp-search:focus-within { background: var(--nr-surface); box-shadow: inset 0 0 0 1px var(--nr-sep-strong); }
 .cp-search__in { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--nr-text); font: inherit; font-size: var(--nr-fs-md); }
 .cp-search__in::-webkit-search-cancel-button { cursor: pointer; }
@@ -899,7 +900,11 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
   background: var(--nr-surface); box-shadow: inset 0 0 0 1px var(--nr-sep-strong), var(--nr-shadow-2); }
 .cp-search--float .cp-search__pop { left: 0; right: 0; width: auto; }
 
-/* вид календаря — справа от поиска: иконка и подпись; тесно — только иконка */
+/* вид календаря — за поиском: иконка и подпись; тесно — только иконка. Чёрно-белый: выбранный — белым на чёрном (в тёмной — наоборот) */
+.cp-views { background: transparent; box-shadow: inset 0 0 0 1px var(--nr-sep); }
+.cp-views .nr-seg__item { color: var(--nr-text-2); }
+.cp-views .nr-seg__item[aria-checked='true'] { background: var(--nr-text); color: var(--nr-canvas); box-shadow: none; }
+@media (hover: hover) { .cp-views .nr-seg__item[aria-checked='false']:hover { color: var(--nr-text); background: var(--nr-fill-3); } }
 .nr-main { container: main / inline-size; }
 .cp-views__item { display: inline-flex; align-items: center; gap: 6px; }
 .cp-views__item .nr-icon { flex: none; }
