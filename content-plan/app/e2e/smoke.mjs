@@ -109,7 +109,10 @@ check(
   'карточка едет за указателем по 15 минутам, на ней — время, куда встанет',
   'на переносимой карточке нет нового времени',
 )
+const tipText = (await page.locator('.cp-drag-hint').textContent()) ?? ''
+check(tipText.startsWith(`Вт, 10 ноя · ${later}`), `подсказка у указателя словами: «${tipText}»`, `нет подсказки при переносе: «${tipText}»`)
 await page.mouse.up()
+check(!(await page.locator('.cp-drag-hint').count()), 'отпустили — подсказка ушла', 'подсказка осталась')
 const moved = new RegExp(`^Тезисы · Тезис дня: .*, ${later}`)
 check(await col.getByRole('button', { name: moved }).count(), 'перенос на другой час указателем', 'время не поменялось')
 check(!(await page.getByRole('complementary', { name: 'Материал' }).count()), 'после переноса карточка не открывается', 'перенос открыл форму')
@@ -166,7 +169,18 @@ check(box && box.width > 120, 'неделя по ширине экрана', 'к
 // нарушение одно, а «Поменять местами» ставит Сбер на 2.11
 await jump('2026-11-02')
 const landao = cell('2026-11-02').locator('.cp-card--main', { hasText: 'Landao' }).first()
-await dragBy(landao, (await cell('2026-11-02').boundingBox()).width, 0)
+const lnd = await landao.boundingBox()
+await page.mouse.move(lnd.x + lnd.width / 2, lnd.y + 8)
+await page.mouse.down()
+await page.mouse.move(lnd.x + lnd.width / 2 + (await cell('2026-11-02').boundingBox()).width, lnd.y + 8, { steps: 10 })
+const fullTip = (await page.locator('.cp-drag-hint').textContent()) ?? ''
+check(
+  fullTip.includes('Вместе с группой') && fullTip.includes('Здесь уже FULL') && fullTip.includes('Сбер') && fullTip.includes('можно поменять местами'),
+  'подсказка до переноса: что едет с FULL и что здесь уже FULL',
+  `подсказка FULL: «${fullTip}»`,
+)
+await page.screenshot({ path: `${SHOTS}/2a-hint.png` })
+await page.mouse.up()
 check(await cell('2026-11-03').locator('.cp-card--main', { hasText: 'Landao' }).count(), 'FULL — на другой день указателем', 'FULL не переехал')
 await toast().filter({ hasText: 'вместе с группой' }).waitFor()
 const viol = page.locator('.cp-tg__day').filter({ has: page.getByRole('button', { name: 'Открыть день 2026-11-03' }) }).locator('.cp-viol')
@@ -181,6 +195,36 @@ check(
 await page.keyboard.press('Control+z')
 await page.keyboard.press('Control+z')
 check(await cell('2026-11-02').locator('.cp-card--main', { hasText: 'Landao' }).count(), 'отмена вернула', 'отмена не сработала')
+
+// несколько карточек: Shift-щелчок выбирает, перенос выбранной везёт все на тот же сдвиг, Esc снимает
+const pick1 = cell('2026-11-02').locator('.cp-card', { hasText: 'Тезисы' }).first()
+const pick2 = cell('2026-11-03').locator('.cp-card', { hasText: 'Тезисы' }).first()
+const [t1, t2] = [await pick1.locator('.cp-card__title').textContent(), await pick2.locator('.cp-card__title').textContent()]
+await pick1.locator('.cp-card__open').click({ modifiers: ['Shift'] })
+await pick2.locator('.cp-card__open').click({ modifiers: ['Shift'] })
+const selbar = page.getByRole('toolbar', { name: 'Выбранные карточки' })
+check(
+  (await selbar.textContent())?.includes('Выбрано: 2') && !(await page.getByRole('complementary', { name: 'Материал' }).count()) && (await page.locator('.cp-card--picked').count()) === 2,
+  'Shift-щелчок выбирает карточки, а не открывает; внизу — «Выбрано: 2»',
+  'выбор нескольких карточек не работает',
+)
+await page.screenshot({ path: `${SHOTS}/2b-selected.png` })
+const p1 = await pick1.boundingBox()
+await page.mouse.move(p1.x + p1.width / 2, p1.y + 8)
+await page.mouse.down()
+await page.mouse.move(p1.x + p1.width / 2 + 2 * (await cell('2026-11-02').boundingBox()).width, p1.y + 8, { steps: 10 })
+const manyTip = (await page.locator('.cp-drag-hint').textContent()) ?? ''
+check(manyTip.startsWith('2 карточки · +2 дня') && (await page.locator('.cp-card--lifted').count()) === 2, `выбранные едут вместе, подсказка: «${manyTip.split('\n')[0]}»`, `перенос выбранных: «${manyTip}»`)
+await page.mouse.up()
+check(
+  (await cell('2026-11-04').locator('.cp-card__title', { hasText: t1 }).count()) && (await cell('2026-11-05').locator('.cp-card__title', { hasText: t2 }).count()),
+  'обе выбранные переехали на два дня',
+  'выбранные не переехали',
+)
+await page.keyboard.press('Control+z')
+check(await cell('2026-11-02').locator('.cp-card__title', { hasText: t1 }).count(), 'перенос выбранных отменяется одним шагом', 'отмена не вернула выбранные')
+await page.keyboard.press('Escape')
+check(!(await selbar.count()) && !(await page.locator('.cp-card--picked').count()), 'Esc снимает выделение', 'выделение не снялось')
 
 // дорожки по каналам — вид выбирается слева; карточку переносят указателем на другой день
 await modes.getByRole('radio', { name: 'Каналы' }).click()
@@ -197,6 +241,7 @@ await page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height / 2)
 await page.mouse.down()
 await page.mouse.move(tgt.x + tgt.width / 2, tgt.y + 10, { steps: 12 })
 check(await page.locator('.cp-ghost').count(), 'в дорожках карточка едет за указателем', 'нет карточки под указателем')
+check(((await page.locator('.cp-drag-hint').textContent()) ?? '').startsWith('Чт, 12 ноя'), 'в дорожках — та же подсказка словами', 'в дорожках нет подсказки')
 await page.mouse.up()
 check(await target.locator('.cp-card__title', { hasText: laneTitle }).count(), 'перенос в дорожках указателем', 'в дорожках карточка не переехала')
 await page.keyboard.press('Control+z')

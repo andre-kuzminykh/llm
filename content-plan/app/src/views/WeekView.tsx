@@ -3,11 +3,12 @@ import {
   applyPan, blockGeometry, gestureEnd, layoutBlocks, minutesFromMidnight, minutesToClock, nowLine, resizeEnd, shiftAnchor, snapMin, type Geometry,
 } from '../model/calendar'
 import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
+import { whereText } from '../model/hint'
 import { shownTitle, tagOf, type ISODate, type Item, type Plan } from '../model/types'
 import { platformTypes, type Unit } from '../model/units'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan, type Mode } from '../ui/ctx'
-import { autoScroll, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
+import { autoScroll, hintBox, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
 import { Icon } from '../ui/Icon'
 import { useInfinite } from '../ui/infinite'
 import { DateJump, TopBar } from '../ui/TopBar'
@@ -67,6 +68,7 @@ interface Gesture {
   y: number
   hold: number // пальцем — таймер удержания
   live: boolean // жест начался: мышь сдвинулась, палец удержан
+  ids: string[] // что едет: карточка или все выбранные, если взяли выбранную
   cancelled?: boolean // Esc: карточка вернулась, отпущенная кнопка — не щелчок
 }
 
@@ -77,13 +79,16 @@ export interface TimeDrag {
   mode: 'move' | 'resize'
   to: ISODate
   min: number
+  ids: string[] // выбранные едут вместе: на столько же дней и минут
+  dDays: number
+  dMin: number
 }
 
 /** Календарь SMM — неделя: дни листаются вбок без конца. «Время» — шкала часов, как календарь в nr_management:
  *  карточку берут и ставят на другой день и час, тянут за нижний край, пустой лист тянут рукой.
  *  «Каналы», «Площадки», «Темы» — дорожками, как в исходной таблице. Вид выбирается в панели слева. */
 export function WeekView() {
-  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn, dropOn, dispatch, toast, mode: m } = usePlan()
+  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn, dropOn, dispatch, toast, mode: m, selected, toggleSelect, moveMany, hint } = usePlan()
   const mode = m as Exclude<Mode, 'feed'>
   const gutter = mode === 'time' ? GUT : phone ? 96 : 132
   // неделя целиком по ширине экрана: колонка дня — седьмая часть (на телефоне — два дня)
@@ -144,6 +149,8 @@ export function WeekView() {
   const [drag, setDrag] = useState<TimeDrag | null>(null)
   const aimed = useRef<TimeDrag | null>(null) // то же, что drag, но без ожидания отрисовки
   const raf = useRef(0)
+  const tip = useRef<ReturnType<typeof hintBox> | null>(null) // подсказка словами у указателя
+  const dateOf = (id: string) => plan.items.find((x) => x.id === id)?.date
 
   /** Куда встанет карточка: день — колонка под курсором, время — сдвиг по вертикали с привязкой к 15 минутам. */
   const aim = () => {
@@ -153,15 +160,26 @@ export function WeekView() {
     const dy = g.y - g.y0 + (el.scrollTop - g.top0)
     let next: TimeDrag
     if (g.mode === 'resize') {
-      next = { key: g.unit.key, date: g.date, mode: 'resize', to: g.date, min: minutesFromMidnight(resizeEnd(g.unit.time, g.topMin + g.heightMin + dy / PPM)) }
+      const min = minutesFromMidnight(resizeEnd(g.unit.time, g.topMin + g.heightMin + dy / PPM))
+      next = { key: g.unit.key, date: g.date, mode: 'resize', to: g.date, min, ids: g.ids, dDays: 0, dMin: 0 }
     } else {
       const cx = g.x - el.getBoundingClientRect().left + el.scrollLeft - GUT
-      next = { key: g.unit.key, date: g.date, mode: 'move', to: inf.dateAt(Math.floor(cx / col)), min: snapMin(g.topMin + dy / PPM) }
+      const to = inf.dateAt(Math.floor(cx / col))
+      const min = snapMin(g.topMin + dy / PPM)
+      next = { key: g.unit.key, date: g.date, mode: 'move', to, min, ids: g.ids, dDays: daysBetween(g.date, to), dMin: min - g.topMin }
     }
     const d = aimed.current
     if (d && d.key === next.key && d.to === next.to && d.min === next.min && d.mode === next.mode) return
     aimed.current = next
     setDrag(next)
+    // подсказка словами: куда, что едет вместе, что отметит проверка
+    if (next.mode === 'resize') tip.current?.show([{ text: `${g.unit.time}–${minutesToClock(next.min)}` }])
+    else {
+      const many = next.ids.length > 1
+      const moves = many ? next.ids.map((id) => ({ id, date: addDays(dateOf(id) ?? next.to, next.dDays) })) : [{ id: g.unit.head.id, date: next.to }]
+      tip.current?.show([{ text: whereText(next.to, many ? undefined : minutesToClock(next.min), next.ids.length, next.dDays, next.dMin) }, ...hint(moves)])
+    }
+    tip.current?.place(g.x, g.y)
   }
   const goLive = () => {
     const g = gesture.current
@@ -169,6 +187,7 @@ export function WeekView() {
     g.live = true
     if (g.touch) navigator.vibrate?.(8)
     document.body.classList.add('cp-grabbing')
+    tip.current = hintBox()
     aim()
     const loop = () => {
       const el = inf.ref.current
@@ -190,6 +209,8 @@ export function WeekView() {
       x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, top0: el?.scrollTop ?? 0,
       hold: touch ? window.setTimeout(goLive, HOLD_MS) : 0,
       live: false,
+      // взяли выбранную — едут все выбранные
+      ids: kind === 'move' && selected.has(unit.head.id) && selected.size > 1 ? [...selected] : [unit.head.id],
     }
     if (kind === 'resize' && !touch) goLive() // мышью край берут нарочно — сразу; пальцем — тоже удержанием
   }
@@ -206,7 +227,10 @@ export function WeekView() {
       if (g.cancelled) return
       g.x = e.clientX
       g.y = e.clientY
-      if (g.live) return aim()
+      if (g.live) {
+        tip.current?.place(g.x, g.y)
+        return aim()
+      }
       if (Math.hypot(g.x - g.x0, g.y - g.y0) <= SLOP * (g.touch ? 2 : 1)) return
       if (!g.touch) return goLive()
       // палец поехал раньше, чем взял карточку, — это лист
@@ -248,9 +272,13 @@ export function WeekView() {
     const d = aimed.current
     aimed.current = null
     setDrag(null)
+    tip.current?.remove()
+    tip.current = null
     if (panned || g?.cancelled) swallowClick() // лист тянули или перенос отменили — отпущенная кнопка мыши не щелчок
     if (decision !== 'commit-drag' || !g || !d) return
     swallowClick()
+    // пальцем подержали и отпустили на месте — это выбор карточки, а не перенос
+    if (g.touch && g.mode === 'move' && Math.hypot(g.x - g.x0, g.y - g.y0) <= SLOP * 2) return toggleSelect(g.unit.head.id)
     if (keep) commit(g, d)
   }
   const commit = (g: Gesture, d: TimeDrag) => {
@@ -263,9 +291,16 @@ export function WeekView() {
       return
     }
     if (d.to === g.date && d.min === g.topMin) return
+    if (d.ids.length > 1) return moveMany(d.ids, d.dDays, d.dMin)
     dropOn(d.to, { kind: 'item', id: head.id }, minutesToClock(d.min))
   }
-  useEffect(() => () => cancelAnimationFrame(raf.current), [])
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(raf.current)
+      tip.current?.remove()
+    },
+    [],
+  )
   // Esc, пока карточку ведут, — отмена: она возвращается на место
   const dragging = drag !== null
   useEffect(() => {
@@ -277,6 +312,8 @@ export function WeekView() {
       g.cancelled = true
       aimed.current = null
       setDrag(null)
+      tip.current?.remove()
+      tip.current = null
       cancelAnimationFrame(raf.current)
       document.body.classList.remove('cp-grabbing')
     }
@@ -381,7 +418,7 @@ function TimeGrid({ days, count, col, drag, grab }: { days: { date: ISODate; i: 
           ))}
         </div>
         {days.map(({ date, i }) => (
-          <TimeColumn key={date} date={date} left={GUT + i * col} width={col} now={nowLine(date, clock)} drag={drag?.date === date ? drag : null} grab={grab} />
+          <TimeColumn key={date} date={date} left={GUT + i * col} width={col} now={nowLine(date, clock)} drag={drag} grab={grab} />
         ))}
       </div>
     </div>
@@ -418,12 +455,13 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
       {placed.map(({ item: u, topMin, heightMin, col, cols }) => {
         const w = inner / cols
         const g = { topMin, heightMin }
-        const lifted = drag?.key === u.key ? drag : null
+        // ведут эту карточку — или другую выбранную, а эта едет вместе с ней
+        const lifted = drag && ((drag.key === u.key && drag.date === date) || (drag.mode === 'move' && drag.ids.length > 1 && drag.ids.includes(u.head.id))) ? drag : null
         const end = lifted?.mode === 'resize' ? lifted.min : topMin + heightMin
         const moving = lifted?.mode === 'move' ? lifted : null
         const box = { top: topMin * PPM + 1, left: 4 + col * w, width: w - 2, height: Math.max(18, heightMin * PPM - 2) }
         // карточку ведут — она стоит там, куда встанет (колонка и 15 минут), а на старом месте — пунктир
-        const ghost: CSSProperties = moving ? { transform: `translate(${daysBetween(date, moving.to) * width}px, ${(moving.min - topMin) * PPM}px)` } : {}
+        const ghost: CSSProperties = moving ? { transform: `translate(${moving.dDays * width}px, ${moving.dMin * PPM}px)` } : {}
         return (
           <Fragment key={u.key}>
             {moving && <span className="cp-tg__origin" style={box} aria-hidden="true" />}
@@ -432,7 +470,7 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
               variant="compact"
               narrow={w < 110}
               className={lifted ? 'cp-card--lifted' : undefined}
-              when={lifted ? (moving ? minutesToClock(moving.min) : `${u.time}–${minutesToClock(end)}`) : undefined}
+              when={lifted ? (moving ? minutesToClock(Math.max(0, Math.min(topMin + moving.dMin, 1425))) : `${u.time}–${minutesToClock(end)}`) : undefined}
               style={{ position: 'absolute', ...box, height: Math.max(18, (end - topMin) * PPM - 2), ...ghost }}
               onGrab={(e) => grab(e, u, date, 'move', g)}
             >

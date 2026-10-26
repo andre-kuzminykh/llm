@@ -913,3 +913,32 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
   .cp-search__when { width: 64px; }
   .cp-sheet--dash .cp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ── выбранные карточки и подсказка при переносе ─────────────────────────── */
+.cp-card--picked { background: var(--nr-accent-soft); box-shadow: inset 0 0 0 1.5px var(--nr-accent); }
+@media (hover: hover) { .cp-card--picked:hover { background: var(--nr-accent-soft); } }
+.cp-selbar {
+  position: fixed; left: 50%; bottom: 24px; z-index: 90; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  max-width: calc(100vw - 32px); padding: 6px 6px 6px 16px; border-radius: var(--nr-r-full); box-shadow: var(--nr-shadow-3);
+  background: var(--nr-surface); border: 1px solid var(--nr-sep); animation: cpToast var(--nr-dur-3) var(--nr-ease-sheet);
+}
+.cp-selbar .cp-stp__btn { color: var(--nr-text-2); }
+.cp-selbar .cp-pick__btn--empty { color: var(--nr-accent-text); font-weight: var(--nr-fw-semibold); }
+.cp-selbar__n { font-weight: var(--nr-fw-semibold); font-size: var(--nr-fs-md); white-space: nowrap; }
+.cp-selbar .cp-pick__btn { white-space: nowrap; }
+.cp-has-sel .cp-toast { bottom: 84px; }
+/* подсказка словами у указателя: куда встанет, что едет вместе, что отметит проверка */
+.cp-drag-hint {
+  position: fixed; z-index: 1001; max-width: 320px; display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; pointer-events: none;
+  border-radius: var(--nr-r-md); background: var(--nr-surface); color: var(--nr-text); border: 1px solid var(--nr-sep); box-shadow: var(--nr-shadow-3);
+  font-size: var(--nr-fs-sm); line-height: 1.35;
+}
+.cp-drag-hint__line { color: var(--nr-text-2); }
+.cp-drag-hint__line--where { color: var(--nr-text); font-weight: var(--nr-fw-semibold); }
+.cp-drag-hint__line--warn { color: var(--nr-text); padding-left: 16px; position: relative; }
+.cp-drag-hint__line--warn::before { content: '!'; position: absolute; left: 0; top: 0; width: 12px; height: 12px; margin-top: 2px; border-radius: 50%;
+  background: var(--nr-warning); color: var(--nr-canvas); font: 700 9px/12px var(--nr-font); text-align: center; }
+@media (max-width: 600px) {
+  .cp-selbar { left: 8px; right: 8px; bottom: 72px; transform: none; flex-wrap: wrap; border-radius: var(--nr-r-lg); }
+  .cp-has-sel .cp-toast { bottom: 132px; }
+}

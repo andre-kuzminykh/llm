@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { shortDate, today } from './model/dates'
+import { addDays, fromMin, shortDate, toMin, today } from './model/dates'
 import { indexByDate, visible, type Filters } from './model/filters'
+import { moveHint, whereText } from './model/hint'
 import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, type AnyPlan } from './model/io'
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
-import { initialState, reducer } from './model/store'
-import { labelOf, type ISODate, type Item, type Plan } from './model/types'
+import { initialState, reducer, type Action } from './model/store'
+import { labelOf, timeOf, type ISODate, type Item, type Plan } from './model/types'
 import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
 import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type ToastOpts } from './ui/ctx'
 import { Icon } from './ui/Icon'
+import { SelectionBar } from './ui/SelectionBar'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
@@ -252,6 +254,30 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     return () => clearTimeout(t)
   }, [toastState])
 
+  // выбранные карточки; удалённые материалы из выбора выпадают сами
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const selected = useMemo(() => {
+    const live = new Set([...picked].filter((id) => plan.items.some((x) => x.id === id && x.date)))
+    return live.size === picked.size ? picked : live
+  }, [picked, plan.items])
+  const moveMany = (ids: string[], dDays: number, dMin = 0) => {
+    // цели считаются от того, где карточки стоят сейчас: две из одной группы не сдвинут её дважды
+    const actions: Action[] = []
+    for (const id of ids) {
+      const it = plan.items.find((x) => x.id === id)
+      if (!it?.date) continue
+      const rule = rules.get(it.ruleId)
+      const time = dMin && !rule?.stream ? fromMin(Math.max(0, Math.min(toMin(timeOf(it, rule)) + dMin, 24 * 60 - 15))) : undefined
+      actions.push({ type: 'move', id, date: addDays(it.date, dDays), time })
+    }
+    if (!actions.length || (!dDays && !dMin)) return
+    dispatch({ type: 'batch', actions })
+    const one = actions[0].type === 'move' && actions.length === 1 ? actions[0] : null
+    toast(one ? `Перенесено на ${shortDate(one.date)}${one.time ? `, ${one.time}` : ''}` : `Перенесено: ${whereText(today(), undefined, actions.length, dDays, dMin)}`, true)
+  }
+  const pickedRef = useRef(0)
+  pickedRef.current = selected.size
+
   const dropOn = (date: ISODate, d: Drag, time?: string) => {
     const it = plan.items.find((x) => x.id === d.id)
     if (!it) return
@@ -279,6 +305,10 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      if (e.key === 'Escape' && pickedRef.current) {
+        setPicked(new Set()) // сначала Esc снимает выделение
+        return
+      }
       if (e.key === 'Escape') {
         setMenu(false)
         if (narrow) setSideOpen(false)
@@ -340,6 +370,17 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       if (status === 'progress') ctx.openTask(unit.head.id)
     },
     toast,
+    selected,
+    toggleSelect: (id) =>
+      setPicked((s) => {
+        const next = new Set(s)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      }),
+    clearSelection: () => setPicked(new Set()),
+    moveMany,
+    hint: (moves) => moveHint(plan, byDate, moves, today()),
     toggleSide: () => setSideOpen((o) => !o),
     sideOpen,
     openHelp: () => setSheet({ kind: 'help' }),
@@ -354,7 +395,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
 
   return (
     <PlanCtx.Provider value={ctx}>
-      <div className="nr-app">
+      <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}`}>
         {phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
             <button type="button" className="cp-tab" aria-current={sheet?.kind === 'dashboard' ? 'page' : undefined} onClick={() => setSheet({ kind: 'dashboard' })}>
@@ -407,12 +448,13 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'help' && <HelpSheet onClose={closeSheet} />}
-          {!sheet && (
+          {!sheet && !selected.size && (
             <button type="button" className="cp-fab" aria-label="Новый контент" title="Запланировать контент" onClick={() => ctx.openNew({ date: anchor < today() ? today() : anchor })}>
               <Icon name="plus" size={26} />
             </button>
           )}
         </main>
+        <SelectionBar />
         {toastState && (
           <div className="cp-toast nr-glass" role="status" key={toastState.n}>
             <span className="cp-toast__msg">{toastState.msg}</span>

@@ -1,5 +1,7 @@
 // Мелкие общие части: карточка материала, площадки, статусы, переключатели, перетаскивание.
 import { useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from 'react'
+import { addDays, daysBetween } from '../model/dates'
+import { whereText } from '../model/hint'
 import { isSlot, shownTitle, STATUSES, statusOf, tagOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
@@ -151,8 +153,9 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   className?: string
   children?: ReactNode
 }) {
-  const { plan, channels, rubrics, rules, badIds, openItem, dropOn } = usePlan()
+  const { plan, channels, rubrics, rules, badIds, openItem, dropOn, selected, toggleSelect, moveMany, hint } = usePlan()
   const { head } = unit
+  const picked = selected.has(head.id)
   const rule = rules.get(head.ruleId)
   const rubric = rubrics.get(head.rubricId ?? '')
   const color = channels.get(unit.channelId)?.color
@@ -163,7 +166,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const plats = platformTypes(unit, rules, plan.platforms)
   const bad = unit.items.some((it) => badIds.has(it.id))
   const full = !!rule?.full && !head.derive
-  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', className]
+  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', picked && 'cp-card--picked', className]
     .filter(Boolean)
     .join(' ')
   const st = statusOf(head.status)
@@ -176,7 +179,24 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
     <div
       className={cls}
       style={{ '--cp-c': color, ...style } as CSSProperties}
-      onPointerDown={onGrab ?? ((e) => grabCard(e, (d) => dropOn(d.date, { kind: 'item', id: head.id }, d.time)))}
+      onPointerDown={
+        onGrab ??
+        ((e) => {
+          // выбранную карточку везут вместе с остальными выбранными — на тот же сдвиг
+          const many = picked && selected.size > 1 && unit.date ? [...selected] : null
+          const movesTo = (date: string) => {
+            const dd = daysBetween(unit.date!, date)
+            return many ? many.map((id) => ({ id, date: addDays(plan.items.find((x) => x.id === id)?.date ?? date, dd) })) : [{ id: head.id, date }]
+          }
+          grabCard(e, (d) => (many ? moveMany(many, daysBetween(unit.date!, d.date)) : dropOn(d.date, { kind: 'item', id: head.id }, d.time)), {
+            hint: (d) => [
+              { text: whereText(d.date, many || unit.stream ? undefined : d.time, many?.length ?? 1, daysBetween(unit.date ?? d.date, d.date)) },
+              ...hint(movesTo(d.date)),
+            ],
+            onSelect: () => toggleSelect(head.id),
+          })
+        })
+      }
       data-unit={head.id}
     >
       <button
@@ -184,9 +204,12 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
         className="cp-card__open"
         onClick={(e) => {
           e.stopPropagation()
+          // Shift или ⌘ (Ctrl) — выбрать карточку, а не открыть
+          if (e.shiftKey || e.metaKey || e.ctrlKey) return toggleSelect(head.id)
           openItem(head.id)
         }}
-        aria-label={`${label}: ${title}${showTime ? `, ${timeText(unit)}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}`}
+        aria-pressed={picked || undefined}
+        aria-label={`${label}: ${title}${showTime ? `, ${timeText(unit)}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}${picked ? ', выбрано' : ''}`}
         title={variant === 'full' ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
       >
         {line ? (

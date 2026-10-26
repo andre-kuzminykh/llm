@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { Filters } from '../model/filters'
+import type { HintLine, Move } from '../model/hint'
 import type { Violation } from '../model/rules'
 import type { Action } from '../model/store'
 import type { Channel, ISODate, Item, Plan, Rubric, Rule, Status } from '../model/types'
@@ -58,6 +59,14 @@ export interface Ctx {
   /** Планирование недели: уточнить темы пустых слотов. */
   openPlanning: () => void
   dropOn: (date: ISODate, drag: Drag, time?: string) => void
+  /** Выбранные карточки (их главные материалы): Shift- или ⌘-щелчок, пальцем — подержать и отпустить. */
+  selected: Set<string>
+  toggleSelect: (id: string) => void
+  clearSelection: () => void
+  /** Перенести несколько карточек разом: на столько дней и минут — одним шагом истории. */
+  moveMany: (ids: string[], dDays: number, dMin?: number) => void
+  /** Подсказка при переносе словами: что едет вместе и что отметит проверка на новом месте. */
+  hint: (moves: Move[]) => HintLine[]
   /** Статус всей карточке; ▶ ещё и открывает задачу. */
   setStatus: (unit: Unit, status: Status) => void
   toast: (msg: string, opts?: boolean | ToastOpts) => void

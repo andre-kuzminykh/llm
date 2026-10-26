@@ -6,6 +6,7 @@
 // на шкале времени — свои жесты (WeekView): там карточку ещё и растягивают.
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { minutesToClock, snapMin } from '../model/calendar'
+import type { HintLine } from '../model/hint'
 import type { ISODate } from '../model/types'
 
 export const SLOP = 4 // px: меньше — щелчок, а не перенос
@@ -56,8 +57,56 @@ export function dropAt(target: HTMLElement, cardTop: number): Drop {
   return { date, time: minutesToClock(snapMin(min)) }
 }
 
+/** Подсказка у указателя, пока карточку ведут: первая строка — куда, дальше — что едет вместе и что отметит проверка. */
+export function hintBox() {
+  const box = document.createElement('div')
+  box.className = 'cp-drag-hint'
+  box.setAttribute('aria-live', 'polite')
+  box.hidden = true
+  document.body.append(box)
+  let shown = ''
+  return {
+    show(lines: HintLine[]) {
+      const key = lines.map((l) => `${l.warn ? '!' : ''}${l.text}`).join('\n')
+      if (key === shown) return
+      shown = key
+      box.replaceChildren(
+        ...lines.map((l, i) => {
+          const row = document.createElement('div')
+          row.className = `cp-drag-hint__line${i === 0 ? ' cp-drag-hint__line--where' : ''}${l.warn ? ' cp-drag-hint__line--warn' : ''}`
+          row.textContent = l.text
+          return row
+        }),
+      )
+      box.hidden = !lines.length
+    },
+    hide() {
+      box.hidden = true
+      shown = ''
+    },
+    /** Рядом с указателем, не вылезая за экран. */
+    place(x: number, y: number) {
+      if (box.hidden) return
+      const w = box.offsetWidth
+      const h = box.offsetHeight
+      const left = x + 18 + w > innerWidth - 8 ? x - 18 - w : x + 18
+      const top = y + 20 + h > innerHeight - 8 ? y - 20 - h : y + 20
+      box.style.left = `${Math.max(8, left)}px`
+      box.style.top = `${Math.max(8, top)}px`
+    },
+    remove: () => box.remove(),
+  }
+}
+
+export interface GrabOpts {
+  /** Что будет, если отпустить здесь: строки подсказки (первая — куда). */
+  hint?: (d: Drop) => HintLine[]
+  /** Пальцем подержали и отпустили, не сдвинув, — выбрать карточку. */
+  onSelect?: () => void
+}
+
 /** Взять карточку: вызывается из onPointerDown. Куда отпустили — уходит в onDrop. */
-export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) => void) {
+export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) => void, opts: GrabOpts = {}) {
   if (e.button !== 0 || e.isPrimary === false) return
   if ((e.target as HTMLElement).closest('.cp-task-btn, .cp-more')) return // у ▶ — своя работа
   e.stopPropagation() // лист под карточкой не тянется
@@ -73,6 +122,8 @@ export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) =>
   let over: HTMLElement | null = null
   let cancelled = false
   let raf = 0
+  let far = 0 // как далеко увели от места, где взяли
+  let tip: ReturnType<typeof hintBox> | null = null
   const hold = touch ? window.setTimeout(() => begin(), HOLD_MS) : 0
 
   const targetAt = () => (document.elementFromPoint?.(x, y) as HTMLElement | null)?.closest<HTMLElement>('[data-drop]') ?? null
@@ -89,6 +140,7 @@ export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) =>
     document.body.classList.add('cp-grabbing')
     el.classList.add('cp-card--dragging')
     if (touch) navigator.vibrate?.(8)
+    if (opts.hint) tip = hintBox()
     follow()
     raf = requestAnimationFrame(tick)
   }
@@ -100,6 +152,11 @@ export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) =>
     if (t !== over) over?.classList.remove('cp-drop-over')
     t?.classList.add('cp-drop-over')
     over = t
+    if (tip && opts.hint) {
+      if (t) tip.show(opts.hint(dropAt(t, y - grabY)))
+      else tip.hide()
+      tip.place(x, y)
+    }
   }
 
   function tick() {
@@ -112,9 +169,9 @@ export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) =>
     if (ev.pointerId !== id || cancelled) return
     x = ev.clientX
     y = ev.clientY
+    far = Math.max(far, Math.hypot(x - x0, y - y0))
     if (ghost) return follow()
-    const far = Math.hypot(x - x0, y - y0) > SLOP * (touch ? 2 : 1)
-    if (!far) return
+    if (far <= SLOP * (touch ? 2 : 1)) return
     if (touch) return finish() // палец поехал раньше, чем взял карточку, — это прокрутка
     begin()
   }
@@ -125,9 +182,12 @@ export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) =>
     y = ev.clientY
     const started = !!ghost || cancelled
     const t = ghost ? targetAt() : null
+    // пальцем подержали и отпустили на месте — это выбор карточки, а не перенос
+    const select = touch && !!ghost && !cancelled && far <= SLOP * 2
     finish()
     if (!started) return
     swallowClick()
+    if (select) return opts.onSelect?.()
     if (t) onDrop(dropAt(t, y - grabY))
   }
 
@@ -143,6 +203,8 @@ export function grabCard(e: ReactPointerEvent<HTMLElement>, onDrop: (d: Drop) =>
     cancelAnimationFrame(raf)
     ghost?.remove()
     ghost = null
+    tip?.remove()
+    tip = null
     over?.classList.remove('cp-drop-over')
     over = null
     el.classList.remove('cp-card--dragging')
