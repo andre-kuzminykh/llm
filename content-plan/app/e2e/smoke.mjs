@@ -54,12 +54,17 @@ check(
   'вид календаря — Время, Каналы, Площадки, Темы с иконками',
   'нет вида календаря с иконками',
 )
-const right = await page.evaluate(() => {
-  const x = (sel) => document.querySelector(`.cp-top ${sel}`)?.getBoundingClientRect()
-  const [n, s, v, d] = [x('.cp-top__nav'), x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]')]
-  return n && s && v && d && s.left - n.right < 30 && s.right <= v.left && v.left - s.right < 20 && v.right + 100 < d.left && Math.abs(s.top - v.top) < 12 && d.right > window.innerWidth - 40
-})
-check(right, 'поиск и вид — сразу за датой, слева; в самом углу — дашборд, в одну строку', 'поиск, вид и дашборд стоят не так')
+const placed = () =>
+  page.evaluate(() => {
+    const x = (sel) => document.querySelector(`.cp-top ${sel}`)?.getBoundingClientRect()
+    const [t, l, m, s, v, d] = [x(''), x('.cp-top__left'), x('.cp-top__mid'), x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]')]
+    return {
+      // посередине шапки — или, если слева тесно, с отступом от даты; между поиском и видом — заметный промежуток; дашборд — в углу
+      ok: m && s && v && d && (Math.abs(m.left + m.width / 2 - (t.left + t.width / 2)) < 30 || m.left - l.right >= 24) && v.left - s.right >= 20 && Math.abs(s.top - v.top) < 12 && d.right > window.innerWidth - 40,
+      off: Math.round(m.left + m.width / 2 - (t.left + t.width / 2)),
+    }
+  })
+check((await placed()).ok, 'поиск и вид — посередине шапки, между ними промежуток; в углу — дашборд, в одну строку', 'поиск, вид и дашборд стоят не так')
 const bw = await modes.getByRole('radio', { checked: true }).evaluate((el) => {
   const c = getComputedStyle(el)
   const lum = (rgb) => rgb.match(/\d+/g).slice(0, 3).reduce((a, b) => a + Number(b), 0) / 3
@@ -85,6 +90,8 @@ check(
   'фильтры не свернулись или не видно, что включено',
 )
 await page.screenshot({ path: `${SHOTS}/1b-collapsed.png` })
+const centered = await placed()
+check(Math.abs(centered.off) < 30, 'фильтры свёрнуты — поиск и вид ровно посередине', `середина смещена на ${centered.off} px`)
 await page.reload()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 check(!(await side.count()), 'свёрнутые фильтры помнятся после перезагрузки', 'фильтры снова развернулись')

@@ -275,9 +275,13 @@ select.nr-field {
 
 .nr-main { flex: 1; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; background: var(--nr-canvas); position: relative; }
 .cp-top {
-  flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 20px;
-  border-bottom: 1px solid var(--nr-sep-soft);
+  flex: none; display: grid; align-items: center; gap: 32px; padding: 14px 20px; border-bottom: 1px solid var(--nr-sep-soft);
+  /* три части: слева дата, посередине поиск и вид, справа дашборд; если слева тесно — середина сдвигается вправо, но не наезжает */
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
 }
+.cp-top__left, .cp-top__mid, .cp-top__right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cp-top__mid { gap: 28px; }
+.cp-top__right { justify-content: flex-end; }
 .cp-top__nav { display: flex; align-items: center; gap: 4px; }
 .cp-top__spacer { flex: 1; }
 .cp-body { flex: 1; min-height: 0; overflow: auto; }
@@ -723,7 +727,9 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
   .cp-rail-tip { display: none; }
   .cp-side { left: 0; bottom: 60px; width: min(320px, 100vw); }
   .cp-menu { left: 8px; right: 8px; bottom: 68px; width: auto; }
-  .cp-top { padding: 10px 12px; gap: 6px; }
+  .cp-top { padding: 10px 12px; gap: 6px; grid-template-columns: minmax(0, 1fr) auto auto; } /* на телефоне дата сжимается, поиск и вид — справа */
+  .cp-top__left { gap: 6px; }
+  .cp-top__mid { gap: 2px; }
   .cp-top .nr-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cp-jump { min-width: 0; }
   .cp-no-phone { display: none; }
@@ -823,7 +829,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 /* ── поиск вверху: поле и найденное под ним ─────────────────────────────── */
 .cp-search { position: relative; display: flex; align-items: center; gap: 6px; flex: 0 1 240px; min-width: 130px; height: var(--nr-ctl-sm); padding: 0 10px;
   border-radius: var(--nr-r-full); background: var(--nr-fill-3); color: var(--nr-text-3); }
-.cp-search { margin-left: 6px; background: transparent; box-shadow: inset 0 0 0 1px var(--nr-sep); }
+.cp-search { width: 240px; flex: none; background: transparent; box-shadow: inset 0 0 0 1px var(--nr-sep); }
 .cp-search:focus-within { background: var(--nr-surface); box-shadow: inset 0 0 0 1px var(--nr-sep-strong); }
 .cp-search__in { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--nr-text); font: inherit; font-size: var(--nr-fs-md); }
 .cp-search__in::-webkit-search-cancel-button { cursor: pointer; }
@@ -909,7 +915,8 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-views__item { display: inline-flex; align-items: center; gap: 6px; }
 .cp-views__item .nr-icon { flex: none; }
 .cp-views__row { display: inline-flex; align-items: center; gap: 10px; }
-@container main (max-width: 1200px) {
+/* подписи — только когда поиск и вид встают посередине целиком; иначе — иконки, чтобы середина не уезжала */
+@container main (max-width: 1560px) {
   .cp-views__label { display: none; }
   .cp-views__item { padding-left: 9px; padding-right: 9px; }
 }

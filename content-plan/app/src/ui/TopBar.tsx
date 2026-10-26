@@ -15,7 +15,7 @@ const SAVED: Record<string, string> = {
   error: 'Не сохранилось',
 }
 
-/** Шапка календаря: «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки, сразу за ними —
+/** Шапка календаря: слева «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки; посередине —
  *  поиск и вид календаря (время, каналы, площадки, темы); справа в углу — значок дашборда (открывается панелью справа).
  *  «+» — круглая кнопка справа внизу. Отмена — ⌘Z и кнопкой во всплывашке после правки. */
 export function TopBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
@@ -27,6 +27,7 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
   const need = useMemo(() => planningSlots(plan, today()).length, [plan])
   return (
     <header className="cp-top">
+      <div className="cp-top__left">
       <button
         type="button"
         className="nr-btn nr-btn--ghost nr-btn--icon cp-top__filter"
@@ -41,11 +42,14 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
       </button>
       {typeof title === 'string' ? <h1 className="nr-title">{title}</h1> : title}
       {children}
-      {/* поиск и вид — сразу за датой, слева; справа в углу — только дашборд */}
-      <Search />
-      <ViewSwitch />
+      </div>
+      {/* поиск и вид — посередине шапки (если слева тесно — сразу за датой); справа в углу — дашборд */}
+      <div className="cp-top__mid">
+        <Search />
+        <ViewSwitch />
+      </div>
+      <div className="cp-top__right">
       {!sideOpen && <FilterChips />}
-      <span className="cp-top__spacer" />
       {SAVED[saved] && (
         <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню профиля' : undefined}>
           {SAVED[saved]}
@@ -64,6 +68,7 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
           {need > 0 && <span className="cp-top__dot" aria-hidden="true" />}
         </button>
       )}
+      </div>
     </header>
   )
 }
