@@ -12,6 +12,7 @@ export interface Unit {
   channelId: string
   date: ISODate | null
   time: string
+  end?: string // конец на шкале времени, если карточку растянули; без него — час
   stream: boolean // поток 24/7 по вебхуку: в дне — первым, на шкале времени — над часами
 }
 
@@ -51,7 +52,7 @@ export function unitsOf(items: Item[], rules: Map<string, Rule>, channelOrder: s
     const sorted = [...list].sort((a, b) => Number(!!a.derive) - Number(!!b.derive) || a.rank - b.rank)
     const head = sorted[0]
     const rule = rules.get(head.ruleId)
-    out.push({ key, head, items: sorted, channelId: head.channelId, date: head.date, time: timeOf(head, rule), stream: !!rule?.stream })
+    out.push({ key, head, items: sorted, channelId: head.channelId, date: head.date, time: timeOf(head, rule), end: head.end, stream: !!rule?.stream })
   }
   // поток — как событие на весь день: первым
   return out.sort((a, b) => Number(b.stream) - Number(a.stream) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || order(a.channelId) - order(b.channelId) || a.head.rank - b.head.rank)

@@ -18,7 +18,7 @@ export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void
   for (const u of units) groups.set(u.channelId, [...(groups.get(u.channelId) ?? []), u])
   const viol = violByDate.get(date) ?? []
   return (
-    <aside className={`cp-sheet${drop.over ? ' cp-sheet--drop' : ''}`} aria-label={dayTitle(date)} {...drop.props}>
+    <aside className={`cp-sheet${drop.over ? ' cp-sheet--drop' : ''}`} aria-label={dayTitle(date)} {...drop.props} data-drop={date}>
       <div className="cp-sheet__head">
         <IconButton icon="chev-left" label="Предыдущий день" onClick={() => openDay(addDays(date, -1))} size="sm" />
         <h2 className="cp-sheet__title">{dayTitle(date)}</h2>

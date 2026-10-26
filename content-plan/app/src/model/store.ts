@@ -30,9 +30,14 @@ export function moveItem(plan: Plan, id: string, date: ISODate, withGroup = true
   const shift = time ? toMin(time) - toMin(timeOf(it, ruleOf(plan, it.ruleId))) : 0
   if (it.date === date && !shift) return plan
   const together = withGroup && it.group && it.date ? (x: Item) => x.group === it.group && x.date === it.date : (x: Item) => x.id === id
-  const at = (x: Item) => (shift ? { time: fromMin(toMin(timeOf(x, ruleOf(plan, x.ruleId))) + shift) } : {})
+  // конец, если карточку растягивали, едет вместе с началом — длительность та же
+  const at = (x: Item) =>
+    shift ? { time: fromMin(toMin(timeOf(x, ruleOf(plan, x.ruleId))) + shift), ...(x.end ? { end: endAt(toMin(x.end) + shift) } : {}) } : {}
   return fitRange({ ...plan, items: plan.items.map((x) => (together(x) ? { ...x, date, ...at(x) } : x)) })
 }
+
+/** Конец блока — не позже полуночи. */
+const endAt = (min: number) => (min >= 24 * 60 ? '24:00' : fromMin(min))
 
 /** Если материал встал раньше начала или позже конца плана — план продлевается до него. */
 export function fitRange(plan: Plan): Plan {

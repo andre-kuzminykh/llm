@@ -1,9 +1,14 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { addDays, fromMin, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  applyPan, blockGeometry, centerScrollLeft, dayStripRange, gestureEnd, layoutBlocks, minutesFromMidnight, minutesToClock, nowLine,
+  resizeEnd, shiftAnchor, snapMin, SPAN_DAYS, type Geometry, type Span,
+} from '../model/calendar'
+import { addDays, daysBetween, dayTitle, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
 import { shownTitle, tagOf, type ISODate, type Item, type Plan } from '../model/types'
 import { platformTypes, type Unit } from '../model/units'
-import { grab, IconButton, Seg, UnitCard, useDrop } from '../ui/bits'
+import { IconButton, Seg, UnitCard, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
+import { autoScroll, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
 import { Icon } from '../ui/Icon'
 import { useInfinite } from '../ui/infinite'
 import { DateJump, TopBar } from '../ui/TopBar'
@@ -108,46 +113,109 @@ export function CalendarSwitch({ value, onChange }: { value: CalendarMode; onCha
 }
 
 const HOUR = 64 // px на час
-const DUR = 60 // сколько минут карточка занимает на шкале
+const PPM = HOUR / 60 // px на минуту
 const HEAD = 52 // высота шапки дней
 const GUT = 56 // колонка часов
+const SPANS: { id: Span; label: string }[] = [
+  { id: 'day', label: 'День' },
+  { id: '3day', label: '3 дня' },
+  { id: 'week', label: 'Неделя' },
+]
+const BACK: Record<Span, [string, string]> = {
+  day: ['Предыдущий день', 'Следующий день'],
+  '3day': ['Предыдущие 3 дня', 'Следующие 3 дня'],
+  week: ['Предыдущая неделя', 'Следующая неделя'],
+}
 
-/** Календарь по неделям — вид по умолчанию: дни листаются вбок без конца. «Время» — по часам, совпадающие стоят рядом, как в Google Календаре;
- *  «Каналы» и «Площадки» — дорожками, как в исходной таблице. */
+const readSpan = (phone: boolean): Span => {
+  try {
+    const s = localStorage.getItem('cp:span')
+    if (s === 'day' || s === '3day' || s === 'week') return s
+  } catch {
+    /* по умолчанию */
+  }
+  return phone ? '3day' : 'week'
+}
+
+/** Карточку взяли на шкале времени: переносят (move) или тянут за нижний край (resize). */
+interface Gesture {
+  unit: Unit
+  date: ISODate // откуда
+  mode: 'move' | 'resize'
+  topMin: number
+  heightMin: number
+  id: number // pointerId
+  touch: boolean
+  x0: number
+  y0: number
+  top0: number // прокрутка по вертикали при нажатии
+  x: number
+  y: number
+  hold: number // пальцем — таймер удержания
+  live: boolean // жест начался: мышь сдвинулась, палец удержан
+  cancelled?: boolean // Esc: карточка вернулась, отпущенная кнопка — не щелчок
+}
+
+/** Что видно, пока карточку ведут: куда она встанет — день и начало (или конец, если тянут край), по 15 минут. */
+export interface TimeDrag {
+  key: string
+  date: ISODate
+  mode: 'move' | 'resize'
+  to: ISODate
+  min: number
+}
+
+/** Календарь — вид по умолчанию: дни листаются вбок без конца. «Время» — шкала часов, как календарь в nr_management:
+ *  карточку берут и ставят на другой день и час, тянут за нижний край, пустой лист тянут рукой; день, три дня или неделя
+ *  на экран; сверху лента дней. «Каналы», «Площадки», «Темы» — дорожками, как в исходной таблице. */
 export function WeekView() {
-  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn, goto } = usePlan()
+  const { plan, anchor, setAnchor, jump, jumpTo, filters, phone, unitsOn, goto, dropOn, dispatch, toast } = usePlan()
   const [mode, setModeState] = useState<Mode>(readMode)
   const setMode = (m: Mode) => {
     setModeState(m)
     writeWeekMode(m)
   }
+  const [span, setSpanState] = useState<Span>(() => readSpan(phone))
+  const spanStart = (d: ISODate) => (span === 'week' ? mondayOf(d) : d)
+  const spanJump = useRef(false)
+  const setSpan = (s: Span) => {
+    if (s === span) return
+    spanJump.current = true
+    setSpanState(s)
+    try {
+      localStorage.setItem('cp:span', s)
+    } catch {
+      /* до перезагрузки */
+    }
+  }
   const gutter = mode === 'time' ? GUT : phone ? 96 : 132
-  // неделя целиком по ширине экрана: колонка дня — седьмая часть (на телефоне — два дня)
+  // на экране — день, три дня или неделя: колонка дня — доля ширины
   const [width, setWidth] = useState(1200)
-  const perScreen = phone ? 2 : 7
-  const col = Math.max(120, Math.floor((width - gutter) / perScreen))
-  // неделя открывается с понедельника; «Сегодня» и стрелки — тоже к понедельнику
-  const weekJump = useMemo(() => ({ date: mondayOf(jump.date), n: jump.n }), [jump])
-  // шкала времени открывается за полчаса до первого материала недели, дорожки — сверху
+  const col = Math.max(phone ? 56 : 96, Math.floor((width - gutter) / SPAN_DAYS[span]))
+  // неделя открывается с понедельника, три дня и день — с выбранного дня
+  const spanDate = useMemo(() => ({ date: spanStart(jump.date), n: jump.n }), [jump, span]) // eslint-disable-line react-hooks/exhaustive-deps
+  // шкала времени открывается за полчаса до первого материала на экране (недели, трёх дней, дня), дорожки — сверху
   const crossRef = useRef<(d: ISODate) => number | undefined>(() => undefined)
   crossRef.current = (d: ISODate) => {
     if (mode !== 'time') return 0
-    const from = mondayOf(d)
     let first: number | null = null
-    for (let k = 0; k < 7; k++) for (const u of unitsOn(addDays(from, k))) if (!u.stream) first = Math.min(first ?? 24 * 60, toMin(u.time))
+    for (let k = 0; k < SPAN_DAYS[span]; k++) for (const u of unitsOn(addDays(d, k))) if (!u.stream) first = Math.min(first ?? 24 * 60, toMin(u.time))
     // за полчаса до часа первого материала: подпись этого часа видна целиком
     return Math.max(0, (Math.floor((first ?? 8 * 60) / 60) - 0.5) * HOUR)
   }
   const cross = useCallback((d: ISODate) => crossRef.current(d), [])
-  const inf = useInfinite({ axis: 'x', step: 1, size: col, start: plan.start, end: plan.end, anchor: mondayOf(anchor), jump: weekJump, onFocus: setAnchor, overscan: 4, cross })
+  const inf = useInfinite({ axis: 'x', step: 1, size: col, start: plan.start, end: plan.end, anchor: spanStart(anchor), jump: spanDate, onFocus: setAnchor, overscan: 4, cross })
   const shownDays = Math.max(1, Math.floor(((inf.view.len || width) - gutter) / col))
   const firstDay = inf.dateAt(Math.round(inf.view.pos / col))
   const lastDay = addDays(firstDay, shownDays - 1)
-  // «9–15 ноя 2026»; через границу месяца — «30 ноя – 6 дек 2026»; на телефоне без года
+  // «9–15 ноя 2026»; через границу месяца — «30 ноя – 6 дек 2026»; один день — «10 ноя 2026»; на телефоне без года
   const year = phone ? '' : ` ${lastDay.slice(0, 4)}`
-  const title = firstDay.slice(0, 7) === lastDay.slice(0, 7)
-    ? `${Number(firstDay.slice(8))}–${shortDate(lastDay)}${year}`
-    : `${shortDate(firstDay)} – ${shortDate(lastDay)}${year}`
+  const title =
+    firstDay === lastDay
+      ? `${shortDate(firstDay)}${year}`
+      : firstDay.slice(0, 7) === lastDay.slice(0, 7)
+        ? `${Number(firstDay.slice(8))}–${shortDate(lastDay)}${year}`
+        : `${shortDate(firstDay)} – ${shortDate(lastDay)}${year}`
   const days: { date: ISODate; i: number }[] = []
   for (let i = inf.first; i <= inf.last; i++) days.push({ date: inf.dateAt(i), i })
 
@@ -160,43 +228,238 @@ export function WeekView() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [inf.ref])
-  // ширина колонки поменялась — остаться на том же дне: он считается по старой ширине, пока лента не сдвинулась
+  // ширина колонки поменялась: окно поменяли — к его началу; окно браузера — остаться на том же дне
   const lastCol = useRef(col)
   useLayoutEffect(() => {
     const old = lastCol.current
-    if (old === col) return
+    const changed = spanJump.current
+    spanJump.current = false
+    if (old === col && !changed) return
     lastCol.current = col
     const el = inf.ref.current
-    inf.scrollTo(el ? inf.dateAt(Math.round(el.scrollLeft / old)) : mondayOf(anchor), false)
-  }, [col]) // eslint-disable-line react-hooks/exhaustive-deps
+    inf.scrollTo(changed ? spanStart(anchor) : el ? inf.dateAt(Math.round(el.scrollLeft / old)) : spanStart(anchor), false)
+  }, [col, span]) // eslint-disable-line react-hooks/exhaustive-deps
   // смена вида: шкала — к первому часу недели, дорожки — наверх (при переходе к дате это делает сама лента)
   useEffect(() => {
     const el = inf.ref.current
-    if (el) el.scrollTop = crossRef.current(mondayOf(anchor)) ?? 0
+    if (el) el.scrollTop = crossRef.current(spanStart(anchor)) ?? 0
   }, [mode, inf.ref]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── жесты шкалы времени (как в nr_management): взять карточку, растянуть, тянуть лист ──
+  const gesture = useRef<Gesture | null>(null)
+  const pan = useRef<{ x: number; y: number; id: number; moved: boolean } | null>(null)
+  const [drag, setDrag] = useState<TimeDrag | null>(null)
+  const aimed = useRef<TimeDrag | null>(null) // то же, что drag, но без ожидания отрисовки
+  const raf = useRef(0)
+
+  /** Куда встанет карточка: день — колонка под курсором, время — сдвиг по вертикали с привязкой к 15 минутам. */
+  const aim = () => {
+    const g = gesture.current
+    const el = inf.ref.current
+    if (!g?.live || g.cancelled || !el) return
+    const dy = g.y - g.y0 + (el.scrollTop - g.top0)
+    let next: TimeDrag
+    if (g.mode === 'resize') {
+      next = { key: g.unit.key, date: g.date, mode: 'resize', to: g.date, min: minutesFromMidnight(resizeEnd(g.unit.time, g.topMin + g.heightMin + dy / PPM)) }
+    } else {
+      const cx = g.x - el.getBoundingClientRect().left + el.scrollLeft - GUT
+      next = { key: g.unit.key, date: g.date, mode: 'move', to: inf.dateAt(Math.floor(cx / col)), min: snapMin(g.topMin + dy / PPM) }
+    }
+    const d = aimed.current
+    if (d && d.key === next.key && d.to === next.to && d.min === next.min && d.mode === next.mode) return
+    aimed.current = next
+    setDrag(next)
+  }
+  const goLive = () => {
+    const g = gesture.current
+    if (!g || g.live) return
+    g.live = true
+    if (g.touch) navigator.vibrate?.(8)
+    document.body.classList.add('cp-grabbing')
+    aim()
+    const loop = () => {
+      const el = inf.ref.current
+      const cur = gesture.current
+      if (el && cur?.live && autoScroll(el, cur.x, cur.y)) aim()
+      raf.current = requestAnimationFrame(loop)
+    }
+    raf.current = requestAnimationFrame(loop)
+  }
+  /** Взять карточку (move) или её нижний край (resize). */
+  const grab = (e: ReactPointerEvent<HTMLElement>, unit: Unit, date: ISODate, kind: 'move' | 'resize', g: Geometry) => {
+    if (e.button !== 0 || e.isPrimary === false || gesture.current) return
+    if ((e.target as HTMLElement).closest('.cp-task-btn')) return // у ▶ — своя работа
+    e.stopPropagation() // и лист не тянется, и край не берёт карточку целиком (текст не выделяется — user-select в CSS)
+    const touch = e.pointerType === 'touch'
+    const el = inf.ref.current
+    gesture.current = {
+      unit, date, mode: kind, ...g, id: e.pointerId, touch,
+      x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, top0: el?.scrollTop ?? 0,
+      hold: touch ? window.setTimeout(goLive, HOLD_MS) : 0,
+      live: false,
+    }
+    if (kind === 'resize' && !touch) goLive() // мышью край берут нарочно — сразу; пальцем — тоже удержанием
+  }
+  /** Пустой лист берут рукой и тянут в обе стороны; мышью — в любом виде, пальцем — на шкале времени. */
+  const beginPan = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || gesture.current) return
+    if (e.pointerType !== 'mouse' && mode !== 'time') return // дорожки на телефоне листаются сами
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, [data-unit]')) return
+    pan.current = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false }
+  }
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const g = gesture.current
+    if (g && e.pointerId === g.id) {
+      if (g.cancelled) return
+      g.x = e.clientX
+      g.y = e.clientY
+      if (g.live) return aim()
+      if (Math.hypot(g.x - g.x0, g.y - g.y0) <= SLOP * (g.touch ? 2 : 1)) return
+      if (!g.touch) return goLive()
+      // палец поехал раньше, чем взял карточку, — это лист
+      clearTimeout(g.hold)
+      gesture.current = null
+      pan.current = { x: g.x0, y: g.y0, id: g.id, moved: false }
+    }
+    const p = pan.current
+    const el = inf.ref.current
+    if (!p || !el || e.pointerId !== p.id) return
+    if (!p.moved) {
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) <= SLOP) return
+      p.moved = true
+      document.body.classList.add('cp-grabbing')
+      try {
+        el.setPointerCapture(e.pointerId)
+      } catch {
+        /* синтетические события */
+      }
+    }
+    const next = applyPan({ left: el.scrollLeft, top: el.scrollTop }, e.clientX - p.x, e.clientY - p.y)
+    el.scrollLeft = next.left
+    el.scrollTop = next.top
+    p.x = e.clientX
+    p.y = e.clientY
+  }
+  /** Конец жеста — палец подняли или он ушёл с листа: правило gestureEnd решает, что записать. */
+  const endGesture = (e: ReactPointerEvent<HTMLDivElement>, keep = true) => {
+    const g = gesture.current
+    if (g && e.pointerId !== g.id) return
+    const decision = gestureEnd({ dragging: !!g?.live, panning: !!pan.current })
+    if (decision === 'none' && !g) return
+    if (g) clearTimeout(g.hold)
+    cancelAnimationFrame(raf.current)
+    document.body.classList.remove('cp-grabbing')
+    gesture.current = null
+    const panned = pan.current?.moved
+    pan.current = null
+    const d = aimed.current
+    aimed.current = null
+    setDrag(null)
+    if (panned || g?.cancelled) swallowClick() // лист тянули или перенос отменили — отпущенная кнопка мыши не щелчок
+    if (decision !== 'commit-drag' || !g || !d) return
+    swallowClick()
+    if (keep) commit(g, d)
+  }
+  const commit = (g: Gesture, d: TimeDrag) => {
+    const { head } = g.unit
+    if (d.mode === 'resize') {
+      const end = minutesToClock(d.min)
+      if (end === minutesToClock(g.topMin + g.heightMin)) return
+      dispatch({ type: 'update', id: head.id, patch: { end } })
+      toast(`${shownTitle(head)}: ${g.unit.time}–${end}`, true)
+      return
+    }
+    if (d.to === g.date && d.min === g.topMin) return
+    dropOn(d.to, { kind: 'item', id: head.id }, minutesToClock(d.min))
+  }
+  useEffect(() => () => cancelAnimationFrame(raf.current), [])
+  // Esc, пока карточку ведут, — отмена: она возвращается на место
+  const dragging = drag !== null
+  useEffect(() => {
+    if (!dragging) return
+    const onKey = (e: KeyboardEvent) => {
+      const g = gesture.current
+      if (e.key !== 'Escape' || !g) return
+      e.stopPropagation()
+      g.cancelled = true
+      aimed.current = null
+      setDrag(null)
+      cancelAnimationFrame(raf.current)
+      document.body.classList.remove('cp-grabbing')
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [dragging])
+  const timeMode = mode === 'time'
 
   return (
     <>
       <TopBar title={<DateJump label={title} value={anchor} onPick={jumpTo} />}>
-        <nav className="cp-top__nav" aria-label="Недели">
-          <IconButton icon="chev-left" label="Предыдущая неделя" onClick={() => jumpTo(addDays(firstDay, -7))} />
+        <nav className="cp-top__nav" aria-label="Дни">
+          <IconButton icon="chev-left" label={BACK[span][0]} onClick={() => jumpTo(shiftAnchor(firstDay, span, -1))} />
           {!phone && (
             <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => jumpTo(today())}>
               Сегодня
             </button>
           )}
-          <IconButton icon="chev-right" label="Следующая неделя" onClick={() => jumpTo(addDays(firstDay, 7))} />
+          <IconButton icon="chev-right" label={BACK[span][1]} onClick={() => jumpTo(shiftAnchor(firstDay, span, 1))} />
         </nav>
         <CalendarSwitch value={mode} onChange={(m) => (m === 'month' ? goto('month') : setMode(m))} />
       </TopBar>
-      <div className="cp-body nr-scroll" ref={inf.ref} onScroll={inf.onScroll}>
-        {mode === 'time' ? (
-          <TimeGrid days={days} count={inf.range.count} col={col} />
+      <div className="cp-calbar">
+        <DayStrip from={firstDay} to={lastDay} onPick={jumpTo} />
+        <Seg value={span} onChange={setSpan} label="Сколько дней на экране" options={SPANS} />
+      </div>
+      <div
+        className={`cp-body nr-scroll cp-sheet-grab${timeMode ? ' cp-sheet-grab--time' : ''}`}
+        ref={inf.ref}
+        onScroll={() => {
+          inf.onScroll()
+          if (gesture.current?.live) aim()
+        }}
+        onPointerDown={beginPan}
+        onPointerMove={onPointerMove}
+        onPointerUp={endGesture}
+        onPointerLeave={endGesture}
+        onPointerCancel={(e) => endGesture(e, false)}
+      >
+        {timeMode ? (
+          <TimeGrid days={days} count={inf.range.count} col={col} drag={drag} grab={grab} />
         ) : (
           <LaneGrid days={days} count={inf.range.count} col={col} gutter={gutter} mode={mode} hidden={filters.hiddenChannels} shown={[firstDay, lastDay]} />
         )}
       </div>
     </>
+  )
+}
+
+/** Лента дней над календарём: окно на экране подсвечено и стоит посередине; точка — в дне что-то есть.
+ *  Нажать — перейти; на день ленты можно и перенести карточку. */
+function DayStrip({ from, to, onPick }: { from: ISODate; to: ISODate; onPick: (d: ISODate) => void }) {
+  const { unitsOn } = usePlan()
+  const ref = useRef<HTMLDivElement>(null)
+  const days = useMemo(() => dayStripRange(from), [from])
+  const mid = addDays(from, Math.floor(daysBetween(from, to) / 2))
+  useLayoutEffect(() => {
+    const strip = ref.current
+    const chip = strip?.querySelector<HTMLElement>(`[data-drop="${mid}"]`)
+    if (strip && chip) strip.scrollLeft = centerScrollLeft(chip.offsetLeft, chip.offsetWidth, strip.clientWidth, strip.scrollWidth)
+  }, [mid])
+  return (
+    <div className="cp-strip nr-scroll" ref={ref} role="group" aria-label="Лента дней">
+      {days.map((d) => {
+        const on = d >= from && d <= to
+        const n = unitsOn(d).length
+        const cls = ['cp-strip__day', on && 'cp-strip__day--on', d === today() && 'cp-strip__day--today', weekday(d) === SAT && 'cp-strip__day--rest'].filter(Boolean).join(' ')
+        return (
+          <button key={d} type="button" className={cls} aria-current={on} aria-label={`${dayTitle(d)}${n ? ` · ${n}` : ''}`} onClick={() => onPick(d)} data-drop={d}>
+            <span className="cp-strip__wd">{WEEKDAYS[weekday(d)]}</span>
+            <span className="cp-strip__n">{Number(d.slice(8))}</span>
+            <span className={`cp-strip__dot${n ? ' cp-strip__dot--on' : ''}`} aria-hidden="true" />
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -216,61 +479,19 @@ function DayHead({ date }: { date: ISODate }) {
 
 // ── по времени ───────────────────────────────────────────────────────────────
 
-/** Раскладка как в Google Календаре: пересекающиеся по времени карточки делят ширину поровну. */
-export function layoutDay(units: Unit[]) {
-  const items = units.map((u) => ({ u, start: toMin(u.time), end: toMin(u.time) + DUR, lane: 0, lanes: 1, cluster: 0 }))
-  let cluster: typeof items = []
-  let clusterEnd = -1
-  let n = 0
-  const flush = () => {
-    n++
-    const ends: number[] = []
-    for (const it of cluster) {
-      let lane = ends.findIndex((e) => e <= it.start)
-      if (lane < 0) lane = ends.length
-      ends[lane] = it.end
-      it.lane = lane
-    }
-    for (const it of cluster) {
-      it.lanes = ends.length
-      it.cluster = n
-    }
-    cluster = []
-  }
-  for (const it of items) {
-    if (it.start >= clusterEnd && cluster.length) flush()
-    cluster.push(it)
-    clusterEnd = Math.max(clusterEnd, it.end)
-  }
-  flush()
-  return items
-}
-
-/** Если совпавшие по времени не помещаются рядом (уже ~140 px), видна первая карточка, а остальные — «+N» на ней. */
-export function stackDay(units: Unit[], maxLanes: number) {
-  const placed = layoutDay(units).map((it) => ({ ...it, more: [] as Unit[] }))
-  const out: typeof placed = []
-  for (const c of new Set(placed.map((it) => it.cluster))) {
-    const group = placed.filter((it) => it.cluster === c)
-    if (group[0].lanes <= maxLanes) {
-      out.push(...group)
-      continue
-    }
-    const shown = group.filter((it) => it.lane === 0)
-    for (const it of group) {
-      if (it.lane === 0) continue
-      const host = [...shown].reverse().find((s) => s.start <= it.start) ?? shown[0]
-      host.more.push(it.u)
-    }
-    out.push(...shown.map((s) => ({ ...s, lanes: 1 })))
-  }
-  return out
-}
-
 const STREAM_ROW = 26 // строка потока над шкалой
 
-function TimeGrid({ days, count, col }: { days: { date: ISODate; i: number }[]; count: number; col: number }) {
+type Grab = (e: ReactPointerEvent<HTMLElement>, unit: Unit, date: ISODate, mode: 'move' | 'resize', g: Geometry) => void
+
+function TimeGrid({ days, count, col, drag, grab }: { days: { date: ISODate; i: number }[]; count: number; col: number; drag: TimeDrag | null; grab: Grab }) {
   const { unitsOn } = usePlan()
+  // линия «сейчас» сдвигается раз в минуту
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const clock = { date: today(), minutes: now.getHours() * 60 + now.getMinutes() }
   const width = GUT + count * col
   // поток 24/7 (лента Neuronium) — как событие на весь день: строкой над шкалой часов
   const streams = new Map(days.map(({ date }) => [date, unitsOn(date).filter((u) => u.stream)]))
@@ -281,7 +502,7 @@ function TimeGrid({ days, count, col }: { days: { date: ISODate; i: number }[]; 
       <div className="cp-tg__head" style={{ width, height: head }} role="row">
         <div className="cp-tg__corner">{rows > 0 && <span className="cp-tg__alllabel" title="Круглосуточно: приходит по вебхуку и выходит сразу">24/7</span>}</div>
         {days.map(({ date, i }) => (
-          <div key={date} className={`cp-tg__day${weekday(date) === SAT ? ' cp-tg__day--rest' : ''}`} role="columnheader" style={{ left: GUT + i * col, width: col }}>
+          <div key={date} className={`cp-tg__day${weekday(date) === SAT ? ' cp-tg__day--rest' : ''}`} role="columnheader" style={{ left: GUT + i * col, width: col }} data-drop={date}>
             <div className="cp-tg__dayhead">
               <DayHead date={date} />
             </div>
@@ -302,28 +523,32 @@ function TimeGrid({ days, count, col }: { days: { date: ISODate; i: number }[]; 
           ))}
         </div>
         {days.map(({ date, i }) => (
-          <TimeColumn key={date} date={date} left={GUT + i * col} width={col} />
+          <TimeColumn key={date} date={date} left={GUT + i * col} width={col} now={nowLine(date, clock)} drag={drag?.date === date ? drag : null} grab={grab} />
         ))}
       </div>
     </div>
   )
 }
 
-function TimeColumn({ date, left, width }: { date: ISODate; left: number; width: number }) {
-  const { unitsOn, dropOn, openNew, openDay } = usePlan()
-  const at = (clientY: number, el: HTMLElement, offset = 0) => {
-    const y = clientY - el.getBoundingClientRect().top - offset
-    return fromMin(Math.round((y / HOUR) * 4) * 15)
-  }
-  const drop = useDrop((d, e) => dropOn(date, d, at(e.clientY, e.currentTarget as HTMLElement, d.kind === 'item' ? grab.y : 0)))
-  const placed = stackDay(unitsOn(date).filter((u) => !u.stream), Math.max(1, Math.floor((width - 10) / 140)))
-  const now = date === today() ? new Date() : null
+function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; left: number; width: number; now: { show: boolean; topMin: number }; drag: TimeDrag | null; grab: Grab }) {
+  const { unitsOn, dropOn, openNew } = usePlan()
+  const at = (clientY: number, el: HTMLElement) => minutesToClock(snapMin(((clientY - el.getBoundingClientRect().top) / HOUR) * 60))
+  // тему из банка тянут на час
+  const drop = useDrop((d, e) => dropOn(date, d, at(e.clientY, e.currentTarget as HTMLElement)))
+  // пересекающиеся по времени — рядом, по колонкам; все видны
+  const placed = layoutBlocks(
+    unitsOn(date).filter((u) => !u.stream),
+    (u) => blockGeometry(u.time, u.end),
+  )
+  const inner = width - 8
   return (
     <div
       className={`cp-tg__col${weekday(date) === SAT ? ' cp-tg__col--rest' : ''}${drop.over ? ' cp-tg__col--drop' : ''}`}
       role="gridcell"
       aria-label={date}
       data-date={date}
+      data-drop={date}
+      data-hour={HOUR}
       style={{ left, width }}
       {...drop.props}
       onDoubleClick={(e) => {
@@ -331,32 +556,31 @@ function TimeColumn({ date, left, width }: { date: ISODate; left: number; width:
         openNew({ date, time: at(e.clientY, e.currentTarget) })
       }}
     >
-      {now && <span className="cp-tg__now" style={{ top: ((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR }} aria-hidden="true" />}
-      {placed.map(({ u, start, lane, lanes, more }) => {
-        const w = (width - 10) / lanes
+      {now.show && <span className="cp-tg__now" style={{ top: now.topMin * PPM }} aria-hidden="true" />}
+      {placed.map(({ item: u, topMin, heightMin, col, cols }) => {
+        const w = inner / cols
+        const g = { topMin, heightMin }
+        const lifted = drag?.key === u.key ? drag : null
+        const end = lifted?.mode === 'resize' ? lifted.min : topMin + heightMin
+        const moving = lifted?.mode === 'move' ? lifted : null
+        const box = { top: topMin * PPM + 1, left: 4 + col * w, width: w - 2, height: Math.max(18, heightMin * PPM - 2) }
+        // карточку ведут — она стоит там, куда встанет (колонка и 15 минут), а на старом месте — пунктир
+        const ghost: CSSProperties = moving ? { transform: `translate(${daysBetween(date, moving.to) * width}px, ${(moving.min - topMin) * PPM}px)` } : {}
         return (
-          <UnitCard
-            key={u.key}
-            unit={u}
-            variant="compact"
-            narrow={w < 120}
-            style={{ position: 'absolute', top: (start / 60) * HOUR + 1, left: 4 + lane * w, width: w - 2, height: (DUR / 60) * HOUR - 3 }}
-          >
-            {more.length > 0 && (
-              <button
-                type="button"
-                className="cp-more"
-                aria-label={`Ещё ${more.length} в это время: ${more.map((m) => shownTitle(m.head)).join(', ')}`}
-                title={more.map((m) => `${m.time} ${shownTitle(m.head)}`).join('\n')}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  openDay(date)
-                }}
-              >
-                +{more.length}
-              </button>
-            )}
-          </UnitCard>
+          <Fragment key={u.key}>
+            {moving && <span className="cp-tg__origin" style={box} aria-hidden="true" />}
+            <UnitCard
+              unit={u}
+              variant="compact"
+              narrow={w < 110}
+              className={lifted ? 'cp-card--lifted' : undefined}
+              when={lifted ? (moving ? minutesToClock(moving.min) : `${u.time}–${minutesToClock(end)}`) : undefined}
+              style={{ position: 'absolute', ...box, height: Math.max(18, (end - topMin) * PPM - 2), ...ghost }}
+              onGrab={(e) => grab(e, u, date, 'move', g)}
+            >
+              <span className="cp-tg__grip" aria-hidden="true" title="Потянуть — изменить длительность" onPointerDown={(e) => grab(e, u, date, 'resize', g)} />
+            </UnitCard>
+          </Fragment>
         )
       })}
     </div>
@@ -448,7 +672,7 @@ function LaneCell({ lane, date, rows, open }: { lane: Lane; date: ISODate; rows:
   const drop = useDrop((d) => dropOn(date, d))
   const cls = ['cp-cell', !open && 'cp-cell--closed', weekday(date) === SAT && 'cp-cell--rest', drop.over && 'cp-cell--drop'].filter(Boolean).join(' ')
   return (
-    <div className={cls} role="gridcell" {...drop.props} data-date={date} data-lane={lane.id}>
+    <div className={cls} role="gridcell" {...drop.props} data-date={date} data-drop={date} data-lane={lane.id}>
       {open ? rows.map(({ u, kind }) => <UnitCard key={u.key} unit={u} variant="line" kind={kind} />) : rows.length > 0 && <span className="cp-cell__n">{rows.length}</span>}
       {open && lane.channelId && (
         <button

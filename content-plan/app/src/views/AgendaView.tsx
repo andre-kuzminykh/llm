@@ -98,7 +98,7 @@ function AgendaDay({ date }: { date: ISODate }) {
   const { unitsOn, openDay } = usePlan()
   const units = unitsOn(date)
   return (
-    <section className={`cp-agenda__day${weekday(date) === SAT ? ' cp-agenda__day--rest' : ''}`} data-day={date} aria-label={dayTitle(date)}>
+    <section className={`cp-agenda__day${weekday(date) === SAT ? ' cp-agenda__day--rest' : ''}`} data-day={date} data-drop={date} aria-label={dayTitle(date)}>
       <button type="button" className={`cp-agenda__head${date === today() ? ' cp-agenda__head--today' : ''}`} onClick={() => openDay(date)} aria-label={`Открыть день ${date}`}>
         {dayTitle(date)}
       </button>

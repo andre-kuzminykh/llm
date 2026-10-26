@@ -44,6 +44,15 @@ describe('T-CP-003 FR-CP-003 перенос', () => {
     expect(byId(p, 'teaser').time).toBe('15:00')
     expect(byId(p, 'ait').time).toBe('16:00') // у анонса Andre AIT своё время, на час позже FULL
   })
+  it('T-CP-029 растянутая карточка едет на другой час с той же длительностью; конец — не дальше полуночи', () => {
+    const plan = smallPlan()
+    plan.items = plan.items.map((x) => (x.id === 'demo' ? { ...x, end: '13:30' } : x))
+    const p = moveItem(plan, 'demo', '2026-10-27', true, '15:00')
+    expect(byId(p, 'demo')).toMatchObject({ date: '2026-10-27', time: '15:00', end: '16:30' })
+    expect(byId(p, 'teaser').end).toBeUndefined()
+    expect(byId(moveItem(plan, 'demo', '2026-10-26', true, '23:00'), 'demo').end).toBe('24:00')
+    expect(byId(moveItem(plan, 'demo', '2026-10-28'), 'demo').end).toBe('13:30') // только день — время то же
+  })
   it('после конца плана — план продлевается', () => {
     const p = moveItem(smallPlan(), 'thesis', '2027-01-15')
     expect(p.end).toBe('2027-01-15')

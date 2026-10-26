@@ -111,23 +111,83 @@ await page.getByRole('button', { name: 'Отмена' }).click()
 ok('форма материала')
 await page.keyboard.press('Escape')
 
-// неделя по времени: перенос на другой час
+// неделя по времени — календарь из nr_management: карточку берут и ведут указателем, тянут за край, лист тянут рукой
 await page.getByRole('radio', { name: 'Время' }).click()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 await page.getByLabel('Перейти к дате').fill('2026-11-09')
 await page.waitForTimeout(900)
 await page.screenshot({ path: `${SHOTS}/6-week.png` })
+const sheet = page.locator('.cp-body')
+const top = await sheet.evaluate((el) => el.scrollTop)
+check(top > 0 && Math.round(top) % 64 === 32, 'шкала открыта за полчаса до часа первого материала недели', `шкала прокручена на ${top}px`)
 const col = page.locator('.cp-tg__col[data-date="2026-11-10"]')
 const thesis = col.locator('.cp-card', { hasText: 'Тезисы' }).first()
 const box = await col.boundingBox()
-// карточку берут за середину; встаёт она верхним краем туда, куда опустили
-const grabY = (await thesis.boundingBox()).height / 2
-await thesis.dragTo(col, { targetPosition: { x: 40, y: 17 * 64 + grabY } })
-check(await col.getByRole('button', { name: /^Тезисы · Тезис дня: .*, 17:00/ }).count(), 'перенос на другой час', 'время не поменялось')
+const clock = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+const [h0, m0] = (await thesis.locator('.cp-card__time').textContent()).split(':').map(Number)
+const later = clock(h0 * 60 + m0 + 120)
+const tb = await thesis.boundingBox()
+await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2)
+await page.mouse.down()
+await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2 + 2 * 64, { steps: 10 })
+check(
+  await col.locator('.cp-card--lifted .cp-card__time', { hasText: later }).count(),
+  'карточка едет за указателем по 15 минутам, на ней — время, куда встанет',
+  'на переносимой карточке нет нового времени',
+)
+await page.mouse.up()
+const moved = new RegExp(`^Тезисы · Тезис дня: .*, ${later}`)
+check(await col.getByRole('button', { name: moved }).count(), 'перенос на другой час указателем', 'время не поменялось')
+check(!(await page.getByRole('complementary', { name: 'Материал' }).count()), 'после переноса карточка не открывается', 'перенос открыл форму')
+// на другой день — колонка под указателем
+const mb = await col.getByRole('button', { name: moved }).boundingBox()
+await page.mouse.move(mb.x + mb.width / 2, mb.y + 6)
+await page.mouse.down()
+await page.mouse.move(mb.x + mb.width / 2 + box.width, mb.y + 6, { steps: 10 })
+await page.mouse.up()
+const next = page.locator('.cp-tg__col[data-date="2026-11-11"]')
+check(await next.getByRole('button', { name: moved }).count(), 'перенос на другой день указателем', 'карточка не переехала на другой день')
 await page.keyboard.press('Control+z')
-const top = await page.locator('.cp-body').evaluate((el) => el.scrollTop)
-check(top > 0 && Math.round(top) % 64 === 32, 'шкала открыта за полчаса до часа первого материала недели', `шкала прокручена на ${top}px`)
-check(await page.getByRole('button', { name: /^Ещё 1 в это время/ }).count(), 'совпавшие по времени — одной карточкой с «+1»', 'нет «+N» у совпавших')
+await page.keyboard.press('Control+z')
+check(await col.getByRole('button', { name: /^Тезисы · Тезис дня: / }).count(), 'отмена вернула перенос', 'отмена не вернула')
+// нижний край — длительность по 15 минутам
+const grip = col.locator('.cp-card', { hasText: 'Тезисы' }).first().locator('.cp-tg__grip')
+const gb = await grip.boundingBox()
+await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2)
+await page.mouse.down()
+await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2 + 64, { steps: 8 })
+await page.mouse.up()
+const range = await col.locator('.cp-card', { hasText: 'Тезисы' }).first().locator('.cp-card__time').textContent()
+check(range === `${clock(h0 * 60 + m0)}–${clock(h0 * 60 + m0 + 120)}`, 'нижний край тянут — карточка длиннее, «начало–конец»', `после растягивания: ${range}`)
+await page.keyboard.press('Control+z')
+// пустой лист — рукой в обе стороны (правый край колонки свободен от карточек)
+const sb = await sheet.boundingBox()
+const before = await sheet.evaluate((el) => [el.scrollLeft, el.scrollTop])
+await page.mouse.move(box.x + box.width - 2, sb.y + sb.height / 2)
+await page.mouse.down()
+await page.mouse.move(box.x + box.width - 152, sb.y + sb.height / 2 - 60, { steps: 8 })
+await page.mouse.up()
+const after = await sheet.evaluate((el) => [el.scrollLeft, el.scrollTop])
+check(after[0] - before[0] > 100 && after[1] - before[1] > 40, 'пустой лист тянут рукой в обе стороны', `лист не тянется: ${before} → ${after}`)
+const sideBySide = await page.evaluate(() =>
+  [...document.querySelectorAll('.cp-tg__col')].some((c) => {
+    // вторая колонка группы пересечений — карточка не с левого края
+    return [...c.querySelectorAll(':scope > .cp-card')].some((x) => parseFloat(x.style.left) > 4)
+  }),
+)
+check(sideBySide && !(await page.locator('.cp-more').count()), 'совпавшие по времени — рядом, все видны, без «+N»', 'совпавшие спрятаны или наложены')
+// день, три дня или неделя; лента дней
+const spans = page.getByRole('radiogroup', { name: 'Сколько дней на экране' })
+await spans.getByRole('radio', { name: 'День' }).click()
+await page.getByRole('group', { name: 'Лента дней' }).getByRole('button', { name: /^Чт, 12 ноября 2026/ }).click()
+await page.waitForTimeout(900)
+const one = await page.locator('.cp-tg__col[data-date="2026-11-12"]').boundingBox()
+const jumpText = await page.locator('.cp-jump__btn').textContent()
+check(one && one.width > 800 && /12 ноя/.test(jumpText), 'день на экран; лента дней переходит к дню', `день: ширина ${one?.width}, заголовок «${jumpText}»`)
+await page.screenshot({ path: `${SHOTS}/6b-day.png` })
+await spans.getByRole('radio', { name: 'Неделя' }).click()
+await page.getByLabel('Перейти к дате').fill('2026-11-09')
+await page.waitForTimeout(900)
 // лента Neuronium — поток 24/7: строкой над шкалой, без времени; авто-публикации видны по умолчанию и скрываются фильтром
 const allday = page.getByLabel('Круглосуточно, 2026-11-10')
 check(

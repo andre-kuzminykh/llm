@@ -70,6 +70,7 @@ export interface Item {
   origDate?: ISODate
   note?: string
   time?: string // своё время публикации; без него — время формата
+  end?: string // до скольки занимает шкалу времени (растянули нижний край); без него — час
   offGrid?: boolean // разовый, вне сетки: проверка его не трогает
   owner?: string // кто делает
   due?: ISODate // подготовить к; без него — за несколько дней до выхода (leadOf)

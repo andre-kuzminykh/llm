@@ -1,8 +1,9 @@
 // Мелкие общие части: карточка материала, площадки, статусы, переключатели, перетаскивание.
-import { useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from 'react'
 import { isSlot, shownTitle, STATUSES, statusOf, tagOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
+import { grabCard } from './drag'
 import { Icon } from './Icon'
 
 const MIME = 'application/x-content-plan'
@@ -11,11 +12,8 @@ export const PLATFORM_SHORT: Record<string, string> = {
   Web: 'Web', YouTube: 'YT', Instagram: 'IG', TikTok: 'TT', Threads: 'Th', X: 'X', Telegram: 'TG', LinkedIn: 'in', Mail: 'Mail',
 }
 
-/** За какое место карточку взяли: на шкале времени она встаёт верхним краем туда, куда её опустили. */
-export const grab = { y: 0 }
-
+/** Тему из банка тянут на день (материалы в календаре переносятся указателем — см. drag.ts). */
 export function startDrag(e: DragEvent, d: Drag) {
-  grab.y = e.clientY - (e.currentTarget as HTMLElement).getBoundingClientRect().top
   e.dataTransfer.setData(MIME, JSON.stringify(d))
   e.dataTransfer.setData('text/plain', d.id)
   e.dataTransfer.effectAllowed = 'move'
@@ -139,9 +137,21 @@ export const mainChannelId = (plan: Plan) =>
 /** Карточка материала — тихая строка: полоска слева — цвет канала, рубрика словом, тема.
  *  chip — месяц (одной строкой: время, рубрика, тема), compact — шкала времени и лента, line — дорожки недели (время и тема),
  *  full — панель дня: под темой площадки и что на каждой выходит. ▶ в углу — задача. */
-export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, kind, children }: { unit: Unit; variant?: CardVariant; style?: CSSProperties; showTime?: boolean; narrow?: boolean; kind?: string; children?: ReactNode }) {
-  const { plan, channels, rubrics, rules, badIds, openItem } = usePlan()
-  const [dragging, setDragging] = useState(false)
+export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, kind, when, onGrab, className, children }: {
+  unit: Unit
+  variant?: CardVariant
+  style?: CSSProperties
+  showTime?: boolean
+  narrow?: boolean
+  kind?: string
+  /** Время на карточке вместо своего — пока её ведут по шкале, там время, куда она встанет. */
+  when?: string
+  /** Свои жесты (шкала времени); без них карточку переносят на другой день — drag.ts. */
+  onGrab?: (e: PointerEvent<HTMLDivElement>) => void
+  className?: string
+  children?: ReactNode
+}) {
+  const { plan, channels, rubrics, rules, badIds, openItem, dropOn } = usePlan()
   const { head } = unit
   const rule = rules.get(head.ruleId)
   const rubric = rubrics.get(head.rubricId ?? '')
@@ -153,24 +163,20 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const plats = platformTypes(unit, rules, plan.platforms)
   const bad = unit.items.some((it) => badIds.has(it.id))
   const full = !!rule?.full && !head.derive
-  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', dragging && 'cp-card--dragging']
+  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', className]
     .filter(Boolean)
     .join(' ')
   const st = statusOf(head.status)
   const label = `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
   const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
   const line = variant === 'line' || variant === 'chip'
+  // растянутая на шкале карточка — с концом: «12:00–13:30»
+  const time = when ?? (unit.end && !unit.stream && variant === 'compact' ? `${unit.time}–${unit.end}` : timeText(unit))
   return (
     <div
       className={cls}
       style={{ '--cp-c': color, ...style } as CSSProperties}
-      draggable
-      onDragStart={(e) => {
-        e.stopPropagation()
-        startDrag(e, { kind: 'item', id: head.id })
-        setDragging(true)
-      }}
-      onDragEnd={() => setDragging(false)}
+      onPointerDown={onGrab ?? ((e) => grabCard(e, (d) => dropOn(d.date, { kind: 'item', id: head.id }, d.time)))}
       data-unit={head.id}
     >
       <button
@@ -186,7 +192,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
         {line ? (
           <>
             <span className="cp-card__rub">
-              {showTime && <span className="cp-card__time">{timeText(unit)}</span>}
+              {showTime && <span className="cp-card__time">{time}</span>}
               {kind ? <span className="cp-card__kind">{kind}</span> : rubric && <RubricChip name={rubric.name} />}
               {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
@@ -200,7 +206,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
               {format && variant !== 'mini' && <span className="cp-card__fmt">{format}</span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
               {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
-              {showTime && <span className="cp-card__time" title={unit.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : undefined}>{timeText(unit)}</span>}
+              {showTime && <span className="cp-card__time" title={unit.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : undefined}>{time}</span>}
             </span>
             <span className="cp-card__title">{title}</span>
           </>

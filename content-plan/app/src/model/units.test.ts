@@ -1,5 +1,5 @@
 import { byId, item, loadSeed, smallPlan } from '../test/fixtures'
-import { layoutDay } from '../views/WeekView'
+import { blockGeometry, layoutBlocks } from './calendar'
 import { indexByDate } from './filters'
 import { dueOf, platformTypes, taskParts, timeText, unitsOf } from './units'
 
@@ -56,7 +56,7 @@ describe('T-CP-018 FR-CP-018 неделя по времени', () => {
     const p = smallPlan()
     p.items.push(item({ id: 'x', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'В то же время', time: '12:30' }))
     const units = unitsOf(indexByDate(p).get('2026-10-26')!, rulesOf(p))
-    const placed = layoutDay(units).map((x) => [x.u.head.id, x.lane, x.lanes])
+    const placed = layoutBlocks(units, (u) => blockGeometry(u.time, u.end)).map((x) => [x.item.head.id, x.col, x.cols])
     expect(placed).toEqual([
       ['thesis', 0, 1],
       ['demo', 0, 2],

@@ -335,6 +335,11 @@ select.nr-field {
   transition: background-color var(--nr-dur-1) var(--nr-ease);
 }
 .cp-card:active { cursor: grabbing; }
+/* карточку переносят указателем (drag.ts): текст не выделяется, на телефоне — без меню по долгому нажатию */
+.cp-card { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.cp-ghost { position: fixed; z-index: 1000; margin: 0; pointer-events: none; background: var(--nr-surface); box-shadow: var(--nr-shadow-3); opacity: 0.96; }
+[data-drop].cp-drop-over { box-shadow: inset 0 0 0 2px var(--nr-accent); background: var(--nr-accent-soft); }
+body.cp-grabbing, body.cp-grabbing * { cursor: grabbing !important; }
 @media (hover: hover) { .cp-card:hover { background: var(--nr-fill-3); } }
 .cp-card__open {
   flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 3px 22px 4px 8px; border: 0; background: transparent;
@@ -427,6 +432,24 @@ input:checked + .cp-check-row__box { background: var(--nr-accent); border-color:
 input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); outline-offset: 2px; }
 .cp-check-row__text { min-width: 0; }
 
+/* ── лента дней и «День · 3 дня · Неделя» над календарём ───────────────────── */
+.cp-calbar { flex: none; display: flex; align-items: center; gap: 12px; padding: 2px 16px 8px; border-bottom: 1px solid var(--nr-sep-soft); }
+.cp-strip { position: relative; flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.cp-strip::-webkit-scrollbar { display: none; }
+.cp-strip__day {
+  flex: none; width: 40px; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 0 4px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--nr-text-2); cursor: pointer; font: inherit; transition: background-color var(--nr-dur-1) var(--nr-ease);
+}
+@media (hover: hover) { .cp-strip__day:hover { background: var(--nr-fill-3); } }
+.cp-strip__wd { font-size: 10.5px; color: var(--nr-text-3); }
+.cp-strip__n { font-size: var(--nr-fs-md); font-weight: var(--nr-fw-semibold); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.cp-strip__dot { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
+.cp-strip__dot--on { background: var(--nr-text-3); }
+.cp-strip__day--on { background: var(--nr-accent-soft); color: var(--nr-accent-text); }
+.cp-strip__day--on .cp-strip__dot--on { background: var(--nr-accent); }
+.cp-strip__day--today .cp-strip__n { color: var(--nr-accent); }
+.cp-strip__day--rest .cp-strip__wd { color: var(--nr-text-3); opacity: 0.7; }
+
 /* ── неделя: по времени, как в Google Календаре ──────────────────────────── */
 .cp-tg { position: relative; }
 .cp-tg__head { position: sticky; top: 0; z-index: 4; height: 52px; background: var(--nr-canvas); border-bottom: 1px solid var(--nr-sep); }
@@ -452,7 +475,20 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-tg__col--drop { background: var(--nr-accent-soft); box-shadow: inset 0 0 0 2px var(--nr-accent-line); }
 .cp-tg__now { position: absolute; left: 0; right: 0; height: 2px; background: var(--nr-danger); z-index: 2; pointer-events: none; }
 .cp-tg__now::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--nr-danger); }
-.cp-tg__col .cp-card { overflow: hidden; }
+.cp-tg__col .cp-card { overflow: hidden; touch-action: none; }
+/* шкала времени — лист, который берут рукой (как в nr_management): пальцем тоже, поэтому без прокрутки браузера */
+.cp-sheet-grab--time { touch-action: none; user-select: none; -webkit-user-select: none; }
+.cp-sheet-grab--time .cp-tg__col { cursor: grab; }
+/* карточка, которую ведут: встаёт по 15 минутам, время на ней — куда встанет */
+.cp-card--lifted { z-index: 2; background: var(--nr-surface); box-shadow: var(--nr-shadow-3); transition: transform 60ms var(--nr-ease), height 60ms var(--nr-ease); }
+/* где карточка стояла, пока её ведут */
+.cp-tg__origin { position: absolute; border-radius: 6px; border: 1px dashed var(--nr-sep-strong); pointer-events: none; }
+.cp-tg__col .cp-card--lifted .cp-card__time { display: inline; color: var(--nr-accent-text); font-weight: var(--nr-fw-semibold); }
+/* нижний край — потянуть, чтобы изменить длительность */
+.cp-tg__grip { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; touch-action: none; }
+.cp-tg__grip::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 18px; height: 3px; margin-left: -9px; border-radius: 2px; background: var(--nr-text-3); opacity: 0; transition: opacity var(--nr-dur-1) var(--nr-ease); }
+@media (hover: hover) { .cp-card:hover .cp-tg__grip::after { opacity: 0.5; } }
+.cp-card--lifted .cp-tg__grip::after { opacity: 0.5; }
 .cp-tg__col .cp-card__open { gap: 1px; padding-top: 3px; padding-bottom: 3px; }
 .cp-tg__col .cp-card__title { -webkit-line-clamp: 1; }
 .cp-tg__col .cp-card__open { padding-right: 20px; }

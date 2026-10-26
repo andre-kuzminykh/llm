@@ -111,7 +111,7 @@ function MonthDay({ date, current }: { date: ISODate; current: boolean }) {
     .filter(Boolean)
     .join(' ')
   return (
-    <div role="gridcell" className={cls} {...drop.props} onClick={() => openDay(date)} data-date={date}>
+    <div role="gridcell" className={cls} {...drop.props} onClick={() => openDay(date)} data-date={date} data-drop={date}>
       <div className="cp-day__head">
         <button
           type="button"

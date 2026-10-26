@@ -1,4 +1,4 @@
-// Видеодемо SMM: дашборд, календарь (неделя и месяц), от пустого слота до «Вышло», перенос на час,
+// Видеодемо SMM: дашборд, календарь (неделя и месяц), от пустого слота до «Вышло», перенос и растягивание на шкале,
 // «Поменять местами», банк идей и темы, «+» с версией для другой площадки по триггеру. Пишет webm в $OUT (по умолчанию e2e/shots/demo);
 // в mp4: ffmpeg -i <файл>.webm -c:v libx264 -pix_fmt yuv420p -crf 24 -movflags +faststart demo.mp4
 // Запуск — как у smoke.mjs: npm run build && npm run preview, затем node e2e/demo.mjs
@@ -143,14 +143,28 @@ await wait(400)
 // 4. Неделя по времени
 await click(page.getByRole('radio', { name: 'Время' }), 600)
 await jump('2026-11-09')
-await cap('Неделя по времени: совпадающие — рядом, как в Google Календаре', 3400)
+await cap('Календарь как в менеджере: день, три дня или неделя; совпадающие — рядом, все видны', 3400)
 const col = page.locator('.cp-tg__col[data-date="2026-11-10"]')
 const thesis = col.locator('.cp-card', { hasText: 'Тезисы' }).first()
 const t = await center(thesis)
-const colBox = await col.boundingBox()
-await cap('Перетащить на другой час — время меняется', 600)
-await drag(thesis, t.x, colBox.y + 17 * 64 + (t.y - t.b.y))
+await cap('Взять и вести: карточка встаёт по 15 минутам, время на ней — куда встанет', 600)
+await drag(thesis, t.x + t.b.width, t.y + 3 * 64)
 await wait(2200)
+const moved = page.locator('.cp-tg__col[data-date="2026-11-11"] .cp-card', { hasText: 'Тезисы' }).first()
+const grip = await center(moved.locator('.cp-tg__grip'))
+await cap('Нижний край — длительность', 600)
+await page.mouse.move(grip.x, grip.y, { steps: 18 })
+await page.mouse.down()
+await page.mouse.move(grip.x, grip.y + 64, { steps: 20 })
+await page.mouse.up()
+await wait(1600)
+await cap('Пустой лист тянут рукой', 600)
+const sheet = await page.locator('.cp-body').boundingBox()
+await page.mouse.move(sheet.x + sheet.width - 30, sheet.y + sheet.height / 2, { steps: 12 })
+await page.mouse.down()
+await page.mouse.move(sheet.x + sheet.width - 330, sheet.y + sheet.height / 2 - 80, { steps: 30 })
+await page.mouse.up()
+await wait(1200)
 await cap('Или дорожками по каналам — как в исходной таблице', 300)
 await click(page.getByRole('radio', { name: 'Каналы' }), 2800)
 await cap('')
