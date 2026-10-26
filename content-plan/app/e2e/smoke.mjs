@@ -71,6 +71,15 @@ const bw = await modes.getByRole('radio', { checked: true }).evaluate((el) => {
   return Math.abs(lum(c.backgroundColor) - lum(c.color)) > 200
 })
 check(bw, 'выбранный вид — чёрно-белый', 'выбранный вид не чёрно-белый')
+// на белом карточку видно: она залита цветом канала, а не только тонкой линией
+const tint = await page.locator('.cp-tg .cp-card').first().evaluate((el) => {
+  const c = getComputedStyle(el)
+  // color-mix браузер отдаёт как color(srgb 0.94 0.90 0.97) — доли, а не 0–255
+  const k = c.backgroundColor.startsWith('color(') ? 255 : 1
+  const [r, g, b] = c.backgroundColor.match(/[\d.]+/g).slice(0, 3).map((v) => Number(v) * k)
+  return { spread: Math.max(r, g, b) - Math.min(r, g, b), stripe: parseFloat(c.borderLeftWidth) }
+})
+check(tint.spread >= 10 && tint.stripe >= 3, 'карточки залиты цветом канала, полоска 3px — на белом видно', `карточка почти белая: ${JSON.stringify(tint)}`)
 check(
   !(await top.getByRole('radio', { name: 'Месяц' }).count()) && !(await page.getByRole('radiogroup', { name: /Сколько дней/ }).count()) && !(await page.getByRole('group', { name: 'Лента дней' }).count()),
   'нет «Месяца», «День · 3 дня · Неделя» и ленты дней',
