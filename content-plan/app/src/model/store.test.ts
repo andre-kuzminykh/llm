@@ -18,6 +18,7 @@ import {
   moveItem,
   planFill,
   reducer,
+  removeChannel,
   removeItem,
   setPeriod,
   takeDraft,
@@ -302,5 +303,26 @@ describe('T-CP-031 FR-CP-031 периодичность хэштега, план
     expect(r.rubrics.find((x) => x.id === 'agents')!.name).toBe('Агенты')
     expect(addRubric(r, 'агенты')).toBe(r)
     expect(addRubric(r, 'Тезисы')).toBe(r)
+  })
+})
+
+describe('T-CP-040 FR-CP-040 канал: удалить', () => {
+  it('уходят канал, его форматы и материалы — и материалы других каналов по его форматам; последний канал остаётся', () => {
+    const p = smallPlan()
+    p.items.push(item({ id: 'x-andre', channelId: 'dataist', ruleId: 'ait', title: 'Чужой формат' })) // материал Dataist по формату Andre AIT
+    const r = removeChannel(p, 'andre')
+    expect(r.channels.map((c) => c.id)).toEqual(['dataist', 'landao'])
+    expect(r.rules.some((x) => x.id === 'ait')).toBe(false)
+    expect(r.items.some((x) => x.id === 'ait' || x.id === 'x-andre')).toBe(false)
+    expect(r.items.length).toBe(p.items.length - 2)
+    const one = { ...p, channels: [p.channels[0]] }
+    expect(removeChannel(one, 'dataist')).toBe(one)
+  })
+  it('удаление — один шаг истории', () => {
+    let st = reducer(initialState, { type: 'init', plan: smallPlan() })
+    st = reducer(st, { type: 'removeChannel', id: 'andre' })
+    expect(st.plan!.channels.some((c) => c.id === 'andre')).toBe(false)
+    st = reducer(st, { type: 'undo' })
+    expect(st.plan!.channels.some((c) => c.id === 'andre')).toBe(true)
   })
 })

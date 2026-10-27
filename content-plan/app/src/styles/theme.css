@@ -814,7 +814,28 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-side__sec { padding-left: 28px; min-height: 28px; font-size: var(--nr-fs-sm); }
 /* строка канала или раздела: слева — точка цвета (своя кнопка с палитрой), дальше — фильтр */
 .cp-side__row { position: relative; }
-.cp-side__row > .nr-row { padding-left: 32px; }
+.cp-side__row > .nr-row { padding-left: 32px; padding-right: 34px; }
+/* «⋯» у канала — переименовать или удалить; видна при наведении, на сенсорном экране — всегда */
+.cp-side__more {
+  position: absolute; right: 4px; top: 4px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--nr-text-3); cursor: pointer; opacity: 0; transition: opacity var(--nr-dur-1) var(--nr-ease);
+}
+.cp-side__row:hover .cp-side__more, .cp-side__more:focus-visible, .cp-side__row--open .cp-side__more { opacity: 1; }
+@media (hover: none) { .cp-side__more { opacity: 1; } }
+@media (hover: hover) { .cp-side__more:hover { background: var(--nr-fill-2); color: var(--nr-text); } }
+.cp-side__row--open { z-index: 40; }
+.cp-side__menu {
+  position: absolute; top: calc(100% + 2px); right: 0; z-index: 40; display: flex; flex-direction: column; gap: 2px; width: 200px; padding: 6px;
+  border-radius: var(--nr-r-lg); background: var(--nr-surface); border: 1px solid var(--nr-sep); box-shadow: var(--nr-shadow-3);
+}
+.cp-menu__item--danger { color: var(--nr-danger); }
+@media (hover: hover) { .cp-menu__item--danger:hover { color: var(--nr-danger); } }
+.cp-menu__item:disabled { opacity: 0.4; cursor: default; }
+.cp-side__confirm { width: 236px; padding: 10px; }
+.cp-side__confirm p { margin: 0 0 10px; font-size: var(--nr-fs-sm); color: var(--nr-text-2); line-height: 1.4; }
+.cp-side__confirm-btns { display: flex; justify-content: flex-end; gap: 6px; }
+.cp-side__rename { display: flex; gap: 6px; padding: 2px 0 2px 6px; }
+.cp-side__rename .nr-field { flex: 1; min-width: 0; }
 .cp-side__row--sec > .nr-row { padding-left: 50px; }
 .cp-side__row > .cp-colorpick { position: absolute; left: 4px; top: 4px; }
 .cp-side__row--sec > .cp-colorpick { left: 22px; top: 2px; }

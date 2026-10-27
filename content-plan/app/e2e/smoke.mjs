@@ -454,6 +454,20 @@ check(
   'форматы в фильтрах: Видео (полное горизонтальное, короткое вертикальное), Текст (страница на сайте, текст с картинкой)',
   `форматы не те: ${await fmts('Видео')} / ${await fmts('Текст')}`,
 )
+// «⋯» у канала: переименовать или удалить
+await side.getByRole('button', { name: 'Ещё: Landao' }).click()
+const chMenu = side.getByRole('menu', { name: 'Канал «Landao»' })
+const chItems = (await chMenu.getByRole('menuitem').allTextContents()).join('|')
+await chMenu.getByRole('menuitem', { name: 'Переименовать' }).click()
+await side.getByRole('textbox', { name: 'Новое название канала «Landao»' }).fill('Landao Studio')
+await side.getByRole('textbox', { name: 'Новое название канала «Landao»' }).press('Enter')
+const renamedCh = await side.getByRole('button', { name: /^Landao Studio/ }).count()
+await page.keyboard.press('Control+z')
+check(
+  chItems === 'Переименовать|Удалить' && renamedCh && (await side.getByRole('button', { name: /^Landao с/ }).count()),
+  'у канала «⋯»: переименовать (в строке) или удалить; ⌘Z возвращает',
+  `меню канала: ${chItems}, переименован: ${renamedCh}`,
+)
 
 // профиль: «Как пользоваться» и тёмная тема
 await page.getByRole('button', { name: 'Профиль' }).click()

@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
-import { FORMATS, GRAY, statusOf, tagOf } from '../model/types'
+import { plural } from '../model/hint'
+import { channelParts } from '../model/store'
+import { FORMATS, GRAY, statusOf, tagOf, type Channel } from '../model/types'
 import { IconButton, PlatformIcon, StatusFilter, Switch } from './bits'
 import { usePlan, type Ctx } from './ctx'
 import { Icon } from './Icon'
@@ -107,17 +109,17 @@ const PALETTE: { color: string; name: string }[] = [
 ]
 
 /** Точка цвета у канала или раздела: нажали — палитра, выбрали — карточки перекрасились. Esc или щелчок мимо — закрыть. */
-function ColorPick({ label, color, onPick, reset }: { label: string; color: string; onPick: (c: string) => void; reset?: () => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLSpanElement>(null)
-  // щелчок мимо и Esc — на уровне документа: в Safari кнопки фокус не получают
+/** Всплывающее закрывается щелчком мимо и Esc — на уровне документа: в Safari кнопки фокус не получают. */
+function useDismiss(ref: RefObject<HTMLElement>, open: boolean, close: () => void) {
+  const last = useRef(close)
+  last.current = close
   useEffect(() => {
     if (!open) return
-    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
+    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && last.current()
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation() // панель фильтров на узком экране не закрывается
-      setOpen(false)
+      last.current()
     }
     document.addEventListener('pointerdown', away)
     window.addEventListener('keydown', esc, true)
@@ -125,7 +127,13 @@ function ColorPick({ label, color, onPick, reset }: { label: string; color: stri
       document.removeEventListener('pointerdown', away)
       window.removeEventListener('keydown', esc, true)
     }
-  }, [open])
+  }, [open, ref])
+}
+
+function ColorPick({ label, color, onPick, reset }: { label: string; color: string; onPick: (c: string) => void; reset?: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  useDismiss(ref, open, () => setOpen(false))
   const pick = (c: string) => {
     onPick(c)
     setOpen(false)
@@ -157,6 +165,115 @@ function ColorPick({ label, color, onPick, reset }: { label: string; color: stri
         </span>
       )}
     </span>
+  )
+}
+
+/** Строка канала: точка цвета, фильтр и «⋯» — переименовать или удалить (с подтверждением; вернуть — ⌘Z). */
+function ChannelRow({ c, off, onToggle, children }: { c: Channel; off: boolean; onToggle: () => void; children?: ReactNode }) {
+  const { plan, dispatch, toast, filters, setFilters } = usePlan()
+  const [mode, setMode] = useState<'view' | 'menu' | 'rename' | 'delete'>('view')
+  const [name, setName] = useState(c.name)
+  const ref = useRef<HTMLDivElement>(null)
+  useDismiss(ref, mode === 'menu' || mode === 'delete', () => setMode('view'))
+  const last = plan.channels.length <= 1
+
+  const rename = () => {
+    const n = name.trim().replace(/\s+/g, ' ')
+    if (!n || n === c.name) return setMode('view')
+    if (plan.channels.some((x) => x.id !== c.id && x.name.toLowerCase() === n.toLowerCase())) return toast(`Канал «${n}» уже есть`)
+    dispatch({ type: 'channel', id: c.id, patch: { name: n } })
+    toast(`Канал переименован: «${n}»`, true)
+    setMode('view')
+  }
+  const remove = () => {
+    const n = channelParts(plan, c.id).items.length
+    dispatch({ type: 'removeChannel', id: c.id })
+    if (filters.hiddenChannels.includes(c.id)) setFilters({ ...filters, hiddenChannels: filters.hiddenChannels.filter((x) => x !== c.id) })
+    toast(`Канал «${c.name}» удалён${n ? ` вместе с ${n} ${plural(n, 'материалом', 'материалами', 'материалами')}` : ''}`, true)
+  }
+
+  if (mode === 'rename')
+    return (
+      <form
+        className="cp-side__rename"
+        onSubmit={(e) => {
+          e.preventDefault()
+          rename()
+        }}
+      >
+        <input
+          className="nr-field nr-field--sm"
+          aria-label={`Новое название канала «${c.name}»`}
+          value={name}
+          autoFocus
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setMode('view'))}
+        />
+        <button type="submit" className="nr-btn nr-btn--ghost nr-btn--sm">
+          Готово
+        </button>
+      </form>
+    )
+
+  const parts = mode === 'delete' ? channelParts(plan, c.id) : null
+  return (
+    <div ref={ref} className={`cp-side__row${off ? ' cp-side__row--off' : ''}${mode !== 'view' ? ' cp-side__row--open' : ''}`}>
+      {children}
+      <button type="button" className="nr-row" aria-pressed={!off} onClick={onToggle}>
+        {c.name}
+        {c.start > plan.start && <span className="cp-side__count">с {c.start.slice(8)}.{c.start.slice(5, 7)}</span>}
+      </button>
+      <button
+        type="button"
+        className="cp-side__more"
+        aria-label={`Ещё: ${c.name}`}
+        title="Переименовать или удалить"
+        aria-haspopup="menu"
+        aria-expanded={mode === 'menu'}
+        onClick={() => setMode(mode === 'menu' ? 'view' : 'menu')}
+      >
+        <Icon name="more" size={16} />
+      </button>
+      {mode === 'menu' && (
+        <div className="cp-side__menu" role="menu" aria-label={`Канал «${c.name}»`}>
+          <button type="button" role="menuitem" className="cp-menu__item" onClick={() => (setName(c.name), setMode('rename'))}>
+            <Icon name="pencil" size={16} />
+            Переименовать
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="cp-menu__item cp-menu__item--danger"
+            disabled={last}
+            title={last ? 'Последний канал не удалить' : undefined}
+            onClick={() => setMode('delete')}
+          >
+            <Icon name="trash" size={16} />
+            Удалить
+          </button>
+        </div>
+      )}
+      {parts && (
+        <div className="cp-side__menu cp-side__confirm" role="group" aria-label={`Удалить канал «${c.name}»?`}>
+          <p>
+            Удалить «{c.name}»?{' '}
+            {parts.items.length
+              ? `Уйдут ${parts.items.length} ${plural(parts.items.length, 'материал', 'материала', 'материалов')} и форматы канала.`
+              : 'Материалов в нём нет.'}{' '}
+            Вернуть — ⌘Z.
+          </p>
+          <div className="cp-side__confirm-btns">
+            <button type="button" className="nr-btn nr-btn--danger nr-btn--sm" onClick={remove}>
+              Удалить
+            </button>
+            <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setMode('view')}>
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -212,18 +329,9 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
             dispatch({ type: 'channel', id: c.id, patch: { sections: c.sections.map((s) => (s.id === id ? { ...s, color } : s)) } })
           return (
             <div key={c.id} className="cp-side__ch">
-              <div className={`cp-side__row${off ? ' cp-side__row--off' : ''}`}>
+              <ChannelRow c={c} off={off} onToggle={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}>
                 <ColorPick label={`Цвет: ${c.name}`} color={c.color} onPick={(color) => dispatch({ type: 'channel', id: c.id, patch: { color } })} />
-                <button
-                  type="button"
-                  className="nr-row"
-                  aria-pressed={!off}
-                  onClick={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}
-                >
-                  {c.name}
-                  {c.start > plan.start && <span className="cp-side__count">с {c.start.slice(8)}.{c.start.slice(5, 7)}</span>}
-                </button>
-              </div>
+              </ChannelRow>
               {!off &&
                 c.sections.map((sec) => {
                   const hidden = !!filters.hiddenSections?.includes(sec.id)

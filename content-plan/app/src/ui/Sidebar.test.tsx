@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { smallPlan } from '../test/fixtures'
 import { renderApp } from '../test/renderApp'
 
 const side = () => screen.getByRole('complementary', { name: 'Фильтры' })
@@ -59,5 +60,46 @@ describe('T-CP-036 FR-CP-036 четыре формата: видео и текс
     await userEvent.click(within(side()).getByRole('button', { name: 'Свернуть фильтры' }))
     await userEvent.click(screen.getByRole('button', { name: 'Снять фильтр: Скрыт формат: короткое вертикальное видео' }))
     expect(within(day('2026-10-26')).getByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-040 FR-CP-040 канал: «⋯» — переименовать или удалить', () => {
+  it('«⋯» у канала — меню из двух: переименовать (в строке, Enter) и удалить (с подтверждением, ⌘Z возвращает)', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Landao' }))
+    const menu = within(side()).getByRole('menu', { name: 'Канал «Landao»' })
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Переименовать', 'Удалить'])
+    await userEvent.keyboard('{Escape}')
+    expect(within(side()).queryByRole('menu')).toBeNull()
+
+    await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Landao' }))
+    await userEvent.click(within(side()).getByRole('menuitem', { name: 'Переименовать' }))
+    const input = within(side()).getByRole('textbox', { name: 'Новое название канала «Landao»' })
+    await userEvent.clear(input)
+    await userEvent.type(input, 'Dataist{Enter}')
+    expect(screen.getByText('Канал «Dataist» уже есть')).toBeInTheDocument()
+    await userEvent.clear(input)
+    await userEvent.type(input, 'Landao Studio{Enter}')
+    expect(within(side()).getByRole('button', { name: 'Landao Studio с 02.11' })).toBeInTheDocument()
+
+    await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Andre AIT' }))
+    await userEvent.click(within(side()).getByRole('menuitem', { name: 'Удалить' }))
+    const confirm = within(side()).getByRole('group', { name: 'Удалить канал «Andre AIT»?' })
+    expect(confirm).toHaveTextContent('Уйдут 1 материал и форматы канала')
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
+    expect(within(side()).queryByRole('button', { name: 'Andre AIT' })).toBeNull()
+    expect(within(day('2026-10-26')).queryByRole('button', { name: /Анонс от Andre AIT/ })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }))
+    expect(within(side()).getByRole('button', { name: 'Andre AIT' })).toBeInTheDocument()
+    expect(within(day('2026-10-26')).getByRole('button', { name: /Анонс от Andre AIT/ })).toBeInTheDocument()
+  })
+  it('последний канал не удалить', async () => {
+    const p = smallPlan()
+    p.channels = [p.channels[0]]
+    renderApp(p)
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Dataist' }))
+    expect(within(side()).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
   })
 })

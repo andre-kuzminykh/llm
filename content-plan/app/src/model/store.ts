@@ -375,6 +375,25 @@ export const updateChannel = (plan: Plan, id: string, patch: Partial<Channel>): 
   channels: plan.channels.map((c) => (c.id === id ? { ...c, ...patch } : c)),
 })
 
+/** Что уйдёт вместе с каналом: его форматы и материалы — и материалы других каналов по этим форматам. */
+export function channelParts(plan: Plan, id: string) {
+  const rules = new Set(plan.rules.filter((r) => r.channelId === id).map((r) => r.id))
+  return { rules, items: plan.items.filter((it) => it.channelId === id || rules.has(it.ruleId)) }
+}
+
+/** Удалить канал вместе с его форматами и материалами; последний канал не удаляется. */
+export const removeChannel = (plan: Plan, id: string): Plan => {
+  if (plan.channels.length <= 1 || !plan.channels.some((c) => c.id === id)) return plan
+  const { rules, items } = channelParts(plan, id)
+  const gone = new Set(items.map((it) => it.id))
+  return {
+    ...plan,
+    channels: plan.channels.filter((c) => c.id !== id),
+    rules: plan.rules.filter((r) => !rules.has(r.id)),
+    items: plan.items.filter((it) => !gone.has(it.id)),
+  }
+}
+
 const COLORS = ['#8854f3', '#0a84ff', '#30b0c7', '#34c759', '#ff9f0a', '#ff375f', '#5e5ce6', '#a2845e']
 
 /** Новый канал: на всех площадках плана (лишние снимаются в форме), цвет — следующий свободный. */
@@ -419,6 +438,7 @@ export type Action =
   | { type: 'addRubric'; name: string; what?: string; id?: string }
   | { type: 'channel'; id: string; patch: Partial<Channel> }
   | { type: 'addChannel'; name: string; start: ISODate; id?: string }
+  | { type: 'removeChannel'; id: string }
   | { type: 'addPlatform'; name: string }
   | { type: 'setPeriod'; ruleId: string; days: boolean[]; time?: string; from: ISODate }
   | { type: 'takeDraft'; slotId: string; draftId: string }
@@ -458,6 +478,7 @@ function apply(plan: Plan, a: Action): Plan {
     case 'addRubric': return addRubric(plan, a.name, a.what, a.id)
     case 'channel': return updateChannel(plan, a.id, a.patch)
     case 'addChannel': return addChannel(plan, a.name, a.start, a.id)
+    case 'removeChannel': return removeChannel(plan, a.id)
     case 'addPlatform': return addPlatform(plan, a.name)
     case 'setPeriod': return setPeriod(plan, a.ruleId, a.days, a.time, a.from)
     case 'takeDraft': return takeDraft(plan, a.slotId, a.draftId)
