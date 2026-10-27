@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { smallPlan } from '../test/fixtures'
+import { item, smallPlan } from '../test/fixtures'
 import { renderApp } from '../test/renderApp'
 
 const day = (date: string) => document.querySelector(`[data-date="${date}"]`) as HTMLElement
@@ -166,7 +166,7 @@ describe('T-CP-037 FR-CP-037 программа в дашборде', () => {
     const dash = await openDash()
     await userEvent.click(within(dash).getByRole('radio', { name: 'Программа' }))
     expect(within(dash).queryByRole('heading', { name: 'Что делать' })).toBeNull()
-    expect(within(dash).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Сводка', 'Программа', 'Хэштеги', 'Темы', 'Неделя', 'Месяц'])
+    expect(within(dash).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Сводка', 'Программа', 'Неделя', 'Месяц', 'Все'])
     const dataist = within(dash).getByRole('region', { name: 'Программа: Dataist' })
     const demo = within(dataist).getByRole('group', { name: 'Dataist: #демо' })
     // по умолчанию — неделя: 2 ноября не попадает
@@ -201,30 +201,34 @@ describe('T-CP-039 FR-CP-039 общая тема в программе', () => {
     vi.useRealTimers()
   })
 
-  it('отметили строки разных форматов → общая тема; «Темы» показывают их вместе; переименовать и снять', async () => {
-    renderApp()
+  it('отметили строки хэштега разных форматов → общая тема заголовком над ними, внутри хэштега; переименовать и снять', async () => {
+    const p = smallPlan()
+    p.items.push(item({ id: 'th2', date: '2026-10-28', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'Агенты вместо отделов', format: 'Текст с картинкой', platforms: ['X'], rank: 20 }))
+    renderApp(p)
     const dash = await openDash()
     await userEvent.click(within(dash).getByRole('radio', { name: 'Программа' }))
+    expect(within(dash).queryByRole('radio', { name: 'Темы' })).toBeNull() // хэштеги и темы не разделены
     await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: 26 окт 11:00: Я устал от хайпа вокруг ИИ' }))
-    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: 26 окт 12:00: Стратегия' }))
+    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: 28 окт 11:00: Агенты вместо отделов' }))
     const bar = within(dash).getByRole('toolbar', { name: 'Выбранные строки' })
     expect(within(bar).getByText('Выбрано: 2')).toBeInTheDocument()
     await userEvent.type(within(bar).getByRole('combobox', { name: 'Общая тема выбранных' }), 'ИИ-стратегия{Enter}')
     expect(screen.getByText('Тема «ИИ-стратегия»: 2 материала')).toBeInTheDocument()
     expect(within(dash).queryByRole('toolbar', { name: 'Выбранные строки' })).toBeNull()
-    expect(within(dash).getAllByText('Тема: ИИ-стратегия')).toHaveLength(2)
 
-    await userEvent.click(within(dash).getByRole('radio', { name: 'Темы' }))
-    const theme = within(dash).getByRole('region', { name: 'Тема: ИИ-стратегия' })
-    const rows = within(theme).getAllByRole('button', { name: /^26 окт/ }).map((b) => b.getAttribute('aria-label'))
-    expect(rows).toEqual(['26 окт 11:00: Я устал от хайпа вокруг ИИ', '26 окт 12:00: Стратегия'])
-    expect(within(theme).getByText(/Dataist · #тезисы · Короткое видео/)).toBeInTheDocument()
-    expect(within(theme).getByText(/Dataist · #демо · Полное видео/)).toBeInTheDocument()
-    // без темы — свёрнуто, по нажатию — список
-    const rest = within(dash).getByRole('region', { name: 'Без темы' })
-    expect(within(rest).queryByRole('checkbox')).toBeNull()
-    await userEvent.click(within(rest).getByRole('button', { name: /Без темы/ }))
-    expect(within(rest).getAllByRole('checkbox').length).toBeGreaterThan(0)
+    const tag = within(dash).getByRole('group', { name: 'Dataist: #тезисы' })
+    const theme = within(tag).getByRole('region', { name: 'Тема: ИИ-стратегия' })
+    const rows = within(theme).getAllByRole('button', { name: /окт \d\d:\d\d:/ })
+    expect(rows.map((b) => [b.getAttribute('aria-label'), b.getAttribute('title')])).toEqual([
+      ['26 окт 11:00: Я устал от хайпа вокруг ИИ', 'Короткое видео'],
+      ['28 окт 11:00: Агенты вместо отделов', 'Текст с картинкой'],
+    ])
+    // тема — там, где её первый материал; остальное хэштега — по порядку
+    expect(within(tag).getAllByRole('button', { name: /окт \d\d:\d\d:/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      '26 окт 11:00: Я устал от хайпа вокруг ИИ',
+      '28 окт 11:00: Агенты вместо отделов',
+      '27 окт 11:00: Нужна тема',
+    ])
 
     await userEvent.click(within(theme).getByRole('button', { name: 'Переименовать' }))
     const input = within(theme).getByRole('textbox', { name: 'Новое название темы «ИИ-стратегия»' })
@@ -236,5 +240,17 @@ describe('T-CP-039 FR-CP-039 общая тема в программе', () => {
     // ⌘Z возвращает тему
     await userEvent.click(screen.getByRole('button', { name: 'Отменить' }))
     expect(within(dash).getByRole('region', { name: 'Тема: Стратегия с ИИ' })).toBeInTheDocument()
+  })
+  it('«Все» — до конца плана: у хэштега сначала 10 строк, дальше «Показать ещё»', async () => {
+    const p = smallPlan()
+    for (let i = 0; i < 14; i++) p.items.push(item({ id: `t${i}`, date: `2026-11-${String(i + 10).padStart(2, '0')}`, ruleId: 'sh_thesis', rubricId: 'thesis', title: `Тезис ${i + 1}`, format: 'Короткое вертикальное видео', platforms: ['YouTube'], rank: 20 }))
+    renderApp(p)
+    const dash = await openDash()
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Программа' }))
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Все' }))
+    const tag = () => within(dash).getByRole('group', { name: 'Dataist: #тезисы' })
+    expect(within(tag()).getAllByRole('checkbox')).toHaveLength(10)
+    await userEvent.click(within(tag()).getByRole('button', { name: 'Показать ещё 6' }))
+    expect(within(tag()).getAllByRole('checkbox')).toHaveLength(16)
   })
 })

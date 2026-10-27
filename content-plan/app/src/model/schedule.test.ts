@@ -1,7 +1,7 @@
 import { item, smallPlan } from '../test/fixtures'
 import { addDays } from './dates'
 import { indexByDate } from './filters'
-import { daysText, scheduleOf, themesOf, timesText } from './schedule'
+import { dateText, daysText, entriesOf, scheduleOf, timesText } from './schedule'
 import { GRAY } from './types'
 import { unitsOf } from './units'
 
@@ -11,7 +11,7 @@ const parts = (p = smallPlan(), from = '2026-10-24', n = 14) => {
   const byDate = indexByDate(p)
   const order = p.channels.map((c) => c.id)
   const units = Array.from({ length: n }, (_, i) => addDays(from, i)).flatMap((d) => unitsOf(byDate.get(d) ?? [], rules, order))
-  return [p.channels, units, rules, rubrics] as const
+  return [p.channels, units, rules, rubrics, p.platforms] as const
 }
 const build = (p = smallPlan(), from = '2026-10-24', n = 14) => scheduleOf(...parts(p, from, n))
 
@@ -51,26 +51,33 @@ describe('T-CP-037 FR-CP-037 расписание — план повество�
 })
 
 describe('T-CP-039 FR-CP-039 общая тема над несколькими материалами', () => {
-  it('по темам: у материалов разных форматов и каналов одна тема — они вместе, по порядку; остальное — «без темы»', () => {
+  it('общая тема — внутри хэштега, где выходит её первый материал; собирает материалы разных форматов; остальное — по порядку', () => {
     const p = smallPlan()
-    for (const it of p.items) if (it.id === 'demo' || it.id === 'thesis' || it.id === 'ait') it.theme = 'ИИ-стратегия'
-    const { themes, none } = themesOf(...parts(p))
-    expect(themes.map((t) => t.theme)).toEqual(['ИИ-стратегия'])
-    expect(themes[0].rows.map((r) => `${r.time} ${r.channel} ${r.tag} ${r.format} ${r.title}`)).toEqual([
-      '11:00 Dataist #тезисы Короткое вертикальное видео Я устал от хайпа вокруг ИИ',
-      '12:00 Dataist #демо Полное горизонтальное видео Стратегия',
-      '13:00 Andre AIT #демо Текст с картинкой Стратегия',
+    // у #тезисы два материала: тезис 26.10 и слот 27.10; общая тема — у тезиса и у FULL #демо
+    p.items.push(item({ id: 'th2', date: '2026-10-28', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'Агенты вместо отделов', format: 'Текст с картинкой', platforms: ['X'], rank: 20 }))
+    for (const it of p.items) if (it.id === 'thesis' || it.id === 'th2' || it.id === 'demo') it.theme = 'ИИ-стратегия'
+    const tags = build(p)[0].tags
+    const thesis = entriesOf(tags.find((t) => t.tag === '#тезисы')!.rows)
+    expect(thesis.map((e) => ('row' in e ? e.row.title : `Тема ${e.theme}: ${e.rows.map((r) => `${r.title} (${r.format})`).join(', ')}`))).toEqual([
+      'Тема ИИ-стратегия: Я устал от хайпа вокруг ИИ (Короткое вертикальное видео), Агенты вместо отделов (Текст с картинкой)',
+      'Нужна тема',
     ])
-    expect(none.map((r) => r.title)).toEqual(['Нужна тема', 'Нужна тема'])
+    const demo = entriesOf(tags.find((t) => t.tag === '#демо')!.rows)
+    expect(demo.map((e) => ('row' in e ? e.row.title : `Тема ${e.theme}`))).toEqual(['Тема ИИ-стратегия', 'Нужна тема'])
   })
-  it('строка знает все материалы карточки — тема ставится и тизеру с анонсами', () => {
+  it('строка знает все материалы карточки и площадки всех — тема ставится и тизеру с анонсами', () => {
     const row = build()[0].tags.find((t) => t.tag === '#демо')!.rows[0]
     expect(row.ids.sort()).toEqual(['demo', 'office', 'teaser'])
+    expect(row.platforms).toEqual(['Web', 'YouTube', 'Instagram', 'Telegram'])
   })
-  it('тема у карточки — у главного или у любого её материала; в «по хэштегам» видна у строки', () => {
+  it('тема у карточки — у главного или у любого её материала', () => {
     const p = smallPlan()
     p.items.find((it) => it.id === 'teaser')!.theme = 'Стратегия ИИ'
     expect(build(p)[0].tags.find((t) => t.tag === '#демо')!.rows[0].theme).toBe('Стратегия ИИ')
   })
+  it('дата в этом году — «26 окт», в другом — с годом', () => {
+    expect(dateText('2026-10-26', '2026-10-24')).toBe('26 окт')
+    expect(dateText('2027-01-05', '2026-10-24')).toBe('5 янв 2027')
+    expect(daysText(['2026-10-26', '2027-01-04'], 730, '2026-10-24')).toBe('26 окт – 4 янв 2027')
+  })
 })
-

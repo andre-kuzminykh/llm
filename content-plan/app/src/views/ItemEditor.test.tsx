@@ -188,7 +188,7 @@ describe('T-CP-039 FR-CP-039 общая тема в форме', () => {
     vi.useRealTimers()
   })
 
-  it('новому контенту — общая тема с подсказкой уже заведённых; в «Программе → Темы» он под ней вместе с FULL всей карточкой', async () => {
+  it('новому контенту — общая тема с подсказкой уже заведённых; в «Программе» тема — заголовком над ним и над FULL всей карточки', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     // FULL «Стратегия»: общая тема из формы — всей карточке (и тизеру с анонсом)
@@ -212,12 +212,11 @@ describe('T-CP-039 FR-CP-039 общая тема в форме', () => {
     await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Дашборд' }))
     const dash = screen.getByRole('complementary', { name: 'Дашборд' })
     await userEvent.click(within(dash).getByRole('radio', { name: 'Программа' }))
-    await userEvent.click(within(dash).getByRole('radio', { name: 'Темы' }))
-    const group = within(dash).getByRole('region', { name: 'Тема: ИИ-стратегия' })
-    expect(within(group).getAllByRole('button', { name: /окт \d\d:\d\d:/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
-      '26 окт 12:00: Стратегия',
-      '26 окт 13:00: Стратегия',
-      '28 окт 11:00: Стратегия за 5 минут',
-    ])
+    // тема — заголовком внутри каждого хэштега, где у неё есть материалы: у #демо — FULL, у #тезисы — новый тезис
+    const block = (tag: string) => within(within(dash).getByRole('group', { name: tag })).getByRole('region', { name: 'Тема: ИИ-стратегия' })
+    const labels = (el: HTMLElement) => within(el).getAllByRole('button', { name: /окт \d\d:\d\d:/ }).map((b) => b.getAttribute('aria-label'))
+    expect(labels(block('Dataist: #демо'))).toEqual(['26 окт 12:00: Стратегия'])
+    expect(labels(block('Andre AIT: #демо'))).toEqual(['26 окт 13:00: Стратегия'])
+    expect(labels(block('Dataist: #тезисы'))).toEqual(['28 окт 11:00: Стратегия за 5 минут'])
   })
 })

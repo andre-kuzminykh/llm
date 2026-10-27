@@ -342,29 +342,36 @@ check(
   (await schedDataist.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('button').count()) >= 5 &&
     (await dash.getByRole('region', { name: 'Программа: Лаборатория Датаиста' }).count()) &&
     (await schedDataist.locator('.cp-sched__plats svg').count()) > 0 &&
-    (await dash.getByRole('radio').allTextContents()).join('|').endsWith('Неделя|Месяц') &&
+    (await dash.getByRole('radio').allTextContents()).join('|').endsWith('Неделя|Месяц|Все') &&
     !(await dash.getByRole('region', { name: 'Что делать' }).count()),
-  'дашборд → «Программа»: каналы, в них хэштеги, по каждому — тема, справа время, дата и площадки значками; неделя или месяц',
+  'дашборд → «Программа»: каналы, в них хэштеги, по каждому — тема, справа дата и время и площадки значками; неделя, месяц или все',
   'нет расписания в дашборде',
 )
 await page.screenshot({ path: `${SHOTS}/8b-schedule.png` })
-// общая тема над несколькими материалами разных форматов: отметить строки → тема → «Темы» показывают их вместе
-const thesisRow = schedDataist.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('checkbox').first()
-const fullRow = schedDataist.getByRole('group', { name: 'Офис Датаиста: #демо' }).getByRole('checkbox').first()
-await thesisRow.check()
-await fullRow.check()
+// общая тема над несколькими материалами хэштега разных форматов: отметить строки → тема → заголовком над ними, внутри хэштега
+const labTag = dash.getByRole('group', { name: 'Лаборатория Датаиста: #исследования' })
+const rowOf = (sel) => labTag.locator('.cp-sched__item').filter({ has: page.locator(sel) }).first().getByRole('checkbox')
+await rowOf('button[title="Страница на сайте"]').check()
+await rowOf('button:not([title="Страница на сайте"])').check()
 await dash.getByRole('combobox', { name: 'Общая тема выбранных' }).fill('ИИ-агенты в продажах')
 await dash.getByRole('button', { name: 'Поставить тему' }).click()
-await dash.getByRole('radio', { name: 'Темы' }).click()
-const themeBlock = dash.getByRole('region', { name: 'Тема: ИИ-агенты в продажах' })
-const themeFmts = new Set((await themeBlock.locator('.cp-sched__where').allTextContents()).map((t) => t.split(' · ').pop()))
+const themeBlock = labTag.getByRole('region', { name: 'Тема: ИИ-агенты в продажах' })
+const themeFmts = new Set(await themeBlock.locator('.cp-sched__row').evaluateAll((bs) => bs.map((b) => b.title)))
 check(
-  (await themeBlock.getByRole('checkbox').count()) === 2 && themeFmts.has('Полное видео') && themeFmts.has('Короткое видео'),
-  'общая тема: у материалов разных форматов одна тема — в «Расписании → Темы» вместе',
+  !(await dash.getByRole('radio', { name: 'Темы' }).count()) && (await themeBlock.getByRole('checkbox').count()) === 2 && themeFmts.size === 2,
+  'общая тема: заголовком над материалами хэштега разных форматов — в той же программе, без отдельного режима',
   `общая тема не собрала материалы: ${[...themeFmts].join(', ')}`,
 )
 await page.screenshot({ path: `${SHOTS}/8c-themes.png` })
-await dash.getByRole('radio', { name: 'Хэштеги' }).click()
+// «Все» — до конца плана, у хэштега сначала 10 строк
+await dash.getByRole('radio', { name: 'Все' }).click()
+const more = dash.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('button', { name: /^Показать ещё \d+/ })
+check(
+  (await more.count()) === 1 && (await dash.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('checkbox').count()) <= 10,
+  'программа «Все» — до конца плана, у хэштега сначала 10 строк и «Показать ещё»',
+  'нет «Все» или «Показать ещё»',
+)
+await dash.getByRole('radio', { name: 'Неделя' }).click()
 await dash.getByRole('radio', { name: 'Сводка' }).click()
 const topics = dash.getByRole('region', { name: 'Темы' })
 check(
