@@ -139,6 +139,13 @@ export const FORMATS: { group: string; items: string[] }[] = [
 ]
 /** Коротко — в подписях дорожек и расписания и как название нового формата хэштега: «#кейсы · Текст с картинкой». */
 export const FORMAT_SHORT: Record<string, string> = { [FULL_VIDEO]: 'Полное видео', [SHORT_VIDEO]: 'Короткое видео', [WEB_PAGE]: 'Страница на сайте', [TEXT_IMAGE]: 'Текст с картинкой' }
+/** Значок и короткая подпись формата: горизонталь, вертикаль, веб, пост — в форме формат выбирают ими. */
+export const FORMAT_ICON: Record<string, { icon: string; label: string }> = {
+  [FULL_VIDEO]: { icon: 'f-horizontal', label: 'Горизонталь' },
+  [SHORT_VIDEO]: { icon: 'f-vertical', label: 'Вертикаль' },
+  [WEB_PAGE]: { icon: 'f-web', label: 'Веб' },
+  [TEXT_IMAGE]: { icon: 'f-post', label: 'Пост' },
+}
 /** Где такой формат выходит, если канал там есть: полное видео — YouTube, страница — сайт… */
 export const FORMAT_PLATFORMS: Record<string, string[]> = {
   [FULL_VIDEO]: ['YouTube'],

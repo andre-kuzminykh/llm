@@ -1,5 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { addDays, dayTitle, mondayOf, shortDate, today, WEEKDAYS } from '../model/dates'
+import { overdueOf } from '../model/catchup'
 import { AUTO_RULES } from '../model/filters'
 import { planningEnd, planningSlots } from '../model/planning'
 import { newId, setPeriod } from '../model/store'
@@ -69,6 +70,7 @@ export function DashboardSheet({ onClose }: { onClose: () => void }) {
       ) : (
         <div className="cp-sheet__body nr-scroll cp-dash">
           <PlanningAsk />
+          <ShiftAsk />
           <Stats />
           <section className="cp-panel" aria-labelledby="todo-h">
             <div className="cp-panel__head">
@@ -81,6 +83,35 @@ export function DashboardSheet({ onClose }: { onClose: () => void }) {
         </div>
       )}
     </aside>
+  )
+}
+
+/** Не вышло вовремя (дата прошла, «Вышло» не отмечено) — наверстать, не двигая остальной план; и перенести период (отпуск). */
+function ShiftAsk() {
+  const { plan, openCatchUp, openPeriod } = usePlan()
+  const t = today()
+  const n = useMemo(() => overdueOf(plan, t).length, [plan, t])
+  return (
+    <div className="cp-shift-ask">
+      {n > 0 && (
+        <section className="cp-ask" aria-label="Не вышло вовремя">
+          <span className="cp-ask__icon" aria-hidden="true">
+            <Icon name="alert" size={18} />
+          </span>
+          <span className="cp-ask__text">
+            <b>Не вышло вовремя: {n}</b>
+            <span className="cp-muted">Дата прошла, а «Вышло» не отмечено. Наверстать — в свободные слоты, остальной план на месте.</span>
+          </span>
+          <button type="button" className="nr-btn nr-btn--primary nr-btn--sm" onClick={openCatchUp}>
+            Наверстать
+          </button>
+        </section>
+      )}
+      <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={openPeriod}>
+        <Icon name="calendar" size={16} />
+        Перенести период (отпуск)…
+      </button>
+    </div>
   )
 }
 

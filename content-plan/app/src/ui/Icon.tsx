@@ -134,6 +134,32 @@ const P: Record<string, ReactElement> = {
   ),
   flag: <path d="M6 20.5v-16M6 4.5h10.5l-2 4 2 4H6" />,
   swap: <path d="M7 4.5L3.5 8 7 11.5M3.5 8h13M17 12.5l3.5 3.5-3.5 3.5M20.5 16h-13" />,
+  // форматы: горизонталь, вертикаль, веб, пост
+  'f-horizontal': (
+    <>
+      <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+      <path d="M10.5 9.6v4.8l4-2.4z" fill="currentColor" />
+    </>
+  ),
+  'f-vertical': (
+    <>
+      <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+      <path d="M10.8 9.6v4.8l3.6-2.4z" fill="currentColor" />
+    </>
+  ),
+  'f-web': (
+    <>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <path d="M3 8.5h18M6 6.5h.01M8.5 6.5h.01M7 12h10M7 15.5h6" />
+    </>
+  ),
+  'f-post': (
+    <>
+      <rect x="4" y="3.5" width="16" height="17" rx="2.5" />
+      <path d="M4 13.5l4-3.5 4 3.5 2.5-2 5.5 4.5M8 17.5h6" />
+      <circle cx="15.5" cy="7.5" r="1.25" />
+    </>
+  ),
   // площадки: простые знаки, не логотипы
   'p-Web': (
     <>

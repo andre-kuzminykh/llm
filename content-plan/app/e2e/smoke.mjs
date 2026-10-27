@@ -296,12 +296,13 @@ await form.waitFor()
 check(!(await form.getByRole('button', { name: 'YouTube' }).count()), 'форма: тема и дата сверху, остальное — в «Подробнее»', 'форма показывает всё сразу')
 await form.getByRole('button', { name: 'Подробнее' }).click()
 check(await form.getByRole('button', { name: 'YouTube' }).count(), '«Подробнее» раскрывает площадки', 'нет площадок в «Подробнее»')
-const fmtSelect = form.getByRole('combobox', { name: /^Формат/ })
+const fmtGroup = form.getByRole('radiogroup', { name: 'Формат' })
+const fmtLabels = (await fmtGroup.getByRole('radio').allTextContents()).join('|')
+const fmtOn = await fmtGroup.getByRole('radio', { checked: true }).getAttribute('aria-label')
 check(
-  (await fmtSelect.locator('optgroup').evaluateAll((gs) => gs.map((g) => g.label).join('|'))) === 'Видео|Текст' &&
-    (await fmtSelect.inputValue()) === 'Полное горизонтальное видео',
-  'форма: формат — из четырёх в группах «Видео» и «Текст»; у FULL — полное горизонтальное видео',
-  `формат в форме не тот: ${await fmtSelect.inputValue()}`,
+  fmtLabels === 'Горизонталь|Вертикаль|Веб|Пост' && (await fmtGroup.locator('svg').count()) === 4 && fmtOn === 'Полное горизонтальное видео',
+  'форма: формат — значками «Горизонталь / Вертикаль / Веб / Пост», щёлкнуть один; у FULL — горизонталь',
+  `формат в форме не тот: ${fmtLabels}, выбран ${fmtOn}`,
 )
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOTS}/5-editor.png` })
@@ -329,6 +330,29 @@ const dash = page.getByRole('complementary', { name: 'Дашборд' })
 await dash.waitFor()
 check((await dash.getByRole('region', { name: 'Что делать' }).count()) && (await page.getByRole('grid', { name: 'Неделя по времени' }).isVisible()), 'дашборд — панелью справа, календарь под ним', 'дашборд не панелью')
 await page.screenshot({ path: `${SHOTS}/8-dashboard.png` })
+// не вышло вовремя → «Наверстать»: что куда встанет, перенос одним шагом (здесь сразу отменяем); «Перенести период» — отпуск
+const lateAsk = dash.getByRole('region', { name: 'Не вышло вовремя' })
+await lateAsk.getByRole('button', { name: 'Наверстать' }).click()
+const catchSheet = page.getByRole('complementary', { name: 'Наверстать' })
+const catchRows = await catchSheet.locator('.cp-shift__when').allTextContents()
+const catchGo = catchSheet.getByRole('button', { name: /^Перенести: \d+/ })
+await catchGo.click()
+const caught = /^Наверстали: \d+/.test((await toast().textContent()) ?? '')
+await page.keyboard.press('Control+z')
+check(
+  catchRows.length > 0 && catchRows.every((t) => / → .+ · (в пустой слот|свободный день|вне сетки|вместе со своей группой)/.test(t)) && caught && (await lateAsk.count()),
+  '«Не вышло вовремя» → «Наверстать»: видно, куда встанет каждая карточка; перенос — одним шагом, ⌘Z возвращает',
+  `наверстать: ${catchRows.slice(0, 2).join(' / ')}`,
+)
+await dash.getByRole('button', { name: 'Перенести период (отпуск)…' }).click()
+const periodSheet = page.getByRole('complementary', { name: 'Перенести период' })
+const periodSum = (await periodSheet.getByRole('status').textContent()) ?? ''
+check(
+  /^Из периода — \d+ карточ/.test(periodSum) && (await periodSheet.getByRole('radio', { name: 'На следующие слоты' }).getAttribute('aria-checked')) === 'true',
+  '«Перенести период» (отпуск): на следующие слоты или в свободные места, сначала видно, что куда',
+  `перенести период: ${periodSum}`,
+)
+await periodSheet.getByRole('button', { name: 'Назад' }).click()
 const statLabels = await dash.getByLabel('Сводка', { exact: true }).locator('dt').allTextContents()
 check(
   statLabels.join('|') === 'просрочено|в работе|готово, ждёт выхода',

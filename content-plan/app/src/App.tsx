@@ -21,6 +21,7 @@ import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
 import { ItemEditor } from './views/ItemEditor'
 import { PlanningSheet } from './views/PlanningSheet'
+import { CatchUpSheet, PeriodSheet } from './views/ShiftSheets'
 import { TaskSheet } from './views/TaskSheet'
 import { WeekView } from './views/WeekView'
 
@@ -31,12 +32,14 @@ type Sheet =
   | { kind: 'item'; id: string; back?: Back }
   | { kind: 'new'; draft: Partial<Item>; back?: Back }
   | { kind: 'task'; id: string; back?: Back }
+  | { kind: 'catchup'; back?: Back }
+  | { kind: 'period'; back?: Back }
   | { kind: 'help' }
   | null
 
 /** Открыли форму или задачу поверх листа — «назад» ведёт к нему. */
 const backOf = (s: Sheet): Back | undefined =>
-  !s || s.kind === 'help' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
+  !s || s.kind === 'help' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' || s.kind === 'catchup' || s.kind === 'period' ? s.back : s
 
 const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
 const readMode = (): Mode => {
@@ -364,6 +367,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     openDashboard: () => setSheet({ kind: 'dashboard' }),
     openDrafts: () => setSheet({ kind: 'drafts' }),
     openPlanning: () => setSheet((s) => ({ kind: 'planning', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
+    openCatchUp: () => setSheet((s) => ({ kind: 'catchup', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
+    openPeriod: () => setSheet((s) => ({ kind: 'period', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
     dropOn,
     setStatus: (unit, status) => {
       dispatch({ type: 'updateMany', ids: unit.items.map((x) => x.id), patch: { status } })
@@ -444,6 +449,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           {sheet?.kind === 'dashboard' && <DashboardSheet onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'planning' && <PlanningSheet onClose={closeSheet} onBack={back} />}
+          {sheet?.kind === 'catchup' && <CatchUpSheet onClose={closeSheet} onBack={back} />}
+          {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} onBack={back} />}
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}

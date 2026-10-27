@@ -58,6 +58,10 @@ export interface Ctx {
   openDrafts: () => void
   /** Планирование недели: уточнить темы пустых слотов. */
   openPlanning: () => void
+  /** Наверстать просроченное, не двигая остальной план. */
+  openCatchUp: () => void
+  /** Перенести период (отпуск): на следующие слоты или в свободные места. */
+  openPeriod: () => void
   dropOn: (date: ISODate, drag: Drag, time?: string) => void
   /** Выбранные карточки (их главные материалы): Shift- или ⌘-щелчок, пальцем — подержать и отпустить. */
   selected: Set<string>

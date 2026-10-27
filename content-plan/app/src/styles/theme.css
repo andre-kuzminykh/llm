@@ -602,7 +602,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-sheet--drop { box-shadow: inset 0 0 0 2px var(--nr-accent), var(--nr-shadow-3); }
 .cp-field { display: flex; flex-direction: column; gap: 6px; }
 .cp-field__row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cp-field__row--fmt { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); } /* «Полное горизонтальное видео» — целиком */
+.cp-field__row--fmt { grid-template-columns: minmax(0, 1fr); } /* хэштег, под ним формат значками во всю ширину — подписи целиком */
 .cp-hint { font-size: var(--nr-fs-sm); color: var(--nr-text-3); margin: 0; }
 .cp-group-head { display: flex; align-items: center; gap: 8px; font-weight: var(--nr-fw-semibold); font-size: var(--nr-fs-sm); color: var(--nr-text-2); }
 .cp-list { display: flex; flex-direction: column; gap: 6px; }
@@ -1061,3 +1061,30 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
   .cp-selbar { left: 8px; right: 8px; bottom: 72px; transform: none; flex-wrap: wrap; border-radius: var(--nr-r-lg); }
   .cp-has-sel .cp-toast { bottom: 132px; }
 }
+
+/* ── наверстать и перенести период ───────────────────────────────────────── */
+.cp-shift-ask { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.cp-shift-ask .cp-ask { align-self: stretch; }
+.cp-shift { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.cp-shift__row { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 4px; padding: 6px 8px 6px 6px; border-left: 3px solid var(--cp-c, var(--nr-sep)); border-radius: 2px; }
+.cp-shift__row:not(:has(.cp-sched__check)) { grid-template-columns: minmax(0, 1fr); padding-left: 10px; }
+.cp-shift__row .cp-sched__check { opacity: 1; margin-top: 3px; }
+.cp-shift__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: var(--nr-fs-md); }
+.cp-shift__where { font-size: var(--nr-fs-xs); color: var(--nr-text-3); }
+.cp-shift__when { font-size: var(--nr-fs-sm); color: var(--nr-text-2); font-variant-numeric: tabular-nums; }
+.cp-shift__when b { color: var(--nr-text); font-weight: var(--nr-fw-semibold); }
+.cp-shift__sum { margin: 0; font-size: var(--nr-fs-sm); color: var(--nr-text-2); }
+.cp-shift__go { align-self: flex-start; }
+.cp-pills--flush { padding: 0; }
+
+/* формат в форме — значками: горизонталь, вертикаль, веб, пост */
+.cp-fmt { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.cp-fmt__opt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 6px 2px 4px; border: 1px solid var(--nr-sep);
+  border-radius: var(--nr-r-sm); background: transparent; color: var(--nr-text-2); cursor: pointer;
+  transition: background-color var(--nr-dur-1) var(--nr-ease), color var(--nr-dur-1) var(--nr-ease);
+}
+@media (hover: hover) { .cp-fmt__opt:hover { background: var(--nr-fill-3); color: var(--nr-text); } }
+.cp-fmt__opt[aria-checked='true'] { background: var(--nr-text); border-color: var(--nr-text); color: var(--nr-canvas); }
+.cp-fmt__label { font-size: var(--nr-fs-xs); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cp-side__sec .nr-icon { flex: none; color: var(--nr-text-3); }

@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { addDays, dayTitle, shortDate, WEEKDAYS, weekday } from '../model/dates'
 import { newId, type Action } from '../model/store'
-import { FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type ISODate, type Item, type Rule, type Status } from '../model/types'
+import { FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type ISODate, type Item, type Rule, type Status } from '../model/types'
 import { dueOf, leadOf } from '../model/units'
 import { IconButton, PickText, Seg, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
@@ -262,18 +262,18 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
               disabled={fromFull}
             />
           </div>
-          <label className="cp-field" title={needRule ? 'У хэштега в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
+          <div className="cp-field" title={needRule ? 'У хэштега в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
             <span className="nr-label">Формат{needRule && <span className="cp-field__new"> · новый</span>}</span>
-            <select className="nr-field" value={format} onChange={(e) => pickFormat(e.target.value)}>
-              {FORMATS.map((g) => (
-                <optgroup key={g.group} label={g.group}>
-                  {g.items.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </optgroup>
+            {/* значками: горизонталь, вертикаль, веб, пост — щёлкнуть один */}
+            <div className="cp-fmt" role="radiogroup" aria-label="Формат">
+              {FORMATS.flatMap((g) => g.items).map((f) => (
+                <button key={f} type="button" role="radio" aria-checked={format === f} aria-label={f} title={f} className="cp-fmt__opt" onClick={() => pickFormat(f)}>
+                  <Icon name={FORMAT_ICON[f].icon} size={22} />
+                  <span className="cp-fmt__label">{FORMAT_ICON[f].label}</span>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
         </div>
         {fits.length > 1 && (
           <label className="cp-field" title={rule?.what || undefined}>

@@ -36,6 +36,33 @@ export function moveItem(plan: Plan, id: string, date: ISODate, withGroup = true
   return fitRange({ ...plan, items: plan.items.map((x) => (together(x) ? { ...x, date, ...at(x) } : x)) })
 }
 
+/** Карточка материала с группой: группа того же дня, а без группы — сам материал. */
+const cardKey = (x: Item) => (x.group && x.date ? `g|${x.group}|${x.date}` : `i|${x.id}`)
+
+/** Много переносов сразу — за один проход (тысячи карточек при сдвиге очереди): каждая карточка с группой — на свою
+ *  дату и время; remove — уходят с группой. Это то же, что moveItem и removeItem по очереди, если карточки разные. */
+export function moveGroups(plan: Plan, moves: { id: string; date: ISODate; time?: string }[], remove: string[] = []): Plan {
+  const rules = new Map(plan.rules.map((r) => [r.id, r]))
+  const byId = new Map(plan.items.map((x) => [x.id, x]))
+  const go = new Map<string, { date: ISODate; shift: number }>()
+  for (const m of moves) {
+    const it = byId.get(m.id)
+    if (!it) continue
+    go.set(cardKey(it), { date: m.date, shift: m.time ? toMin(m.time) - toMin(timeOf(it, rules.get(it.ruleId))) : 0 })
+  }
+  const gone = new Set(remove.map((id) => byId.get(id)).filter((x): x is Item => !!x).map(cardKey))
+  const items: Item[] = []
+  for (const x of plan.items) {
+    const k = cardKey(x)
+    if (gone.has(k)) continue
+    const g = go.get(k)
+    if (!g) items.push(x)
+    else if (!g.shift) items.push({ ...x, date: g.date })
+    else items.push({ ...x, date: g.date, time: fromMin(toMin(timeOf(x, rules.get(x.ruleId))) + g.shift), ...(x.end ? { end: endAt(toMin(x.end) + g.shift) } : {}) })
+  }
+  return fitRange({ ...plan, items })
+}
+
 /** Конец блока — не позже полуночи. */
 const endAt = (min: number) => (min >= 24 * 60 ? '24:00' : fromMin(min))
 
@@ -156,6 +183,26 @@ export function duplicateItem(plan: Plan, id: string, date?: ISODate): Plan {
     return c
   })
   return fitRange({ ...plan, items: [...plan.items, ...copies] })
+}
+
+/** Наверстать: куда встаёт просроченная карточка. Занимает пустой слот — слот (с группой) уходит; вне сетки — с отметкой. */
+export interface CatchUpMove {
+  id: string
+  date: ISODate
+  time?: string // своё время слота, если у слота оно было
+  slotId?: string
+  offGrid?: boolean
+}
+
+/** Перенести просроченные карточки, не двигая остальной план: одним шагом истории. */
+export function catchUp(plan: Plan, moves: CatchUpMove[]): Plan {
+  let next = plan
+  for (const m of moves) {
+    if (m.slotId) next = removeItem(next, m.slotId, true)
+    next = moveItem(next, m.id, m.date, true, m.time)
+    if (m.offGrid) next = updateItem(next, m.id, { offGrid: true })
+  }
+  return next
 }
 
 export function removeItem(plan: Plan, id: string, withGroup = true): Plan {
@@ -439,6 +486,8 @@ export type Action =
   | { type: 'channel'; id: string; patch: Partial<Channel> }
   | { type: 'addChannel'; name: string; start: ISODate; id?: string }
   | { type: 'removeChannel'; id: string }
+  | { type: 'catchUp'; moves: CatchUpMove[] }
+  | { type: 'moveGroups'; moves: { id: string; date: ISODate; time?: string }[]; remove?: string[] }
   | { type: 'addPlatform'; name: string }
   | { type: 'setPeriod'; ruleId: string; days: boolean[]; time?: string; from: ISODate }
   | { type: 'takeDraft'; slotId: string; draftId: string }
@@ -479,6 +528,8 @@ function apply(plan: Plan, a: Action): Plan {
     case 'channel': return updateChannel(plan, a.id, a.patch)
     case 'addChannel': return addChannel(plan, a.name, a.start, a.id)
     case 'removeChannel': return removeChannel(plan, a.id)
+    case 'catchUp': return catchUp(plan, a.moves)
+    case 'moveGroups': return moveGroups(plan, a.moves, a.remove)
     case 'addPlatform': return addPlatform(plan, a.name)
     case 'setPeriod': return setPeriod(plan, a.ruleId, a.days, a.time, a.from)
     case 'takeDraft': return takeDraft(plan, a.slotId, a.draftId)

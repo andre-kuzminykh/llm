@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { item, smallPlan } from '../test/fixtures'
 import { renderApp } from '../test/renderApp'
@@ -252,5 +252,58 @@ describe('T-CP-039 FR-CP-039 общая тема в программе', () => {
     expect(within(tag()).getAllByRole('checkbox')).toHaveLength(10)
     await userEvent.click(within(tag()).getByRole('button', { name: 'Показать ещё 6' }))
     expect(within(tag()).getAllByRole('checkbox')).toHaveLength(16)
+  })
+})
+
+describe('T-CP-041/042 FR-CP-041/042 наверстать и перенести период', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('«Не вышло вовремя» → «Наверстать»: видно, что куда встанет; снятая галочка остаётся; перенос — одним шагом', async () => {
+    renderApp()
+    const dash = await openDash()
+    const ask = within(dash).getByRole('region', { name: 'Не вышло вовремя' })
+    expect(ask).toHaveTextContent('Не вышло вовремя: 2')
+    await userEvent.click(within(ask).getByRole('button', { name: 'Наверстать' }))
+    const sheet = screen.getByRole('complementary', { name: 'Наверстать' })
+    const full = within(sheet).getByRole('checkbox', { name: 'Перенести: Демо · FULL: Стратегия' }).closest('li')!
+    expect(full).toHaveTextContent('26 окт → 2 ноя 12:00 · в пустой слот')
+    const thesis = within(sheet).getByRole('checkbox', { name: 'Перенести: Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ' })
+    expect(thesis.closest('li')).toHaveTextContent('26 окт → 28 окт 11:00 · свободный день')
+    await userEvent.click(thesis)
+    expect(thesis.closest('li')).toHaveTextContent('26 окт · остаётся')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Перенести: 1' }))
+    expect(screen.getByText('Наверстали: 1 карточка — остальной план на месте')).toBeInTheDocument()
+    // назад — к дашборду; осталось одно
+    expect(within(screen.getByRole('complementary', { name: 'Дашборд' })).getByRole('region', { name: 'Не вышло вовремя' })).toHaveTextContent('Не вышло вовремя: 1')
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }))
+    expect(within(screen.getByRole('complementary', { name: 'Дашборд' })).getByRole('region', { name: 'Не вышло вовремя' })).toHaveTextContent('Не вышло вовремя: 2')
+  })
+  it('«Перенести период»: даты и каналы, «на следующие слоты» или «в свободные места», предпросмотр, перенос', async () => {
+    const p = smallPlan()
+    for (const [id, date] of [['A', '2026-10-29'], ['B', '2026-10-30'], ['C', '2026-11-01'], ['D', '2026-11-02']])
+      p.items.push(item({ id, date, ruleId: 'sh_thesis', rubricId: 'thesis', title: `Тезис ${id}`, format: 'Короткое вертикальное видео', platforms: ['YouTube'], rank: 20 }))
+    renderApp(p)
+    const dash = await openDash()
+    await userEvent.click(within(dash).getByRole('button', { name: 'Перенести период (отпуск)…' }))
+    const sheet = screen.getByRole('complementary', { name: 'Перенести период' })
+    const set = async (label: string, v: string) => fireEvent.change(within(sheet).getByLabelText(label), { target: { value: v } })
+    await set('С', '2026-10-29')
+    await set('По', '2026-10-30')
+    expect(within(sheet).getByRole('radio', { name: 'На следующие слоты' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(sheet).getByRole('status')).toHaveTextContent('Из периода — 2 карточки с темой')
+    const rows = within(sheet).getAllByRole('listitem').map((li) => li.textContent)
+    expect(rows[0]).toContain('Тезис A')
+    expect(rows[0]).toContain('29 окт → 1 ноя 11:00 · следующий слот')
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'В свободные места' }))
+    expect(within(sheet).getAllByRole('listitem')[0]).toHaveTextContent('29 окт → 3 ноя 11:00 · свободный день')
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'На следующие слоты' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Перенести' }))
+    expect(screen.getByText('Период 29 окт – 30 окт свободен: перенесено 2 карточки')).toBeInTheDocument()
   })
 })

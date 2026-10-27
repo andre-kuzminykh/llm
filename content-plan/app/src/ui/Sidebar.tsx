@@ -3,7 +3,7 @@ import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
 import { plural } from '../model/hint'
 import { channelParts } from '../model/store'
-import { FORMATS, GRAY, statusOf, tagOf, type Channel } from '../model/types'
+import { FORMAT_ICON, FORMATS, GRAY, statusOf, tagOf, type Channel } from '../model/types'
 import { IconButton, PlatformIcon, StatusFilter, Switch } from './bits'
 import { usePlan, type Ctx } from './ctx'
 import { Icon } from './Icon'
@@ -400,6 +400,7 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
                 aria-pressed={!filters.hiddenFormats?.includes(f)}
                 onClick={() => setFilters({ ...filters, hiddenFormats: toggle(filters.hiddenFormats ?? [], f) })}
               >
+                <Icon name={FORMAT_ICON[f].icon} size={16} />
                 {f}
               </button>
             ))}

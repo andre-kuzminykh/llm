@@ -38,7 +38,7 @@ describe('T-CP-005 FR-CP-005 форма материала', () => {
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
     await pickTag(form, '#тезисы')
     // формат — из четырёх: у #тезисы в Dataist это короткое вертикальное видео («Тезис дня»)
-    expect(within(form).getByRole('combobox', { name: 'Формат' })).toHaveDisplayValue('Короткое вертикальное видео')
+    expect(within(within(form).getByRole('radiogroup', { name: 'Формат' })).getByRole('radio', { checked: true })).toHaveAccessibleName('Короткое вертикальное видео')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'ИИ не заменит вас')
     const date = within(form).getByLabelText('Дата')
     await userEvent.clear(date)
@@ -125,26 +125,27 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
     expect(within(day('2026-10-31')).queryByRole('img', { name: /Нарушений/ })).toBeNull()
   })
-  it('формат — из четырёх в двух группах; общие форматы FULL достаются только рубрикам, у которых есть FULL', async () => {
+  it('формат — значками: горизонталь, вертикаль, веб, пост, щёлкнуть один; общие форматы FULL достаются только рубрикам, у которых есть FULL', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
-    const select = () => within(form).getByRole('combobox', { name: /^Формат/ })
-    expect(within(select()).getAllByRole('group').map((g) => g.getAttribute('label'))).toEqual(['Видео', 'Текст'])
-    expect(within(select()).getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Полное горизонтальное видео',
-      'Короткое вертикальное видео',
-      'Страница на сайте',
-      'Текст с картинкой',
+    const group = () => within(form).getByRole('radiogroup', { name: 'Формат' })
+    const radios = within(group()).getAllByRole('radio')
+    expect(radios.map((o) => [o.getAttribute('aria-label'), o.textContent, !!o.querySelector('svg')])).toEqual([
+      ['Полное горизонтальное видео', 'Горизонталь', true],
+      ['Короткое вертикальное видео', 'Вертикаль', true],
+      ['Страница на сайте', 'Веб', true],
+      ['Текст с картинкой', 'Пост', true],
     ])
     // у #демо короткое видео — тизер FULL: формат уже есть, новым не заводится
     await pickTag(form, '#демо')
-    await userEvent.selectOptions(select(), 'Короткое вертикальное видео')
+    await userEvent.click(within(group()).getByRole('radio', { name: 'Короткое вертикальное видео' }))
+    expect(within(group()).getByRole('radio', { name: 'Короткое вертикальное видео' })).toHaveAttribute('aria-checked', 'true')
     expect(within(form).queryByText('· новый')).toBeNull()
     // у #тезисы FULL нет — страница на сайте для них новая, заведётся разовой
     await pickTag(form, '#тезисы')
-    await userEvent.selectOptions(select(), 'Страница на сайте')
+    await userEvent.click(within(group()).getByRole('radio', { name: 'Страница на сайте' }))
     expect(within(form).getByText('· новый')).toBeInTheDocument()
   })
 })
