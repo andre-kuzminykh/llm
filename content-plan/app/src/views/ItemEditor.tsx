@@ -286,7 +286,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           </label>
         )}
 
-        <label className="cp-field" title="Одна тема у нескольких материалов разных форматов — по ней их видно в «Расписании»">
+        <label className="cp-field" title="Одна тема у нескольких материалов разных форматов — по ней их видно в «Программе»">
           <span className="nr-label">Общая тема</span>
           <input
             className="nr-field"

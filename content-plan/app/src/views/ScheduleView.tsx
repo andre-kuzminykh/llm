@@ -1,19 +1,18 @@
-// Расписание в дашборде — программа: что выпускаем. «Хэштеги»: каналы, в них хэштеги, по каждому — что и когда выходит.
-// «Темы»: общая тема над несколькими материалами разных форматов — что и когда по ней выходит. Время подписью, а не шкалой.
-// Отметили строки — над ними ставится общая тема. Учитывает фильтры слева.
+// Программа в дашборде — что выпускаем. «Хэштеги»: каналы, в них хэштеги, по каждому — темы материалов, справа время,
+// дата и площадки значками. «Темы»: общая тема над несколькими материалами разных форматов — что и когда по ней выходит.
+// Не шкала времени. Отметили строки — над ними ставится общая тема. Учитывает фильтры слева.
 import { useId, useState, type CSSProperties, type ReactNode } from 'react'
-import { addDays, shortDate, today, WEEKDAYS, weekday } from '../model/dates'
+import { addDays, shortDate, today } from '../model/dates'
 import { plural } from '../model/hint'
 import { daysText, scheduleOf, themesOf, timesText, type SchedRow } from '../model/schedule'
 import { FORMAT_SHORT } from '../model/types'
 import type { Unit } from '../model/units'
-import { IconButton, Seg, StatusIcon } from '../ui/bits'
+import { IconButton, PlatformIcon, Seg, StatusIcon } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 
-type Span = '7' | '14' | '30'
+type Span = '7' | '30'
 const SPANS: { id: Span; label: string }[] = [
   { id: '7', label: 'Неделя' },
-  { id: '14', label: '2 недели' },
   { id: '30', label: 'Месяц' },
 ]
 type By = 'tags' | 'themes'
@@ -38,13 +37,12 @@ function write(key: string, v: string) {
   }
 }
 
-const dayText = (d: string) => `${WEEKDAYS[weekday(d)]}, ${shortDate(d)}`
 const many = (n: number) => `${n} ${plural(n, 'материал', 'материала', 'материалов')}`
 const clean = (s: string) => s.trim().replace(/\s+/g, ' ')
 
 export function Schedule() {
   const { plan, unitsOn, dispatch, toast } = usePlan()
-  const [span, setSpan] = useState<Span>(() => read('cp:sched-span', ['7', '14', '30'], '14'))
+  const [span, setSpan] = useState<Span>(() => read('cp:sched-span', ['7', '30'], '7'))
   const [by, setBy] = useState<By>(() => read('cp:sched-by', ['tags', 'themes'], 'tags'))
   const [picked, setPicked] = useState<Map<string, string[]>>(new Map()) // строка → её материалы
   const [none, setNone] = useState(false) // «Без темы» развёрнуто
@@ -72,7 +70,7 @@ export function Schedule() {
     <div className="cp-sched">
       <div className="cp-sched__head">
         <Seg label="Программа" value={by} options={BYS} onChange={(v) => (setBy(v), write('cp:sched-by', v))} />
-        <Seg label="Период расписания" value={span} options={SPANS} onChange={(v) => (setSpan(v), write('cp:sched-span', v))} />
+        <Seg label="Период программы" value={span} options={SPANS} onChange={(v) => (setSpan(v), write('cp:sched-span', v))} />
         <span className="cp-muted">
           {shortDate(days[0])} – {shortDate(days[n - 1])}
         </span>
@@ -109,12 +107,12 @@ type RowProps = { row: SchedRow; span: number; where: boolean; picked: boolean; 
 
 function ByTags({ units, rowProps }: { units: Unit[]; rowProps: (r: SchedRow, where: boolean) => RowProps }) {
   const { plan, rules, rubrics } = usePlan()
-  const groups = scheduleOf(plan.channels, units, rules, rubrics)
+  const groups = scheduleOf(plan.channels, units, rules, rubrics, plan.platforms)
   if (!groups.length) return <p className="cp-empty">На эти дни ничего нет — или всё скрыто фильтрами.</p>
   return (
     <>
       {groups.map((g) => (
-        <section key={g.id} className="cp-sched__ch" style={{ '--cp-c': g.color } as CSSProperties} aria-label={`Расписание: ${g.name}`}>
+        <section key={g.id} className="cp-sched__ch" style={{ '--cp-c': g.color } as CSSProperties} aria-label={`Программа: ${g.name}`}>
           <h3 className="cp-sched__name">{g.name}</h3>
           {g.tags.map((tag) => (
             <div key={tag.id} className="cp-sched__tag" role="group" aria-label={`${g.name}: ${tag.tag}`}>
@@ -144,7 +142,7 @@ function ByThemes({ units, rowProps, none, setNone, known, setTheme }: {
   setTheme: (ids: string[], theme: string | undefined, msg: string) => void
 }) {
   const { plan, rules, rubrics } = usePlan()
-  const { themes, none: rest } = themesOf(plan.channels, units, rules, rubrics)
+  const { themes, none: rest } = themesOf(plan.channels, units, rules, rubrics, plan.platforms)
   const all = (theme: string) => plan.items.filter((x) => x.theme === theme).map((x) => x.id) // вся тема, не только за период
   return (
     <>
@@ -267,20 +265,20 @@ function PickBar({ count, known, themed, onSet, onClear, onCancel }: { count: nu
 
 function ScheduleRow({ row, span, where, picked, onToggle }: RowProps) {
   const { openItem } = usePlan()
-  const when = row.days.length > 1 ? daysText(row.days, span) : dayText(row.date)
+  // справа — «21 окт 10:00»; слитая строка — «каждый день 09:00»
+  const when = row.days.length > 1 ? daysText(row.days, span) : shortDate(row.date)
   const times = timesText(row.days, span)
-  const label = `${when}, ${row.time}: ${row.title}${times ? `, ${times}` : ''}`
+  const label = `${when} ${row.time}: ${row.title}${times ? `, ${times}` : ''}`
+  const format = FORMAT_SHORT[row.format] ?? row.format
   return (
     <li className={`cp-sched__item${picked ? ' cp-sched__item--picked' : ''}`}>
       <input type="checkbox" className="cp-sched__check" aria-label={`Выбрать: ${label}`} checked={picked} onChange={onToggle} />
-      <button type="button" className="cp-sched__row" onClick={() => openItem(row.id)} aria-label={label}>
-        <span className="cp-sched__when">{when}</span>
-        <span className="cp-sched__time">{row.time}</span>
+      <button type="button" className="cp-sched__row" onClick={() => openItem(row.id)} aria-label={label} title={format}>
         <span className="cp-sched__main">
           {where && (
             <span className="cp-sched__where">
               <span className="cp-sched__dot" style={{ background: row.color }} aria-hidden="true" />
-              {row.channel} · {row.tag}
+              {row.channel} · {row.tag} · {format}
             </span>
           )}
           <span className={`cp-sched__title${row.slot ? ' cp-sched__title--slot' : ''}`}>
@@ -289,7 +287,14 @@ function ScheduleRow({ row, span, where, picked, onToggle }: RowProps) {
           </span>
           {!where && row.theme && <span className="cp-sched__theme">Тема: {row.theme}</span>}
         </span>
-        <span className="cp-sched__fmt">{FORMAT_SHORT[row.format] ?? row.format}</span>
+        <span className="cp-sched__when">
+          {when} <span className="cp-sched__time">{row.time}</span>
+        </span>
+        <span className="cp-sched__plats" aria-label={`Площадки: ${row.platforms.join(', ')}`}>
+          {row.platforms.map((p) => (
+            <PlatformIcon key={p} platform={p} size={13} />
+          ))}
+        </span>
         <StatusIcon status={row.status} />
       </button>
     </li>

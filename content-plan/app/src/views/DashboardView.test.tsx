@@ -152,7 +152,7 @@ describe('T-CP-022 FR-CP-022 черновики — банк идей во вк�
   })
 })
 
-describe('T-CP-037 FR-CP-037 расписание в дашборде', () => {
+describe('T-CP-037 FR-CP-037 программа в дашборде', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-24T09:00:00'))
@@ -161,27 +161,34 @@ describe('T-CP-037 FR-CP-037 расписание в дашборде', () => {
     vi.useRealTimers()
   })
 
-  it('«Расписание» переворачивает дашборд: каналы → хэштеги → когда что выходит; щелчок открывает материал', async () => {
+  it('«Программа» переворачивает дашборд: каналы → хэштеги → тема, справа время, дата и площадки; неделя или месяц; щелчок открывает материал', async () => {
     renderApp()
     const dash = await openDash()
-    await userEvent.click(within(dash).getByRole('radio', { name: 'Расписание' }))
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Программа' }))
     expect(within(dash).queryByRole('heading', { name: 'Что делать' })).toBeNull()
-    const dataist = within(dash).getByRole('region', { name: 'Расписание: Dataist' })
+    expect(within(dash).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Сводка', 'Программа', 'Хэштеги', 'Темы', 'Неделя', 'Месяц'])
+    const dataist = within(dash).getByRole('region', { name: 'Программа: Dataist' })
     const demo = within(dataist).getByRole('group', { name: 'Dataist: #демо' })
-    expect(within(demo).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Пн, 26 окт, 12:00: Стратегия',
-      'Пн, 2 ноя, 12:00: Нужна тема',
+    // по умолчанию — неделя: 2 ноября не попадает
+    expect(within(demo).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['26 окт 12:00: Стратегия'])
+    const row = within(demo).getByRole('button', { name: '26 окт 12:00: Стратегия' })
+    // тема — первой, справа время и дата, рядом площадки всей карточки значками
+    expect([...row.children].map((x) => x.className.split(' ')[0])).toEqual(['cp-sched__main', 'cp-sched__when', 'cp-sched__plats'])
+    expect(row.querySelector('.cp-sched__when')).toHaveTextContent('26 окт 12:00')
+    expect(within(row).getByLabelText('Площадки: Web, YouTube, Instagram, Telegram').querySelectorAll('svg')).toHaveLength(4)
+    expect(within(dash).getByRole('region', { name: 'Программа: Andre AIT' })).toBeInTheDocument()
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Месяц' }))
+    expect(within(within(dash).getByRole('group', { name: 'Dataist: #демо' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
+      '26 окт 12:00: Стратегия',
+      '2 ноя 12:00: Нужна тема',
+      '9 ноя 12:00: Нужна тема',
     ])
-    expect(within(dash).getByRole('region', { name: 'Расписание: Andre AIT' })).toBeInTheDocument()
-    // неделя вместо двух: 2 ноября уже не попадает
-    await userEvent.click(within(dash).getByRole('radio', { name: 'Неделя' }))
-    expect(within(within(dash).getByRole('group', { name: 'Dataist: #демо' })).getAllByRole('button')).toHaveLength(1)
-    await userEvent.click(within(dash).getByRole('button', { name: 'Пн, 26 окт, 12:00: Стратегия' }))
+    await userEvent.click(within(dash).getByRole('button', { name: '26 окт 12:00: Стратегия' }))
     const sheet = screen.getByRole('complementary', { name: 'Материал' })
     expect(within(sheet).getByRole('textbox', { name: 'Тема' })).toHaveValue('Стратегия')
     // «Назад» — к расписанию, а не к сводке
     await userEvent.click(within(sheet).getByRole('button', { name: 'Назад' }))
-    expect(within(screen.getByRole('complementary', { name: 'Дашборд' })).getByRole('radio', { name: 'Расписание' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(screen.getByRole('complementary', { name: 'Дашборд' })).getByRole('radio', { name: 'Программа' })).toHaveAttribute('aria-checked', 'true')
   })
 })
 
@@ -197,9 +204,9 @@ describe('T-CP-039 FR-CP-039 общая тема в программе', () => {
   it('отметили строки разных форматов → общая тема; «Темы» показывают их вместе; переименовать и снять', async () => {
     renderApp()
     const dash = await openDash()
-    await userEvent.click(within(dash).getByRole('radio', { name: 'Расписание' }))
-    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: Пн, 26 окт, 11:00: Я устал от хайпа вокруг ИИ' }))
-    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: Пн, 26 окт, 12:00: Стратегия' }))
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Программа' }))
+    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: 26 окт 11:00: Я устал от хайпа вокруг ИИ' }))
+    await userEvent.click(within(dash).getByRole('checkbox', { name: 'Выбрать: 26 окт 12:00: Стратегия' }))
     const bar = within(dash).getByRole('toolbar', { name: 'Выбранные строки' })
     expect(within(bar).getByText('Выбрано: 2')).toBeInTheDocument()
     await userEvent.type(within(bar).getByRole('combobox', { name: 'Общая тема выбранных' }), 'ИИ-стратегия{Enter}')
@@ -209,10 +216,10 @@ describe('T-CP-039 FR-CP-039 общая тема в программе', () => {
 
     await userEvent.click(within(dash).getByRole('radio', { name: 'Темы' }))
     const theme = within(dash).getByRole('region', { name: 'Тема: ИИ-стратегия' })
-    const rows = within(theme).getAllByRole('button', { name: /^Пн, 26 окт/ }).map((b) => b.getAttribute('aria-label'))
-    expect(rows).toEqual(['Пн, 26 окт, 11:00: Я устал от хайпа вокруг ИИ', 'Пн, 26 окт, 12:00: Стратегия'])
-    expect(within(theme).getByText('Короткое видео')).toBeInTheDocument()
-    expect(within(theme).getByText('Полное видео')).toBeInTheDocument()
+    const rows = within(theme).getAllByRole('button', { name: /^26 окт/ }).map((b) => b.getAttribute('aria-label'))
+    expect(rows).toEqual(['26 окт 11:00: Я устал от хайпа вокруг ИИ', '26 окт 12:00: Стратегия'])
+    expect(within(theme).getByText(/Dataist · #тезисы · Короткое видео/)).toBeInTheDocument()
+    expect(within(theme).getByText(/Dataist · #демо · Полное видео/)).toBeInTheDocument()
     // без темы — свёрнуто, по нажатию — список
     const rest = within(dash).getByRole('region', { name: 'Без темы' })
     expect(within(rest).queryByRole('checkbox')).toBeNull()

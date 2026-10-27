@@ -329,14 +329,22 @@ const dash = page.getByRole('complementary', { name: 'Дашборд' })
 await dash.waitFor()
 check((await dash.getByRole('region', { name: 'Что делать' }).count()) && (await page.getByRole('grid', { name: 'Неделя по времени' }).isVisible()), 'дашборд — панелью справа, календарь под ним', 'дашборд не панелью')
 await page.screenshot({ path: `${SHOTS}/8-dashboard.png` })
-// «Расписание» переворачивает дашборд: каналы → хэштеги → что и когда выходит, время подписью
-await dash.getByRole('radio', { name: 'Расписание' }).click()
-const schedDataist = dash.getByRole('region', { name: 'Расписание: Офис Датаиста' })
+const statLabels = await dash.getByLabel('Сводка', { exact: true }).locator('dt').allTextContents()
+check(
+  statLabels.join('|') === 'просрочено|в работе|готово, ждёт выхода',
+  'сводка без «выходит за 7 дней» и «слотов без темы на месяц»',
+  `сводка: ${statLabels.join(', ')}`,
+)
+// «Программа» переворачивает дашборд: каналы → хэштеги → тема, справа время, дата и площадки значками
+await dash.getByRole('radio', { name: 'Программа' }).click()
+const schedDataist = dash.getByRole('region', { name: 'Программа: Офис Датаиста' })
 check(
   (await schedDataist.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('button').count()) >= 5 &&
-    (await dash.getByRole('region', { name: 'Расписание: Лаборатория Датаиста' }).count()) &&
+    (await dash.getByRole('region', { name: 'Программа: Лаборатория Датаиста' }).count()) &&
+    (await schedDataist.locator('.cp-sched__plats svg').count()) > 0 &&
+    (await dash.getByRole('radio').allTextContents()).join('|').endsWith('Неделя|Месяц') &&
     !(await dash.getByRole('region', { name: 'Что делать' }).count()),
-  'дашборд → «Расписание»: каналы, в них хэштеги, по каждому — когда что выходит',
+  'дашборд → «Программа»: каналы, в них хэштеги, по каждому — тема, справа время, дата и площадки значками; неделя или месяц',
   'нет расписания в дашборде',
 )
 await page.screenshot({ path: `${SHOTS}/8b-schedule.png` })
@@ -349,7 +357,7 @@ await dash.getByRole('combobox', { name: 'Общая тема выбранных
 await dash.getByRole('button', { name: 'Поставить тему' }).click()
 await dash.getByRole('radio', { name: 'Темы' }).click()
 const themeBlock = dash.getByRole('region', { name: 'Тема: ИИ-агенты в продажах' })
-const themeFmts = new Set(await themeBlock.locator('.cp-sched__fmt').allTextContents())
+const themeFmts = new Set((await themeBlock.locator('.cp-sched__where').allTextContents()).map((t) => t.split(' · ').pop()))
 check(
   (await themeBlock.getByRole('checkbox').count()) === 2 && themeFmts.has('Полное видео') && themeFmts.has('Короткое видео'),
   'общая тема: у материалов разных форматов одна тема — в «Расписании → Темы» вместе',

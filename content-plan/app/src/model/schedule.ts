@@ -1,4 +1,4 @@
-// Расписание — программа: что выпускаем. По хэштегам: каналы (разделы — как отдельные каналы), в них хэштеги,
+// Программа — что выпускаем. По хэштегам: каналы (разделы — как отдельные каналы), в них хэштеги,
 // по каждому — что и когда выходит. По темам: общая тема над несколькими материалами разных форматов и каналов —
 // что и когда по ней выходит. Не шкала времени: время — подписью у строки.
 // Потоки 24/7 сюда не идут; одно и то же, что выходит много раз («Исследование дня»), — одной строкой с днями.
@@ -17,6 +17,7 @@ export interface SchedRow {
   slot: boolean
   status: Status
   format: string
+  platforms: string[] // где выходит: площадки всех материалов строки, в порядке плана
   group: string // канал или раздел: id группы и название
   channel: string
   color?: string
@@ -44,8 +45,9 @@ export interface ThemeGroup {
 }
 
 /** Карточки за период → строки по порядку: потоки 24/7 не идут. */
-function rowsOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, rubrics: Map<string, Rubric>): SchedRow[] {
+function rowsOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, rubrics: Map<string, Rubric>, order: string[]): SchedRow[] {
   const byId = new Map(channels.map((c) => [c.id, c]))
+  const at = (p: string) => (order.includes(p) ? order.indexOf(p) : order.length)
   return units
     .filter((u) => !u.stream && u.date)
     .sort((a, b) => a.date!.localeCompare(b.date!) || a.time.localeCompare(b.time))
@@ -66,6 +68,7 @@ function rowsOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, ru
         slot: isSlot(it),
         status: it.status,
         format: it.format,
+        platforms: [...new Set(u.items.flatMap((x) => x.platforms))].sort((a, b) => at(a) - at(b)),
         group: sec ? `${c.id}:${sec.id}` : c.id,
         channel: sec?.web ?? c.name,
         color: colorOf(c, sec?.id),
@@ -81,19 +84,20 @@ function rowsOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, ru
 function push(list: SchedRow[], r: SchedRow) {
   const same =
     !r.slot && list.find((x) => !x.slot && x.group === r.group && x.tag === r.tag && x.title === r.title && x.time === r.time && x.format === r.format)
-  if (!same) return list.push({ ...r, ids: [...r.ids] })
+  if (!same) return list.push({ ...r, ids: [...r.ids], platforms: [...r.platforms] })
   same.days.push(r.date)
   same.ids.push(...r.ids)
+  for (const p of r.platforms) if (!same.platforms.includes(p)) same.platforms.push(p)
 }
 
 /** По хэштегам: каналы и разделы (в порядке плана) → хэштеги (по первому выходу) → строки. */
-export function scheduleOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, rubrics: Map<string, Rubric>): SchedGroup[] {
+export function scheduleOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, rubrics: Map<string, Rubric>, platforms: string[] = []): SchedGroup[] {
   const groups = new Map<string, SchedGroup>()
   for (const c of channels) {
     groups.set(c.id, { id: c.id, name: c.name, color: c.color, tags: [] })
     for (const s of c.sections) groups.set(`${c.id}:${s.id}`, { id: `${c.id}:${s.id}`, name: s.web, color: colorOf(c, s.id), tags: [] })
   }
-  for (const r of rowsOf(channels, units, rules, rubrics)) {
+  for (const r of rowsOf(channels, units, rules, rubrics, platforms)) {
     const g = groups.get(r.group)!
     let tag = g.tags.find((t) => t.tag === r.tag)
     if (!tag) {
@@ -106,10 +110,16 @@ export function scheduleOf(channels: Channel[], units: Unit[], rules: Map<string
 }
 
 /** По темам: общие темы (по первому выходу) → всё, что по теме выходит, в любом канале и формате; без темы — отдельно. */
-export function themesOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, rubrics: Map<string, Rubric>): { themes: ThemeGroup[]; none: SchedRow[] } {
+export function themesOf(
+  channels: Channel[],
+  units: Unit[],
+  rules: Map<string, Rule>,
+  rubrics: Map<string, Rubric>,
+  platforms: string[] = [],
+): { themes: ThemeGroup[]; none: SchedRow[] } {
   const themes = new Map<string, ThemeGroup>()
   const none: SchedRow[] = []
-  for (const r of rowsOf(channels, units, rules, rubrics)) {
+  for (const r of rowsOf(channels, units, rules, rubrics, platforms)) {
     if (!r.theme) {
       push(none, r)
       continue

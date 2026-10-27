@@ -188,7 +188,7 @@ describe('T-CP-039 FR-CP-039 общая тема в форме', () => {
     vi.useRealTimers()
   })
 
-  it('новому контенту — общая тема с подсказкой уже заведённых; в «Расписании → Темы» он под ней вместе с FULL всей карточкой', async () => {
+  it('новому контенту — общая тема с подсказкой уже заведённых; в «Программе → Темы» он под ней вместе с FULL всей карточкой', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     // FULL «Стратегия»: общая тема из формы — всей карточке (и тизеру с анонсом)
@@ -211,13 +211,13 @@ describe('T-CP-039 FR-CP-039 общая тема в форме', () => {
 
     await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Дашборд' }))
     const dash = screen.getByRole('complementary', { name: 'Дашборд' })
-    await userEvent.click(within(dash).getByRole('radio', { name: 'Расписание' }))
+    await userEvent.click(within(dash).getByRole('radio', { name: 'Программа' }))
     await userEvent.click(within(dash).getByRole('radio', { name: 'Темы' }))
     const group = within(dash).getByRole('region', { name: 'Тема: ИИ-стратегия' })
-    expect(within(group).getAllByRole('button', { name: /окт, \d\d:\d\d:/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Пн, 26 окт, 12:00: Стратегия',
-      'Пн, 26 окт, 13:00: Стратегия',
-      'Ср, 28 окт, 11:00: Стратегия за 5 минут',
+    expect(within(group).getAllByRole('button', { name: /окт \d\d:\d\d:/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      '26 окт 12:00: Стратегия',
+      '26 окт 13:00: Стратегия',
+      '28 окт 11:00: Стратегия за 5 минут',
     ])
   })
 })

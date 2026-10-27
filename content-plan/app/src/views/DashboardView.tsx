@@ -30,7 +30,7 @@ const weekRange = (monday: ISODate) => {
 type DashView = 'summary' | 'schedule'
 const DASH_VIEWS: { id: DashView; label: string }[] = [
   { id: 'summary', label: 'Сводка' },
-  { id: 'schedule', label: 'Расписание' },
+  { id: 'schedule', label: 'Программа' },
 ]
 
 function readView(): DashView {
@@ -42,7 +42,7 @@ function readView(): DashView {
 }
 
 /** Дашборд SMM — панелью справа, календарь остаётся под ним. «Сводка»: за неделю — просьба уточнить темы, цифры,
- *  что делать сейчас и темы-хэштеги по каналам с периодичностью. «Расписание»: то же, перевёрнутое в план повествования —
+ *  что делать сейчас и темы-хэштеги по каналам с периодичностью. «Программа»: то же, перевёрнутое в план повествования —
  *  каналы, в них хэштеги, что и когда выходит. */
 export function DashboardSheet({ onClose }: { onClose: () => void }) {
   const { filters, setFilters } = usePlan()
@@ -123,20 +123,15 @@ function useTodo() {
 }
 
 function Stats() {
-  const { plan } = usePlan()
   const rows = useTodo()
   const t = today()
   const late = rows.filter((r) => r.due < t && r.unit.head.status !== 'ready').length
-  const week = rows.filter((r) => r.unit.date! >= t && r.unit.date! <= addDays(t, 6)).length
   const work = rows.filter((r) => r.unit.head.status === 'progress').length
   const ready = rows.filter((r) => r.unit.head.status === 'ready').length
-  const slots = plan.items.filter((x) => x.date && x.date >= t && x.date <= addDays(t, 30) && !x.derive && isSlot(x)).length
   const cells: { n: number; label: string; late?: boolean }[] = [
     { n: late, label: 'просрочено', late: late > 0 },
-    { n: week, label: 'выходит за 7 дней' },
     { n: work, label: 'в работе' },
     { n: ready, label: 'готово, ждёт выхода' },
-    { n: slots, label: 'слотов без темы на месяц' },
   ]
   return (
     <dl className="cp-stats" aria-label="Сводка">
