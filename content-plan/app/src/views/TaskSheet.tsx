@@ -1,30 +1,28 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { shortDate, WEEKDAYS, weekday } from '../model/dates'
 import { colorOf, isSlot, timeOf, titleIsFormat, type Item } from '../model/types'
-import { dueOf, leadOf, taskParts, unitsOf, type Unit } from '../model/units'
+import { taskParts, unitsOf, type Unit } from '../model/units'
 import { IconButton, mainChannelId, PickText, PlatformIcon, RubricChip, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
-/** Задача по созданию контента: тема, что сделать на каждой площадке; ниже строкой — когда выход, к какому дню, кто делает.
+/** Задача по созданию контента: тема, что сделать на каждой площадке; ниже строкой — когда выход.
  *  Открывается по ▶. Правки сохраняются сразу, каждая — шаг истории. */
 export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => void; onBack?: () => void }) {
   const { plan, byDate, dispatch, rules, rubrics, channels, openItem, setStatus, toast } = usePlan()
   const head = plan.items.find((x) => x.id === id)
   const [title, setTitle] = useState(head && !isSlot(head) ? head.title : '')
-  const [owner, setOwner] = useState(head?.owner ?? '')
   const [note, setNote] = useState(head?.note ?? '')
   const [noteOpen, setNoteOpen] = useState(!!head?.note)
   // текст сохраняется, когда поле теряет фокус; если лист закрыли раньше — при закрытии
-  const latest = useRef({ head, title, owner, note })
-  latest.current = { head, title, owner, note }
+  const latest = useRef({ head, title, note })
+  latest.current = { head, title, note }
   useEffect(
     () => () => {
-      const { head: h, title: t, owner: o, note: n } = latest.current
+      const { head: h, title: t, note: n } = latest.current
       if (!h) return
       const patch: Partial<Item> = {}
       if (t.trim() && t.trim() !== h.title) patch.title = t.trim()
-      if (o.trim() !== (h.owner ?? '')) patch.owner = o.trim() || undefined
       if (n !== (h.note ?? '')) patch.note = n || undefined
       if (Object.keys(patch).length) dispatch({ type: 'update', id: h.id, patch })
     },
@@ -43,7 +41,6 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
   const done = new Set(unit.head.done ?? [])
   const doneN = parts.filter((p) => done.has(p.key)).length
   const allDone = parts.length > 0 && doneN === parts.length
-  const due = dueOf(head, rule)
 
   const update = (patch: Partial<Item>) => dispatch({ type: 'update', id: head.id, patch })
   const toggle = (key: string) => update({ done: done.has(key) ? [...done].filter((k) => k !== key) : [...done, key] })
@@ -119,23 +116,8 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
               ) : (
                 <PickText type="time" label="Время выхода" value={unit.time} text={unit.time} onChange={(t) => t && head.date && dispatch({ type: 'move', id: head.id, date: head.date, time: t })} />
               )}
-              <span className="cp-task__sep" aria-hidden="true">·</span>
             </>
           )}
-          <span className="cp-task__due" title={head.due ? undefined : `По умолчанию — за ${leadOf(rule)} дн. до выхода`}>
-            срок <PickText type="date" label="Подготовить к" value={due ?? ''} text={due ? shortDate(due) : ''} placeholder="—" onChange={(d) => update({ due: d || undefined })} />
-          </span>
-          <span className="cp-task__sep" aria-hidden="true">·</span>
-          <input
-            className="cp-inline"
-            aria-label="Кто делает"
-            placeholder="кто делает"
-            value={owner}
-            size={Math.max(10, owner.length + 1)}
-            onChange={(e) => setOwner(e.target.value)}
-            onBlur={() => owner.trim() !== (head.owner ?? '') && update({ owner: owner.trim() || undefined })}
-            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          />
         </div>
 
         <div className="cp-task__status">

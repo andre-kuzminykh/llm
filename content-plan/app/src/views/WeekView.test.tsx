@@ -4,7 +4,7 @@ import { renderApp } from '../test/renderApp'
 
 // календарь неделей по времени, неделя на экран: колонка — (1200 − 56) / 7 px (в jsdom ширины нет — берётся 1200)
 const COL = Math.floor((1200 - 56) / 7)
-const HOUR = 64
+const HOUR = 80
 const week = () => renderApp(undefined, { 'cp:week-mode': 'time' })
 const sheet = () => document.querySelector('.cp-body') as HTMLElement
 const column = (date: string) => document.querySelector(`.cp-tg__col[data-date="${date}"]`) as HTMLElement
@@ -44,9 +44,9 @@ describe('T-CP-029 FR-CP-029 календарь по времени — жест
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     const grip = card('demo').querySelector('.cp-tg__grip') as HTMLElement
     fireEvent.pointerDown(grip, { clientX: xOf('2026-10-26'), clientY: 400 })
-    fireEvent.pointerMove(sheet(), { clientX: xOf('2026-10-26'), clientY: 400 + 1.4 * HOUR }) // +84 минуты → 14:30
+    fireEvent.pointerMove(sheet(), { clientX: xOf('2026-10-26'), clientY: 400 + 2 * HOUR }) // конец 12:30 (карточка — полчаса) + 2 ч → 14:30
     expect(within(card('demo')).getByText('12:00–14:30')).toBeInTheDocument()
-    fireEvent.pointerUp(sheet(), { clientX: xOf('2026-10-26'), clientY: 400 + 1.4 * HOUR })
+    fireEvent.pointerUp(sheet(), { clientX: xOf('2026-10-26'), clientY: 400 + 2 * HOUR })
     expect(within(card('demo')).getByText('12:00–14:30')).toBeInTheDocument()
     expect(parseFloat(card('demo').style.height)).toBeCloseTo(2.5 * HOUR - 2)
     // растянутая карточка едет с той же длительностью
@@ -208,5 +208,93 @@ describe('T-CP-034 FR-CP-034 несколько карточек сразу', ()
     expect(within(column('2026-10-28')).queryByRole('button', { name: /Я устал от хайпа/ })).toBeNull()
     await userEvent.keyboard('{Control>}z{/Control}')
     expect(within(column('2026-10-28')).getByRole('button', { name: /^Тезисы · Тезис дня: Я устал от хайпа/ })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-043 FR-CP-043 каналы правятся в дорожках «Каналы»', () => {
+  it('«Добавить канал» внизу — пустая дорожка видна; «⋯»: выше, переименовать', async () => {
+    renderApp(undefined, { 'cp:week-mode': 'channels' })
+    const grid = await screen.findByRole('grid', { name: 'Неделя по каналам' })
+    const lanes = () => within(grid).getAllByRole('rowheader').map((h) => h.textContent?.replace(/\d+$/, ''))
+    await userEvent.click(within(grid).getByRole('button', { name: 'Добавить канал' }))
+    await userEvent.type(within(grid).getByRole('textbox', { name: 'Новый канал' }), 'Podcast{Enter}')
+    expect(lanes()).toContain('Podcast')
+    await userEvent.click(within(grid).getByRole('button', { name: 'Ещё: Podcast' }))
+    await userEvent.click(within(grid).getByRole('menuitem', { name: 'Выше' }))
+    const names = within(grid).getAllByRole('button', { name: /^Ещё: / }).map((b) => b.getAttribute('aria-label')!.slice(5))
+    expect(names.indexOf('Podcast')).toBe(names.length - 2)
+    await userEvent.click(within(grid).getByRole('button', { name: 'Ещё: Podcast' }))
+    await userEvent.click(within(grid).getByRole('menuitem', { name: 'Переименовать' }))
+    const input = within(grid).getByRole('textbox', { name: 'Новое название канала «Podcast»' })
+    await userEvent.clear(input)
+    await userEvent.type(input, 'Подкаст{Enter}')
+    expect(within(grid).getByRole('button', { name: 'Ещё: Подкаст' })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-045 FR-CP-045 карточка на полчаса; щелчок по пустому месту шкалы — новый контент на это время', () => {
+  it('щелчок в 10:40 — форма «Новый контент» на этот день и 10:30', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    const col = document.querySelector('.cp-tg__col[data-date="2026-10-29"]') as HTMLElement
+    fireEvent.click(col, { clientY: 80 * 10 + 53 }) // 80 px на час: 10:40
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    expect(within(form).getByLabelText('Дата')).toHaveValue('2026-10-29')
+    expect(within(form).getByLabelText('Время выхода')).toHaveValue('10:30')
+  })
+})
+
+describe('T-CP-046 FR-CP-046 «Неделя / Месяц»: в месяце в каждом дне видно всё', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('переключатель значками — выбран один; в месяце все карточки дня, стрелки — соседний месяц; выбор помнится', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    const toggle = () => screen.getByRole('radiogroup', { name: 'Неделя или месяц' })
+    expect(within(toggle()).getByRole('radio', { name: 'Неделя' })).toHaveAttribute('aria-checked', 'true')
+    await userEvent.click(within(toggle()).getByRole('radio', { name: 'Месяц' }))
+    expect(within(toggle()).getByRole('radio', { name: 'Месяц' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(toggle()).getByRole('radio', { name: 'Неделя' })).toHaveAttribute('aria-checked', 'false')
+    expect(localStorage.getItem('cp:span')).toBe('month')
+    const month = screen.getByRole('grid', { name: 'Месяц: Октябрь 2026' })
+    // вид недели (время, каналы…) в месяце не нужен
+    expect(screen.queryByRole('radiogroup', { name: 'Вид календаря' })).toBeNull()
+    // 26 октября: тезис, FULL с тизером и анонсом (одна карточка), анонс Andre AIT — все видны
+    const day = month.querySelector('[data-date="2026-10-26"]') as HTMLElement
+    expect(within(day).getByRole('button', { name: /^Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ/ })).toBeInTheDocument()
+    expect(within(day).getByRole('button', { name: /^Демо · FULL: Стратегия/ })).toBeInTheDocument()
+    expect(within(day).getByRole('button', { name: /^Демо · Анонс от Andre AIT: Стратегия/ })).toBeInTheDocument()
+    // пустое место дня — новый контент на этот день
+    fireEvent.click(month.querySelector('[data-date="2026-10-30"]') as HTMLElement)
+    expect(within(screen.getByRole('complementary', { name: 'Новый контент' })).getByLabelText('Дата')).toHaveValue('2026-10-30')
+    await userEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }))
+    expect(screen.getByRole('grid', { name: 'Месяц: Ноябрь 2026' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Предыдущий месяц' }))
+    await userEvent.click(within(toggle()).getByRole('radio', { name: 'Неделя' }))
+    expect(screen.getByRole('grid', { name: 'Неделя по времени' })).toBeInTheDocument()
+  })
+  it('карточку переносят на другой день месяца', async () => {
+    renderApp(undefined, { 'cp:span': 'month' })
+    const month = await screen.findByRole('grid', { name: 'Месяц: Октябрь 2026' })
+    const thesis = within(month.querySelector('[data-date="2026-10-26"]') as HTMLElement).getByRole('button', { name: /^Тезисы · Тезис дня/ }).closest('.cp-card') as HTMLElement
+    const target = month.querySelector('[data-date="2026-10-29"]') as HTMLElement
+    target.getBoundingClientRect = () => ({ left: 500, right: 600, top: 300, bottom: 400, width: 100, height: 100, x: 500, y: 300, toJSON: () => ({}) })
+    const at = document.elementFromPoint
+    document.elementFromPoint = () => target
+    try {
+      fireEvent.pointerDown(thesis, { button: 0, pointerType: 'mouse', clientX: 10, clientY: 10, isPrimary: true })
+      fireEvent.pointerMove(window, { pointerType: 'mouse', clientX: 550, clientY: 350 })
+      fireEvent.pointerUp(window, { pointerType: 'mouse', clientX: 550, clientY: 350 })
+    } finally {
+      document.elementFromPoint = at
+    }
+    expect(within(month.querySelector('[data-date="2026-10-29"]') as HTMLElement).getByRole('button', { name: /^Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ/ })).toBeInTheDocument()
   })
 })

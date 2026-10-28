@@ -76,7 +76,7 @@ export function DraftsSheet({ onClose }: { onClose: () => void }) {
       </div>
       <div className="cp-sheet__body nr-scroll">
         <p className="cp-hint">Банк идей: темы без даты. Перетащите тему на день в календаре, разложите по слотам — или при планировании недели они подставятся сами.</p>
-        <div className="cp-tags" role="group" aria-label="Хэштеги черновиков">
+        <div className="cp-tags" role="group" aria-label="Рубрики черновиков">
           {rules.map((r) => {
             const n = bankOf(plan, r.id).length
             return (

@@ -18,7 +18,7 @@ export function suggestTags(options: Rubric[], text: string, max = 6): Rubric[] 
   return [...starts, ...inside].slice(0, max)
 }
 
-export function TagInput({ label, value, options, onPick, disabled, placeholder = '#хэштег', allowNew = true }: {
+export function TagInput({ label, value, options, onPick, disabled, placeholder = '#рубрика', allowNew = true }: {
   label: string
   value: string // что показано, пока не начали печатать: «#тезисы»
   options: Rubric[]
@@ -91,7 +91,7 @@ export function TagInput({ label, value, options, onPick, disabled, placeholder 
               }}
               onMouseEnter={() => setActive(i)}
             >
-              {'rubric' in p ? tagOf(p.rubric.name) : `Новый хэштег ${tagOf(p.name)}`}
+              {'rubric' in p ? tagOf(p.rubric.name) : `Новая рубрика ${tagOf(p.name)}`}
             </span>
           ))}
         </span>

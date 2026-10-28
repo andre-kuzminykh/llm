@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { smallPlan } from '../test/fixtures'
 import { renderApp } from '../test/renderApp'
@@ -69,7 +69,7 @@ describe('T-CP-040 FR-CP-040 канал: «⋯» — переименовать 
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Landao' }))
     const menu = within(side()).getByRole('menu', { name: 'Канал «Landao»' })
-    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Переименовать', 'Удалить'])
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Переименовать', 'Выше', 'Ниже', 'Удалить'])
     await userEvent.keyboard('{Escape}')
     expect(within(side()).queryByRole('menu')).toBeNull()
 
@@ -81,7 +81,7 @@ describe('T-CP-040 FR-CP-040 канал: «⋯» — переименовать 
     expect(screen.getByText('Канал «Dataist» уже есть')).toBeInTheDocument()
     await userEvent.clear(input)
     await userEvent.type(input, 'Landao Studio{Enter}')
-    expect(within(side()).getByRole('button', { name: 'Landao Studio с 02.11' })).toBeInTheDocument()
+    expect(within(side()).getByRole('button', { name: 'Landao Studio' })).toBeInTheDocument() // без «с 02.11»
 
     await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Andre AIT' }))
     await userEvent.click(within(side()).getByRole('menuitem', { name: 'Удалить' }))
@@ -101,5 +101,56 @@ describe('T-CP-040 FR-CP-040 канал: «⋯» — переименовать 
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Dataist' }))
     expect(within(side()).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
+  })
+  it('порядок каналов: «Выше / Ниже» в «⋯» и перетаскивание мышью; ⌘Z возвращает', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    const order = () => within(side()).getAllByRole('button', { name: /^Ещё: / }).map((b) => b.getAttribute('aria-label')!.slice(5))
+    expect(order()).toEqual(['Dataist', 'Andre AIT', 'Landao'])
+    await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Landao' }))
+    expect(within(side()).getByRole('menuitem', { name: 'Ниже' })).toBeDisabled()
+    await userEvent.click(within(side()).getByRole('menuitem', { name: 'Выше' }))
+    expect(order()).toEqual(['Dataist', 'Landao', 'Andre AIT'])
+    // мышью: взять Dataist и потянуть вниз за всех
+    const row = within(side()).getByRole('button', { name: 'Dataist' })
+    fireEvent.pointerDown(row, { button: 0, pointerType: 'mouse', clientY: 10 })
+    fireEvent.pointerMove(window, { pointerType: 'mouse', clientY: 80 })
+    fireEvent.pointerUp(window, { pointerType: 'mouse', clientY: 80 })
+    expect(order()).toEqual(['Landao', 'Andre AIT', 'Dataist'])
+    await userEvent.keyboard('{Control>}z{/Control}')
+    expect(order()).toEqual(['Dataist', 'Landao', 'Andre AIT'])
+  })
+})
+
+describe('T-CP-044 FR-CP-044 рубрики в фильтре — выделить', () => {
+  it('ничего не выделено — видны все; щелчок выделяет — видны только выделенные; «Выделить все» и «Снять выделение»', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    const tags = () => within(side()).getByRole('group', { name: 'Рубрики' })
+    const pill = (name: string) => within(tags()).getByRole('button', { name })
+    const thesis = () => within(day('2026-10-26')).queryByRole('button', { name: /^Тезисы · Тезис дня/ })
+    const demo = () => within(day('2026-10-26')).queryByRole('button', { name: /^Демо · FULL/ })
+    expect(within(tags()).getAllByRole('button').every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true)
+    expect(thesis()).not.toBeNull()
+    expect(demo()).not.toBeNull()
+
+    await userEvent.click(pill('#тезисы'))
+    expect(pill('#тезисы')).toHaveAttribute('aria-pressed', 'true')
+    expect(thesis()).not.toBeNull()
+    expect(demo()).toBeNull()
+    expect(within(side()).getByRole('button', { name: 'Сбросить' })).toBeInTheDocument() // фильтр включён
+
+    await userEvent.click(pill('#демо'))
+    expect(demo()).not.toBeNull()
+
+    await userEvent.click(within(side()).getByRole('button', { name: 'Выделить все' }))
+    expect(within(tags()).getAllByRole('button').every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true)
+    expect(within(side()).getByRole('button', { name: 'Выделить все' })).toBeDisabled()
+    expect(within(side()).queryByRole('button', { name: 'Сбросить' })).toBeNull() // все выделены — фильтра нет
+
+    await userEvent.click(within(side()).getByRole('button', { name: 'Снять выделение' }))
+    expect(within(tags()).getAllByRole('button').every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true)
+    expect(thesis()).not.toBeNull()
+    expect(demo()).not.toBeNull()
   })
 })

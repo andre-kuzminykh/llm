@@ -1,9 +1,8 @@
 import { useId, useMemo, useState } from 'react'
-import { addDays, dayTitle, shortDate, WEEKDAYS, weekday } from '../model/dates'
+import { dayTitle, shortDate, weekday } from '../model/dates'
 import { newId, type Action } from '../model/store'
-import { FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type ISODate, type Item, type Rule, type Status } from '../model/types'
-import { dueOf, leadOf } from '../model/units'
-import { IconButton, PickText, Seg, StatusPicker, Switch } from '../ui/bits'
+import { FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type Item, type Rule, type Status } from '../model/types'
+import { IconButton, PickText, StatusPicker, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 import { TagInput, type TagPick } from '../ui/TagInput'
@@ -18,7 +17,7 @@ interface Props {
 
 /** Форма материала: новый или существующий. Сохранение — один шаг истории. */
 export function ItemEditor({ id, draft, onClose, onBack }: Props) {
-  const { plan, dispatch, rubrics, rules, channels, toast, openItem, labelOf } = usePlan()
+  const { plan, dispatch, rubrics, rules, channels, toast, openItem } = usePlan()
   const existing = id ? plan.items.find((x) => x.id === id) : undefined
   const base: Partial<Item> = existing ?? draft ?? {}
   const titleId = useId()
@@ -46,27 +45,18 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [status, setStatus] = useState<Status>(base.status ?? 'planned')
   const [note, setNote] = useState(base.note ?? '')
   const [time, setTime] = useState(base.time ?? '')
-  const [owner, setOwner] = useState(base.owner ?? '')
-  const [due, setDue] = useState(base.due ?? '')
-  const [theme, setTheme] = useState(base.theme ?? '') // общая тема над несколькими материалами
-  const themesId = useId()
-  const [offGrid, setOffGrid] = useState<boolean | null>(base.offGrid ?? (existing ? false : null))
   const [withGroup, setWithGroup] = useState(true)
   const [withFamily, setWithFamily] = useState(true)
   const [error, setError] = useState('')
-  const [more, setMore] = useState(!existing) // новый контент — все поля сразу
-  const [copies, setCopies] = useState<ISODate[]>([]) // копии на другие даты
-  const [versions, setVersions] = useState<string[]>([]) // пересоздать для этих площадок
-  const [after, setAfter] = useState(false) // версии — автоматически, когда оригинал выйдет
-  const [newTag, setNewTag] = useState('') // хэштег, которого ещё нет: заведётся при сохранении
+  const [newTag, setNewTag] = useState('') // рубрика, которой ещё нет: заведётся при сохранении
   const [format, setFormat] = useState(base.format ?? rules.get(firstRule)?.format ?? TEXT_IMAGE)
 
   const channel = channels.get(channelId)
   const rule = rules.get(ruleId)
   const rubric = rubricId ? rubrics.get(rubricId) : undefined
-  // у хэштега в этом канале ещё нет такого формата — при сохранении заведётся, разовый (периодичность — в «Темах»)
+  // у рубрики в этом канале ещё нет такого формата — при сохранении заведётся, разовый (периодичность — в «Темах»)
   const needRule = !rule || rule.channelId !== channelId || (rule.rubricId !== null && rule.rubricId !== rubricId) || !!newTag || (!existing && rule.format !== format)
-  // одного формата у хэштега может быть несколько в сетке: «Исследование дня» и «Итоги месяца» — обе страницы на сайте
+  // одного формата у рубрики может быть несколько в сетке: «Исследование дня» и «Итоги месяца» — обе страницы на сайте
   const fits = needRule ? [] : rulesFor(channelId, rubricId).filter((r) => r.format === format || r.id === ruleId)
   const members = useMemo(
     () => (existing?.group && existing.date ? plan.items.filter((x) => x.group === existing.group && x.date === existing.date && x.id !== existing.id) : []),
@@ -74,9 +64,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   )
   const isBank = !!existing && existing.date === null
   const fromFull = !!existing?.derive // рубрика берётся у FULL группы
-  // разовый материал на «чужой» день — сразу вне сетки, чтобы проверка не ругалась; можно выключить
+  // новый материал на «чужой» день — разовый: проверка сетки его не трогает
   const offDay = !!date && !!rule && !rule.days[weekday(date)]
-  const isOffGrid = offGrid ?? offDay
 
   const takeRule = (r: Rule | undefined) => {
     setRuleId(r?.id ?? '')
@@ -84,12 +73,12 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     if (r) setFormat(r.format)
     if (!existing && r) setPlatforms(r.platforms)
   }
-  /** Формат хэштега в канале: такой же, как выбран, если есть, иначе первый. */
+  /** Формат рубрики в канале: такой же, как выбран, если есть, иначе первый. */
   const ruleFor = (cid: string, rb: string | null) => {
     const list = rulesFor(cid, rb)
     return list.find((r) => r.format === format) ?? list[0]
   }
-  /** Выбрали формат: есть такой у хэштега в канале — берём его; нет — заведётся при сохранении (у материала — просто формат). */
+  /** Выбрали формат: есть такой у рубрики в канале — берём его; нет — заведётся при сохранении (у материала — просто формат). */
   const pickFormat = (f: string) => {
     setFormat(f)
     const r = rulesFor(channelId, rubricId).find((x) => x.format === f)
@@ -112,7 +101,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     setNewTag('')
     if (rule?.rubricId !== null) takeRule(ruleFor(channelId, rb))
   }
-  /** Хэштег из подсказок или новый: у такого в канале может не быть формата — тогда он заведётся при сохранении. */
+  /** Рубрика из подсказок или новая: у такой в канале может не быть формата — тогда он заведётся при сохранении. */
   const pickTag = (p: TagPick) => {
     if ('rubric' in p) return pickRubric(p.rubric.id)
     setNewTag(p.name)
@@ -124,12 +113,9 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const save = (toDrafts = false) => {
     const t = title.trim() || PLACEHOLDER
     const day = toDrafts ? '' : date
-    if (!platforms.length) {
-      setMore(true)
-      return setError('Выберите хотя бы одну площадку')
-    }
+    if (!platforms.length) return setError('Выберите хотя бы одну площадку')
     if (toDrafts && t === PLACEHOLDER) return setError('Для черновика нужна тема')
-    // новый хэштег или хэштег без формата в канале: заводим их тем же шагом истории
+    // новая рубрика или рубрика без формата в канале: заводим их тем же шагом истории
     const setup: Action[] = []
     let ruleNow: Rule | undefined = rule
     if (needRule) {
@@ -152,26 +138,16 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       note: note || undefined,
       format,
       time: time && time !== ruleNow.time ? time : undefined,
-      owner: owner.trim() || undefined,
-      due: due || undefined,
-      theme: theme.trim().replace(/\s+/g, ' ') || undefined,
-      offGrid: (isOffGrid || (needRule && !!day)) || undefined,
+      // у материала флаг остаётся как был; новый на «чужой» день или с новым форматом — разовый
+      offGrid: (existing && !isBank ? existing.offGrid : offDay || (needRule && !!day)) || undefined,
     }
-    // копии и версии — в том же шаге истории, что и сам материал
-    const extra = (id: string): Action[] => [
-      ...copies.map((d): Action => ({ type: 'duplicate', id, date: d })),
-      ...(versions.length && day ? [{ type: 'versions', id, platforms: versions, after } as Action] : []),
-    ]
-    const also = [copies.length && !!day && `копий: ${copies.length}`, versions.length && day && `версий: ${versions.length}${after ? ', после выхода' : ''}`].filter(Boolean).join(', ')
     const run = (actions: Action[]) => dispatch(actions.length > 1 ? { type: 'batch', actions } : actions[0])
     if (existing && isBank && date) {
-      run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }, ...extra(existing.id)])
-      toast(`Тема поставлена на ${date}${also ? ` · ${also}` : ''}`, true)
+      run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }])
+      toast(`Тема поставлена на ${shortDate(date)}`, true)
     } else if (existing) {
-      // общая тема — всей карточке: тизеру, анонсам и письмам группы тоже
-      const themed: Action[] = patch.theme !== existing.theme && members.length ? [{ type: 'updateMany', ids: members.map((x) => x.id), patch: { theme: patch.theme } }] : []
-      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }, ...themed, ...extra(existing.id)])
-      toast(`Сохранено${also ? ` · ${also}` : ''}`, true)
+      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }])
+      toast('Сохранено', true)
     } else {
       const sample = plan.items.find((x) => x.ruleId === ruleNow!.id && x.date && !x.derive)
       const item: Item = {
@@ -189,14 +165,11 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         rank: sample?.rank ?? 50,
         note: patch.note,
         time: patch.time,
-        owner: patch.owner,
-        due: patch.due,
-        theme: patch.theme,
         offGrid: patch.offGrid,
       }
       for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
-      run([...setup, { type: 'create', item, withFamily: withFamily && !!day && !needRule }, ...(day ? extra(item.id) : [])])
-      toast(day ? `Создано на ${shortDate(day)}${also ? ` · ${also}` : ''}` : 'Сохранено в черновики', true)
+      run([...setup, { type: 'create', item, withFamily: withFamily && !!day && !needRule }])
+      toast(day ? `Создано на ${shortDate(day)}` : 'Сохранено в черновики', true)
     }
     onClose()
   }
@@ -209,12 +182,6 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   }
 
   const heading = existing ? (isBank ? 'Черновик' : 'Материал') : 'Новый контент'
-  const offGridField = (
-    <div className="cp-field">
-      <Switch checked={isOffGrid} onChange={setOffGrid}>Вне сетки — разовый, проверка его не трогает</Switch>
-      {offDay && rule && <span className="cp-hint">По сетке «{labelOf({ rubricId, ruleId })}» не выходит в {WEEKDAYS[weekday(date)]}.</span>}
-    </div>
-  )
   return (
     <aside className="cp-sheet" aria-label={heading} onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && save()}>
       <div className="cp-sheet__head">
@@ -223,6 +190,18 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
       <div className="cp-sheet__body nr-scroll">
+        <div className="cp-field" title={rubric?.what || undefined}>
+          <span className="nr-label">Рубрика</span>
+          <TagInput
+            label="Рубрика"
+            value={newTag ? tagOf(newTag) : rubric ? tagOf(rubric.name) : ''}
+            // рубрики этого канала — первыми, потом остальные
+            options={[...rubricsFor(channelId, rubricId), ...plan.rubrics.filter((r) => !rubricsFor(channelId, rubricId).includes(r))]}
+            onPick={pickTag}
+            disabled={fromFull}
+          />
+        </div>
+
         <div className="cp-field">
           <label className="nr-label" htmlFor={titleId}>Тема</label>
           <textarea
@@ -250,29 +229,16 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           )}
         </div>
 
-        <div className="cp-field__row cp-field__row--fmt">
-          <div className="cp-field" title={rubric?.what || undefined}>
-            <span className="nr-label">Хэштег</span>
-            <TagInput
-              label="Хэштег"
-              value={newTag ? tagOf(newTag) : rubric ? tagOf(rubric.name) : ''}
-              // хэштеги этого канала — первыми, потом остальные
-              options={[...rubricsFor(channelId, rubricId), ...plan.rubrics.filter((r) => !rubricsFor(channelId, rubricId).includes(r))]}
-              onPick={pickTag}
-              disabled={fromFull}
-            />
-          </div>
-          <div className="cp-field" title={needRule ? 'У хэштега в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
-            <span className="nr-label">Формат{needRule && <span className="cp-field__new"> · новый</span>}</span>
-            {/* значками: горизонталь, вертикаль, веб, пост — щёлкнуть один */}
-            <div className="cp-fmt" role="radiogroup" aria-label="Формат">
-              {FORMATS.flatMap((g) => g.items).map((f) => (
-                <button key={f} type="button" role="radio" aria-checked={format === f} aria-label={f} title={f} className="cp-fmt__opt" onClick={() => pickFormat(f)}>
-                  <Icon name={FORMAT_ICON[f].icon} size={22} />
-                  <span className="cp-fmt__label">{FORMAT_ICON[f].label}</span>
-                </button>
-              ))}
-            </div>
+        <div className="cp-field" title={needRule ? 'У рубрики в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
+          <span className="nr-label">Формат{needRule && <span className="cp-field__new"> · новый</span>}</span>
+          {/* значками: горизонталь, вертикаль, веб, пост — щёлкнуть один */}
+          <div className="cp-fmt" role="radiogroup" aria-label="Формат">
+            {FORMATS.flatMap((g) => g.items).map((f) => (
+              <button key={f} type="button" role="radio" aria-checked={format === f} aria-label={f} title={f} className="cp-fmt__opt" onClick={() => pickFormat(f)}>
+                <Icon name={FORMAT_ICON[f].icon} size={22} />
+                <span className="cp-fmt__label">{FORMAT_ICON[f].label}</span>
+              </button>
+            ))}
           </div>
         </div>
         {fits.length > 1 && (
@@ -286,168 +252,67 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           </label>
         )}
 
-        <label className="cp-field" title="Одна тема у нескольких материалов разных форматов — по ней их видно в «Программе»">
-          <span className="nr-label">Общая тема</span>
-          <input
-            className="nr-field"
-            list={themesId}
-            value={theme}
-            placeholder="Например, «ИИ-агенты в продажах» — объединит видео, шортсы и тексты"
-            onChange={(e) => setTheme(e.target.value)}
-          />
-          <datalist id={themesId}>
-            {[...new Set(plan.items.map((x) => x.theme).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'ru')).map((t) => (
-              <option key={t} value={t} />
+        <label className="cp-field">
+          <span className="nr-label">Канал</span>
+          <select className="nr-field" value={channelId} onChange={(e) => pickChannel(e.target.value)} disabled={!!existing?.group && members.length > 0}>
+            {plan.channels.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
-          </datalist>
+          </select>
+        </label>
+        {channel && channel.sections.length > 0 && (rule?.sectionId || sectionId) && (
+          <label className="cp-field">
+            <span className="nr-label">Раздел</span>
+            <select className="nr-field" value={sectionId ?? ''} onChange={(e) => setSectionId(e.target.value || undefined)}>
+              <option value="">—</option>
+              {channel.sections.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <div className="cp-field">
+          <span className="nr-label">Площадки</span>
+          <div className="cp-pills" style={{ padding: 0 }}>
+            {plan.platforms.map((p) => {
+              const allowed = channel?.platforms.includes(p)
+              if (!allowed && !platforms.includes(p)) return null
+              return (
+                <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
+                  {p}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="cp-task__status">
+          <span className="nr-label">Статус</span>
+          <StatusPicker size="sm" value={status} onChange={setStatus} />
+        </div>
+
+        <label className="cp-field">
+          <span className="nr-label">Заметка</span>
+          <textarea className="nr-field" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Сценарий, ссылки, что учесть" />
         </label>
 
-        {date && offDay && offGridField}
-
-        <button type="button" className="cp-more-btn" aria-expanded={more} onClick={() => setMore(!more)}>
-          <Icon name="chev-right" size={14} />
-          Подробнее
-        </button>
-        {more && (
-          <div className="cp-form__more">
-            <label className="cp-field">
-              <span className="nr-label">Канал</span>
-              <select className="nr-field" value={channelId} onChange={(e) => pickChannel(e.target.value)} disabled={!!existing?.group && members.length > 0}>
-                {plan.channels.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </label>
-            {channel && channel.sections.length > 0 && (rule?.sectionId || sectionId) && (
-              <label className="cp-field">
-                <span className="nr-label">Раздел</span>
-                <select className="nr-field" value={sectionId ?? ''} onChange={(e) => setSectionId(e.target.value || undefined)}>
-                  <option value="">—</option>
-                  {channel.sections.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            <div className="cp-field">
-              <span className="nr-label">Площадки</span>
-              <div className="cp-pills" style={{ padding: 0 }}>
-                {plan.platforms.map((p) => {
-                  const allowed = channel?.platforms.includes(p)
-                  if (!allowed && !platforms.includes(p)) return null
-                  return (
-                    <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
-                      {p}
-                    </button>
-                  )
-                })}
-              </div>
+        {members.length > 0 && (
+          <div className="cp-field">
+            <span className="nr-label">Группа · {members.length + 1}</span>
+            <div className="cp-members">
+              {members.map((m) => (
+                <button key={m.id} type="button" className="nr-pill" onClick={() => openItem(m.id)} title="Открыть этот материал">
+                  {rules.get(m.ruleId)?.name ?? m.ruleId}
+                  {m.channelId !== existing?.channelId && <span className="cp-muted">· {channels.get(m.channelId)?.name}</span>}
+                </button>
+              ))}
             </div>
-
-            <div className="cp-task__status">
-              <span className="nr-label">Статус</span>
-              <StatusPicker size="sm" value={status} onChange={setStatus} />
-            </div>
-
-            <div className="cp-field__row">
-              <label className="cp-field">
-                <span className="nr-label">Кто делает</span>
-                <input className="nr-field" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Имя" />
-              </label>
-              {date && (
-                <div className="cp-field">
-                  <span className="nr-label">Подготовить к</span>
-                  <PickText
-                    type="date"
-                    label="Подготовить к"
-                    value={due || (existing ? dueOf({ ...existing, date }, rule) ?? '' : addDays(date, -leadOf(rule)))}
-                    text={shortDate(due || (existing ? dueOf({ ...existing, date }, rule) ?? date : addDays(date, -leadOf(rule))))}
-                    onChange={setDue}
-                  />
-                </div>
-              )}
-            </div>
-
-            <label className="cp-field">
-              <span className="nr-label">Заметка</span>
-              <textarea className="nr-field" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Сценарий, ссылки, что учесть" />
-            </label>
-
-            {date && !offDay && offGridField}
-
-            {members.length > 0 && (
-              <div className="cp-field">
-                <span className="nr-label">Группа · {members.length + 1}</span>
-                <div className="cp-members">
-                  {members.map((m) => (
-                    <button key={m.id} type="button" className="nr-pill" onClick={() => openItem(m.id)} title="Открыть этот материал">
-                      {rules.get(m.ruleId)?.name ?? m.ruleId}
-                      {m.channelId !== existing?.channelId && <span className="cp-muted">· {channels.get(m.channelId)?.name}</span>}
-                    </button>
-                  ))}
-                </div>
-                <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
-              </div>
-            )}
-            {!existing && (
-              <Switch checked={withFamily} onChange={setWithFamily}>С сопутствующими публикациями, как у ближайшего материала рубрики</Switch>
-            )}
-            {date && !isBank && (
-              <div className="cp-field">
-                <span className="nr-label">Копии на другие даты</span>
-                <div className="cp-chips cp-chips--wrap" role="group" aria-label="Копии на другие даты">
-                  {copies.map((d) => (
-                    <button key={d} type="button" className="cp-chip" aria-label={`Убрать копию на ${shortDate(d)}`} onClick={() => setCopies(copies.filter((x) => x !== d))}>
-                      {WEEKDAYS[weekday(d)]}, {shortDate(d)}
-                      <Icon name="close" size={12} />
-                    </button>
-                  ))}
-                  <PickText type="date" label="Копия на дату" value="" text="" placeholder="+ дата" onChange={(d) => d && d !== date && !copies.includes(d) && setCopies([...copies, d].sort())} />
-                </div>
-              </div>
-            )}
-            {date && !isBank && (
-              <div className="cp-field">
-                <span className="nr-label">Пересоздать для площадок</span>
-                <div className="cp-pills" style={{ padding: 0 }} role="group" aria-label="Пересоздать для площадок">
-                  {plan.platforms
-                    .filter((p) => !platforms.includes(p))
-                    .map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        className="nr-pill"
-                        aria-pressed={versions.includes(p)}
-                        aria-label={`Версия для ${p}`}
-                        onClick={() => setVersions(versions.includes(p) ? versions.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || versions.includes(x)))}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                </div>
-                {versions.length > 0 && (
-                  <Seg
-                    value={after ? 'after' : 'with'}
-                    onChange={(v) => setAfter(v === 'after')}
-                    label="Когда пересоздать"
-                    options={[
-                      { id: 'with', label: 'Вместе с оригиналом' },
-                      { id: 'after', label: 'Автоматически после выхода' },
-                    ]}
-                  />
-                )}
-                {versions.length > 0 && (
-                  <span className="cp-hint">
-                    {after
-                      ? 'Когда оригинал отметят «Вышло», версии на следующий день станут задачами «в работе».'
-                      : 'Версии выйдут в тот же день и встанут в ту же карточку.'}
-                  </span>
-                )}
-              </div>
-            )}
-            {existing?.origDate && <p className="cp-hint">В исходной сетке стоял {shortDate(existing.origDate)}.</p>}
+            <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
           </div>
+        )}
+        {!existing && (
+          <Switch checked={withFamily} onChange={setWithFamily}>С сопутствующими публикациями, как у ближайшего материала рубрики</Switch>
         )}
         {error && <p className="cp-hint" style={{ color: 'var(--nr-danger)' }} role="alert">{error}</p>}
       </div>

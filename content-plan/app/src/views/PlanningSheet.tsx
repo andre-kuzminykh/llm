@@ -27,7 +27,7 @@ export function PlanningSheet({ onClose, onBack }: { onClose: () => void; onBack
       </div>
       <div className="cp-sheet__body nr-scroll">
         <p className="cp-hint">
-          Слоты без темы до {shortDate(planningEnd(t))}: их ставит периодичность хэштегов. Впишите тему (Enter) или возьмите ближайший черновик того же хэштега.
+          Слоты без темы до {shortDate(planningEnd(t))}: их ставит периодичность рубрик. Впишите тему (Enter) или возьмите ближайший черновик той же рубрики.
         </p>
         {drafts.size > 0 && (
           <button
@@ -92,7 +92,7 @@ function PlanRow({ item, draft }: { item: Item; draft?: Item }) {
         <span className="cp-planrow__ok" aria-label="Тема есть" role="img"><Icon name="check" size={14} /></span>
       ) : (
         draft && (
-          <button type="button" className="cp-chip cp-planrow__draft" onClick={() => dispatch({ type: 'takeDraft', slotId: item.id, draftId: draft.id })} aria-label={`Из черновиков: ${draft.title}`} title="Взять ближайший черновик того же хэштега">
+          <button type="button" className="cp-chip cp-planrow__draft" onClick={() => dispatch({ type: 'takeDraft', slotId: item.id, draftId: draft.id })} aria-label={`Из черновиков: ${draft.title}`} title="Взять ближайший черновик той же рубрики">
             <Icon name="draft" size={12} /> {draft.title}
           </button>
         )

@@ -5,7 +5,7 @@ import { planningSlots } from '../model/planning'
 import { shownTitle, tagOf, timeOf, type ISODate } from '../model/types'
 import { IconButton } from './bits'
 import { activeFilters, FilterChips } from './Sidebar'
-import { usePlan, type Mode } from './ctx'
+import { usePlan, type Mode, type Span } from './ctx'
 import { Icon } from './Icon'
 import { useMedia } from './theme'
 
@@ -16,11 +16,11 @@ const SAVED: Record<string, string> = {
 }
 
 /** Шапка календаря: слева «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки; посередине —
- *  поиск и вид календаря (время, каналы, площадки, темы); справа в углу — значок дашборда (открывается панелью справа).
+ *  поиск, «Неделя / Месяц» и вид недели (время, каналы, площадки, темы); справа в углу — значок дашборда (открывается панелью справа).
  *  «+» — круглая кнопка справа внизу. Отмена — ⌘Z и кнопкой во всплывашке после правки. */
 export function TopBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
   const ctx = usePlan()
-  const { plan, saved, toggleSide, sideOpen, phone, panel, openDashboard, show } = ctx
+  const { plan, saved, toggleSide, sideOpen, phone, panel, openDashboard, show, span } = ctx
   // фильтры свёрнуты — сколько включено, видно на кнопке и метками в шапке
   const n = sideOpen ? 0 : activeFilters(ctx).length
   // за неделю календарь просит уточнить темы: точка на значке дашборда
@@ -43,10 +43,13 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
       {typeof title === 'string' ? <h1 className="nr-title">{title}</h1> : title}
       {children}
       </div>
-      {/* поиск и вид — посередине шапки (если слева тесно — сразу за датой); справа в углу — дашборд */}
+      {/* поиск, неделя или месяц и вид недели — посередине шапки (если слева тесно — сразу за датой); справа в углу — дашборд */}
       <div className="cp-top__mid">
         <Search />
-        <ViewSwitch />
+        <div className="cp-top__views">
+          {!phone && <SpanSwitch />}
+          {span === 'week' && <ViewSwitch />}
+        </div>
       </div>
       <div className="cp-top__right">
       {!sideOpen && <FilterChips />}
@@ -70,6 +73,25 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
       )}
       </div>
     </header>
+  )
+}
+
+const SPANS: { id: Span; label: string; icon: string }[] = [
+  { id: 'week', label: 'Неделя', icon: 'week' },
+  { id: 'month', label: 'Месяц', icon: 'calendar' },
+]
+
+/** Неделя или месяц — значками, выбран один. */
+function SpanSwitch() {
+  const { span, setSpan } = usePlan()
+  return (
+    <div className="nr-seg cp-views cp-span" role="radiogroup" aria-label="Неделя или месяц">
+      {SPANS.map((v) => (
+        <button key={v.id} type="button" role="radio" aria-checked={span === v.id} aria-label={v.label} title={v.label} className="nr-seg__item cp-views__item" onClick={() => setSpan(v.id)}>
+          <Icon name={v.icon} size={16} />
+        </button>
+      ))}
+    </div>
   )
 }
 

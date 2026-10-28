@@ -2,8 +2,8 @@
 // Проверяет оболочку Neuronium (отделы, фильтры слева — сворачиваются, вид календаря с иконками справа от поиска,
 // дашборд — значок в углу и панель справа, поиск вверху),
 // неделю по времени из nr_management (перенос указателем на час и день, край, лист рукой, «Поменять местами»),
-// дорожки и перенос в них, панель дня, ▶ и задачу, черновики во вкладке «+», периодичность хэштега и планирование недели,
-// хэштег с подсказками, «+» с версией по триггеру, «Как пользоваться», тёмную тему, сохранение и телефон.
+// дорожки и перенос в них, панель дня, ▶ и задачу, черновики во вкладке «+», периодичность рубрики и планирование недели,
+// рубрику с подсказками, «+», «Неделя / Месяц», «Наверстать», «Как пользоваться», тёмную тему, сохранение и телефон.
 // Скриншоты — в e2e/shots (или в $SHOTS).
 import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright-core'
@@ -81,9 +81,15 @@ const tint = await page.locator('.cp-tg .cp-card').first().evaluate((el) => {
 })
 check(tint.spread >= 10 && tint.stripe >= 3, 'карточки залиты цветом канала, полоска 3px — на белом видно', `карточка почти белая: ${JSON.stringify(tint)}`)
 check(
-  !(await top.getByRole('radio', { name: 'Месяц' }).count()) && !(await page.getByRole('radiogroup', { name: /Сколько дней/ }).count()) && !(await page.getByRole('group', { name: 'Лента дней' }).count()),
-  'нет «Месяца», «День · 3 дня · Неделя» и ленты дней',
-  'остались месяц, окна дней или лента дней',
+  !(await page.getByRole('radiogroup', { name: /Сколько дней/ }).count()) && !(await page.getByRole('group', { name: 'Лента дней' }).count()),
+  'нет «День · 3 дня · Неделя» и ленты дней',
+  'остались окна дней или лента дней',
+)
+const spanSw = top.getByRole('radiogroup', { name: 'Неделя или месяц' })
+check(
+  (await spanSw.getByRole('radio').count()) === 2 && (await spanSw.locator('svg').count()) === 2 && (await spanSw.getByRole('radio', { name: 'Неделя' }).getAttribute('aria-checked')) === 'true',
+  '«Неделя / Месяц» — переключатель значками, выбран один',
+  'нет переключателя «Неделя / Месяц»',
 )
 check(!(await top.getByRole('button', { name: /Отменить/ }).count()), 'в шапке нет кнопки «Отменить»', 'кнопка «Отменить» в шапке')
 check(!(await side.getByText('Банк идей').count()), 'в фильтрах нет банка идей', 'банк идей в фильтрах')
@@ -115,7 +121,7 @@ await jump('2026-11-09')
 await page.screenshot({ path: `${SHOTS}/6-week.png` })
 const sheet = page.locator('.cp-body')
 const scrolled = await sheet.evaluate((el) => el.scrollTop)
-check(scrolled > 0 && Math.round(scrolled) % 64 === 32, 'шкала открыта за полчаса до часа первого материала недели', `шкала прокручена на ${scrolled}px`)
+check(scrolled > 0 && Math.round(scrolled) % 80 === 40, 'шкала открыта за полчаса до часа первого материала недели', `шкала прокручена на ${scrolled}px`)
 const col = page.locator('.cp-tg__col[data-date="2026-11-10"]')
 const thesis = col.locator('.cp-card', { hasText: 'Тезисы' }).first()
 const box = await col.boundingBox()
@@ -125,7 +131,7 @@ const later = clock(h0 * 60 + m0 + 120)
 const tb = await thesis.boundingBox()
 await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2)
 await page.mouse.down()
-await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2 + 2 * 64, { steps: 10 })
+await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2 + 2 * 80, { steps: 10 })
 check(
   await col.locator('.cp-card--lifted .cp-card__time', { hasText: later }).count(),
   'карточка едет за указателем по 15 минутам, на ней — время, куда встанет',
@@ -154,10 +160,10 @@ const grip = col.locator('.cp-card', { hasText: 'Тезисы' }).first().locato
 const gb = await grip.boundingBox()
 await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2)
 await page.mouse.down()
-await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2 + 64, { steps: 8 })
+await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2 + 80, { steps: 8 })
 await page.mouse.up()
 const range = await col.locator('.cp-card', { hasText: 'Тезисы' }).first().locator('.cp-card__time').textContent()
-check(range === `${clock(h0 * 60 + m0)}–${clock(h0 * 60 + m0 + 120)}`, 'нижний край тянут — карточка длиннее, «начало–конец»', `после растягивания: ${range}`)
+check(range === `${clock(h0 * 60 + m0)}–${clock(h0 * 60 + m0 + 90)}`, 'нижний край тянут — карточка длиннее (полчаса + час), «начало–конец»', `после растягивания: ${range}`)
 await page.keyboard.press('Control+z')
 // пустой лист — рукой в обе стороны (правый край колонки свободен от карточек)
 const sb = await sheet.boundingBox()
@@ -293,9 +299,19 @@ check(await cell('2026-11-09').getByRole('button', { name: 'Задача: Neuron
 await task.getByRole('button', { name: 'Открыть материал' }).click()
 const form = page.getByRole('complementary', { name: 'Материал' })
 await form.waitFor()
-check(!(await form.getByRole('button', { name: 'YouTube' }).count()), 'форма: тема и дата сверху, остальное — в «Подробнее»', 'форма показывает всё сразу')
-await form.getByRole('button', { name: 'Подробнее' }).click()
-check(await form.getByRole('button', { name: 'YouTube' }).count(), '«Подробнее» раскрывает площадки', 'нет площадок в «Подробнее»')
+const yOf = async (loc) => (await loc.boundingBox())?.y ?? -1
+const formY = [
+  await yOf(form.getByRole('combobox', { name: 'Рубрика' })),
+  await yOf(form.getByRole('textbox', { name: 'Тема' })),
+  await yOf(form.getByRole('radiogroup', { name: 'Формат' })),
+  await yOf(form.getByRole('button', { name: 'YouTube' })),
+]
+const gone = await form.getByText(/Подробнее|Кто делает|Подготовить к|Вне сетки|Копии на другие|Пересоздать|Общая тема|исходной сетке/).count()
+check(
+  formY.every((y, i) => y > 0 && (i === 0 || y > formY[i - 1])) && !gone,
+  'форма: сверху рубрика, под ней тема, дальше формат и площадки — всё сразу, без «Подробнее», копий, версий и общей темы',
+  `форма: ${formY.join(', ')}; лишнего: ${gone}`,
+)
 const fmtGroup = form.getByRole('radiogroup', { name: 'Формат' })
 const fmtLabels = (await fmtGroup.getByRole('radio').allTextContents()).join('|')
 const fmtOn = await fmtGroup.getByRole('radio', { checked: true }).getAttribute('aria-label')
@@ -315,34 +331,33 @@ await page.keyboard.press('Escape')
 await page.getByRole('button', { name: 'Новый контент' }).click()
 await page.getByRole('tab', { name: /^Черновики/ }).click()
 const drafts = page.getByRole('complementary', { name: 'Черновики' })
-const tags = drafts.getByRole('group', { name: 'Хэштеги черновиков' })
+const tags = drafts.getByRole('group', { name: 'Рубрики черновиков' })
 await tags.getByRole('button', { name: /^#технологии/ }).click()
-check(await drafts.getByRole('region', { name: 'Черновики: #технологии', exact: true }).count(), 'черновики во вкладке «+»: хэштег — кнопкой', 'хэштеги черновиков не работают')
+check(await drafts.getByRole('region', { name: 'Черновики: #технологии', exact: true }).count(), 'черновики во вкладке «+»: рубрика — кнопкой', 'рубрики черновиков не работают')
 await drafts.getByLabel('Новые черновики: #технологии', { exact: true }).fill('Агент продаж\nИИ-бухгалтер')
 await drafts.getByRole('button', { name: 'Добавить' }).click()
 check(await drafts.getByRole('button', { name: 'ИИ-бухгалтер' }).count(), 'черновики добавлены', 'черновики не добавились')
 await page.screenshot({ path: `${SHOTS}/9-drafts.png` })
 await drafts.getByRole('button', { name: 'Закрыть' }).click()
 
-// дашборд — значок справа вверху, панель справа; периодичность хэштега ставит слоты, за неделю — «уточните темы»
+// дашборд — значок справа вверху, панель справа; периодичность рубрики ставит слоты, за неделю — «уточните темы»
 await top.getByRole('button', { name: 'Дашборд' }).click()
 const dash = page.getByRole('complementary', { name: 'Дашборд' })
 await dash.waitFor()
 check((await dash.getByRole('region', { name: 'Что делать' }).count()) && (await page.getByRole('grid', { name: 'Неделя по времени' }).isVisible()), 'дашборд — панелью справа, календарь под ним', 'дашборд не панелью')
 await page.screenshot({ path: `${SHOTS}/8-dashboard.png` })
-// не вышло вовремя → «Наверстать»: что куда встанет, перенос одним шагом (здесь сразу отменяем); «Перенести период» — отпуск
+// не вышло вовремя → «Наверстать» одной кнопкой: просроченное — на ближайшие дни, остальное по очереди; «Отменить» возвращает
 const lateAsk = dash.getByRole('region', { name: 'Не вышло вовремя' })
+const lateN = Number(((await lateAsk.textContent()) ?? '').match(/Не вышло вовремя: (\d+)/)?.[1] ?? 0)
 await lateAsk.getByRole('button', { name: 'Наверстать' }).click()
-const catchSheet = page.getByRole('complementary', { name: 'Наверстать' })
-const catchRows = await catchSheet.locator('.cp-shift__when').allTextContents()
-const catchGo = catchSheet.getByRole('button', { name: /^Перенести: \d+/ })
-await catchGo.click()
-const caught = /^Наверстали: \d+/.test((await toast().textContent()) ?? '')
-await page.keyboard.press('Control+z')
+const caughtMsg = (await toast().textContent()) ?? ''
+const sheetOpened = await page.getByRole('complementary', { name: 'Наверстать' }).count()
+const lateGone = !(await lateAsk.count())
+await toast().getByRole('button', { name: 'Отменить' }).click()
 check(
-  catchRows.length > 0 && catchRows.every((t) => / → .+ · (в пустой слот|свободный день|вне сетки|вместе со своей группой)/.test(t)) && caught && (await lateAsk.count()),
-  '«Не вышло вовремя» → «Наверстать»: видно, куда встанет каждая карточка; перенос — одним шагом, ⌘Z возвращает',
-  `наверстать: ${catchRows.slice(0, 2).join(' / ')}`,
+  lateN > 0 && /^Наверстали: \d+ карточ/.test(caughtMsg) && !sheetOpened && lateGone && (await lateAsk.count()),
+  '«Наверстать» — одной кнопкой: просроченное на ближайшие дни, остальное сдвигается по очереди; «Отменить» возвращает',
+  `наверстать: ${lateN} → ${caughtMsg}; лист: ${sheetOpened}, ушло: ${lateGone}`,
 )
 await dash.getByRole('button', { name: 'Перенести период (отпуск)…' }).click()
 const periodSheet = page.getByRole('complementary', { name: 'Перенести период' })
@@ -359,7 +374,7 @@ check(
   'сводка без «выходит за 7 дней» и «слотов без темы на месяц»',
   `сводка: ${statLabels.join(', ')}`,
 )
-// «Программа» переворачивает дашборд: каналы → хэштеги → тема, справа время, дата и площадки значками
+// «Программа» переворачивает дашборд: каналы → рубрики → тема, справа время, дата и площадки значками
 await dash.getByRole('radio', { name: 'Программа' }).click()
 const schedDataist = dash.getByRole('region', { name: 'Программа: Офис Датаиста' })
 check(
@@ -368,31 +383,22 @@ check(
     (await schedDataist.locator('.cp-sched__plats svg').count()) > 0 &&
     (await dash.getByRole('radio').allTextContents()).join('|').endsWith('Неделя|Месяц|Все') &&
     !(await dash.getByRole('region', { name: 'Что делать' }).count()),
-  'дашборд → «Программа»: каналы, в них хэштеги, по каждому — тема, справа дата и время и площадки значками; неделя, месяц или все',
+  'дашборд → «Программа»: каналы, в них рубрики, по каждой — тема, справа дата и время и площадки значками; неделя, месяц или все',
   'нет расписания в дашборде',
 )
 await page.screenshot({ path: `${SHOTS}/8b-schedule.png` })
-// общая тема над несколькими материалами хэштега разных форматов: отметить строки → тема → заголовком над ними, внутри хэштега
-const labTag = dash.getByRole('group', { name: 'Лаборатория Датаиста: #исследования' })
-const rowOf = (sel) => labTag.locator('.cp-sched__item').filter({ has: page.locator(sel) }).first().getByRole('checkbox')
-await rowOf('button[title="Страница на сайте"]').check()
-await rowOf('button:not([title="Страница на сайте"])').check()
-await dash.getByRole('combobox', { name: 'Общая тема выбранных' }).fill('ИИ-агенты в продажах')
-await dash.getByRole('button', { name: 'Поставить тему' }).click()
-const themeBlock = labTag.getByRole('region', { name: 'Тема: ИИ-агенты в продажах' })
-const themeFmts = new Set(await themeBlock.locator('.cp-sched__row').evaluateAll((bs) => bs.map((b) => b.title)))
+// общей темы нет: рубрика и есть тема — строк не отмечают
 check(
-  !(await dash.getByRole('radio', { name: 'Темы' }).count()) && (await themeBlock.getByRole('checkbox').count()) === 2 && themeFmts.size === 2,
-  'общая тема: заголовком над материалами хэштега разных форматов — в той же программе, без отдельного режима',
-  `общая тема не собрала материалы: ${[...themeFmts].join(', ')}`,
+  !(await dash.getByRole('checkbox').count()) && !(await dash.getByText(/Общая тема|Поставить тему/).count()) && !(await dash.getByRole('radio', { name: 'Темы' }).count()),
+  'в программе нет общей темы и галочек: рубрика и есть тема',
+  'в программе осталась общая тема',
 )
-await page.screenshot({ path: `${SHOTS}/8c-themes.png` })
-// «Все» — до конца плана, у хэштега сначала 10 строк
+// «Все» — до конца плана, у рубрики сначала 10 строк
 await dash.getByRole('radio', { name: 'Все' }).click()
 const more = dash.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('button', { name: /^Показать ещё \d+/ })
 check(
-  (await more.count()) === 1 && (await dash.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('checkbox').count()) <= 10,
-  'программа «Все» — до конца плана, у хэштега сначала 10 строк и «Показать ещё»',
+  (await more.count()) === 1 && (await dash.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).locator('.cp-sched__row').count()) <= 10,
+  'программа «Все» — до конца плана, у рубрики сначала 10 строк и «Показать ещё»',
   'нет «Все» или «Показать ещё»',
 )
 await dash.getByRole('radio', { name: 'Неделя' }).click()
@@ -401,8 +407,8 @@ const topics = dash.getByRole('region', { name: 'Темы' })
 check(
   (await topics.getByRole('group', { name: 'Темы: Лаборатория Датаиста' }).getByRole('button', { name: /^#исследования/ }).count()) &&
     (await topics.getByRole('group', { name: 'Темы: Академия Датаиста' }).count()),
-  'темы-хэштеги по каналам и разделам',
-  'нет хэштегов разделов',
+  'темы-рубрики по каналам и разделам',
+  'нет рубрик разделов',
 )
 await topics.getByRole('button', { name: 'Править' }).click()
 const period = topics.getByRole('group', { name: 'Периодичность: #технологии · FULL' })
@@ -416,7 +422,7 @@ await ask.getByRole('button', { name: 'Уточнить' }).click()
 const planning = page.getByRole('complementary', { name: 'Планирование недели' })
 await planning.waitFor()
 await planning.getByRole('button', { name: 'Из черновиков: Агент продаж' }).click()
-check(await planning.getByRole('img', { name: 'Тема есть' }).count(), 'планирование: ближайший черновик того же хэштега — в слот', 'черновик не встал в слот')
+check(await planning.getByRole('img', { name: 'Тема есть' }).count(), 'планирование: ближайший черновик той же рубрики — в слот', 'черновик не встал в слот')
 const rest = planning.locator('.cp-planrow:not(.cp-planrow--done) input').first()
 if (await rest.count()) {
   await rest.fill('Сколько стоит ИИ-сотрудник')
@@ -427,28 +433,82 @@ await planning.getByRole('button', { name: 'Назад' }).click()
 await dash.getByRole('region', { name: 'Темы' }).getByRole('group', { name: 'Темы: Офис Датаиста' }).getByRole('button', { name: /^#демо/ }).first().click()
 check(
   !(await dash.count()) && (await side.getByRole('button', { name: '#демо', exact: true }).getAttribute('aria-pressed')) === 'true' && (await side.getByRole('button', { name: '#тезисы', exact: true }).getAttribute('aria-pressed')) === 'false',
-  'хэштег в «Темах» — календарь только по этой теме',
-  'фильтр по хэштегу не встал',
+  'рубрика в «Темах» — календарь только по ней (выделена в фильтре)',
+  'фильтр по рубрике не встал',
 )
 await side.getByRole('button', { name: 'Сбросить' }).click()
+// рубрики в фильтре: щелчок выделяет — видны только выделенные; «Выделить все», «Снять выделение»
+const rubPills = side.getByRole('group', { name: 'Рубрики' }).getByRole('button')
+const pressed = async () => (await rubPills.evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-pressed')))).join('')
+const noneAtFirst = !(await pressed()).includes('true')
+await side.getByRole('group', { name: 'Рубрики' }).getByRole('button', { name: '#тезисы', exact: true }).click()
+const onlyThesis = (await page.locator('.cp-tg__col .cp-card').filter({ hasText: '#демо' }).count()) === 0 && (await page.locator('.cp-tg__col .cp-card').filter({ hasText: '#тезисы' }).count()) > 0
+await side.getByRole('button', { name: 'Выделить все' }).click()
+const allPicked = !(await pressed()).includes('false')
+await side.getByRole('button', { name: 'Снять выделение' }).click()
+check(
+  noneAtFirst && onlyThesis && allPicked && !(await pressed()).includes('true'),
+  'рубрики в фильтре: щелчок выделяет — видны только выделенные; «Выделить все», «Снять выделение»',
+  `рубрики: сначала ${noneAtFirst}, только тезисы ${onlyThesis}, все ${allPicked}`,
+)
 
-// «+»: хэштег с подсказками (как Т9), новый контент с версией для Instagram — автоматически после выхода оригинала
+// «+»: рубрика с подсказками (как Т9), новая — заводится при сохранении
 await page.getByRole('button', { name: 'Новый контент' }).click()
 const newForm = page.getByRole('complementary', { name: 'Новый контент' })
-const tagIn = newForm.getByRole('combobox', { name: 'Хэштег' })
+const tagIn = newForm.getByRole('combobox', { name: 'Рубрика' })
 await tagIn.fill('тех')
-check(await newForm.getByRole('option', { name: '#технологии' }).count(), 'хэштег подсказывается при вводе', 'нет подсказки хэштега')
+check(await newForm.getByRole('option', { name: '#технологии' }).count(), 'рубрика подсказывается при вводе', 'нет подсказки рубрики')
 await tagIn.fill('агенты')
-check(await newForm.getByRole('option', { name: 'Новый хэштег #агенты' }).count(), 'нового хэштега нет — предлагается завести', 'нет «Новый хэштег»')
-await newForm.getByRole('option', { name: 'Новый хэштег #агенты' }).click()
+check(await newForm.getByRole('option', { name: 'Новая рубрика #агенты' }).count(), 'новой рубрики нет — предлагается завести', 'нет «Новая рубрика»')
+await newForm.getByRole('option', { name: 'Новая рубрика #агенты' }).click()
 await page.screenshot({ path: `${SHOTS}/5b-new.png` })
-await newForm.getByRole('textbox', { name: 'Тема' }).fill('Пересоздать для Instagram')
-await newForm.getByRole('button', { name: 'Версия для Instagram' }).click()
-await newForm.getByRole('radio', { name: 'Автоматически после выхода' }).click()
+await newForm.getByRole('textbox', { name: 'Тема' }).fill('Агенты в продажах')
 await newForm.getByRole('button', { name: 'Создать' }).click()
-check(await toast().filter({ hasText: 'версий: 1, после выхода' }).count(), '«+»: новый контент с новым хэштегом и версией по триггеру', 'версия не создалась')
-check(await side.getByRole('button', { name: '#агенты', exact: true }).count(), 'новый хэштег — в фильтрах', 'нового хэштега нет в фильтрах')
+check(await toast().filter({ hasText: /^Создано на/ }).count(), '«+»: новый контент с новой рубрикой', 'контент не создался')
+check(await side.getByRole('button', { name: '#агенты', exact: true }).count(), 'новая рубрика — в фильтрах', 'новой рубрики нет в фильтрах')
 await page.keyboard.press('Control+z')
+
+// «Время»: щелчок по пустому месту шкалы — новый контент на этот день и получас
+{
+  await jump('2026-11-12')
+  // пустое место колонки на виду: где под указателем сама колонка, а не карточка
+  const spot = await cell('2026-11-12').evaluate((col) => {
+    const body = document.querySelector('.cp-body').getBoundingClientRect()
+    const r = col.getBoundingClientRect()
+    const x = r.left + r.width / 2
+    for (let y = body.top + 120; y < body.bottom - 40; y += 20) if (document.elementFromPoint(x, y) === col) return { x, y, min: Math.floor(((y - r.top) / 80) * 2) * 30 }
+    return null
+  })
+  await page.mouse.click(spot.x, spot.y)
+  const slotWant = `${String(Math.floor(spot.min / 60)).padStart(2, '0')}:${String(spot.min % 60).padStart(2, '0')}`
+  const slotForm = page.getByRole('complementary', { name: 'Новый контент' })
+  const when = [await slotForm.getByLabel('Дата', { exact: true }).inputValue().catch((e) => e.message.slice(0, 80)), await slotForm.getByLabel('Время выхода', { exact: true }).inputValue().catch(() => '')]
+  check(when[0] === '2026-11-12' && when[1] === slotWant, `«Время»: щелчок по пустому месту — новый контент на этот день и получас (${slotWant})`, `щелчок по шкале: ${when.join(' ')}, ждали ${slotWant}`)
+  await slotForm.getByRole('button', { name: 'Закрыть' }).click()
+  const h = await page.locator('.cp-tg__col .cp-card').first().evaluate((el) => el.getBoundingClientRect().height)
+  check(h <= 42, 'карточка без конца на шкале — полчаса', `карточка высотой ${h}px`)
+}
+
+// «Месяц»: в каждом дне видно всё; перенос на другой день; щелчок по пустому месту — новый контент
+await spanSw.getByRole('radio', { name: 'Месяц' }).click()
+const monthGrid = page.getByRole('grid', { name: /^Месяц: / })
+await monthGrid.waitFor()
+const mDay = monthGrid.locator('[data-date="2026-11-12"]')
+const mCards = await mDay.locator('.cp-card').count()
+const mShown = await mDay.locator('.cp-card').evaluateAll((cs) => cs.every((c) => c.getBoundingClientRect().height > 0 && getComputedStyle(c).display !== 'none'))
+await page.screenshot({ path: `${SHOTS}/3b-month.png` })
+check(
+  mCards >= 8 && mShown && !(await top.getByRole('radiogroup', { name: 'Вид календаря' }).count()),
+  `«Месяц»: в дне видно все карточки (${mCards}), вида недели нет`,
+  `месяц: ${mCards} карточек, видны ${mShown}`,
+)
+const thisTitle = await monthGrid.getAttribute('aria-label')
+await top.getByRole('button', { name: 'Следующий месяц' }).click()
+const nextTitle = await monthGrid.getAttribute('aria-label')
+await top.getByRole('button', { name: 'Сегодня' }).click()
+check(thisTitle === 'Месяц: Ноябрь 2026' && nextTitle === 'Месяц: Декабрь 2026', 'месяц листается стрелками', `месяц: ${thisTitle} → ${nextTitle}`)
+await spanSw.getByRole('radio', { name: 'Неделя' }).click()
+await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 
 // поиск вверху: найденное под полем, нажать — материал открыт
 await top.getByRole('searchbox', { name: 'Поиск по плану' }).fill('Landao')
@@ -493,7 +553,7 @@ check(
   'форматы в фильтрах: Видео (полное горизонтальное, короткое вертикальное), Текст (страница на сайте, текст с картинкой)',
   `форматы не те: ${await fmts('Видео')} / ${await fmts('Текст')}`,
 )
-// «⋯» у канала: переименовать или удалить
+// «⋯» у канала: переименовать, выше, ниже, удалить
 await side.getByRole('button', { name: 'Ещё: Landao' }).click()
 const chMenu = side.getByRole('menu', { name: 'Канал «Landao»' })
 const chItems = (await chMenu.getByRole('menuitem').allTextContents()).join('|')
@@ -503,8 +563,8 @@ await side.getByRole('textbox', { name: 'Новое название канал�
 const renamedCh = await side.getByRole('button', { name: /^Landao Studio/ }).count()
 await page.keyboard.press('Control+z')
 check(
-  chItems === 'Переименовать|Удалить' && renamedCh && (await side.getByRole('button', { name: /^Landao с/ }).count()),
-  'у канала «⋯»: переименовать (в строке) или удалить; ⌘Z возвращает',
+  chItems === 'Переименовать|Выше|Ниже|Удалить' && renamedCh && (await side.getByRole('button', { name: 'Landao', exact: true }).count()),
+  'у канала «⋯»: переименовать (в строке), выше, ниже, удалить; без «с …»; ⌘Z возвращает',
   `меню канала: ${chItems}, переименован: ${renamedCh}`,
 )
 

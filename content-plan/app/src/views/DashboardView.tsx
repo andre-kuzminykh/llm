@@ -1,7 +1,8 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { addDays, dayTitle, mondayOf, shortDate, today, WEEKDAYS } from '../model/dates'
-import { overdueOf } from '../model/catchup'
+import { catchUpQueue, overdueOf } from '../model/catchup'
 import { AUTO_RULES } from '../model/filters'
+import { plural } from '../model/hint'
 import { planningEnd, planningSlots } from '../model/planning'
 import { newId, setPeriod } from '../model/store'
 import { colorOf, FORMAT_SHORT, isSlot, shownTitle, tagOf, TEXT_IMAGE, titleIsFormat, type ISODate, type Rubric, type Rule, type Status } from '../model/types'
@@ -88,9 +89,22 @@ export function DashboardSheet({ onClose }: { onClose: () => void }) {
 
 /** Не вышло вовремя (дата прошла, «Вышло» не отмечено) — наверстать, не двигая остальной план; и перенести период (отпуск). */
 function ShiftAsk() {
-  const { plan, openCatchUp, openPeriod } = usePlan()
+  const { plan, dispatch, toast, openPeriod } = usePlan()
   const t = today()
   const n = useMemo(() => overdueOf(plan, t).length, [plan, t])
+  /** Одной кнопкой: просроченное — на ближайшие места сетки, остальное сдвигается по очереди. «Отменить» в тосте — назад. */
+  const catchUp = () => {
+    const r = catchUpQueue(plan, t)
+    if (!r.actions.length) return toast('Нечего переносить')
+    dispatch({ type: 'batch', actions: r.actions })
+    const first = [...r.moved].sort((a, b) => a.date.localeCompare(b.date))[0]
+    toast(
+      `Наверстали: ${r.moved.length} ${plural(r.moved.length, 'карточка', 'карточки', 'карточек')} с ${shortDate(first.date)}` +
+        (r.shifted.length ? `, дальше по очереди сдвинулось ${r.shifted.length}` : '') +
+        (r.filled ? `, занято пустых слотов: ${r.filled}` : ''),
+      true,
+    )
+  }
   return (
     <div className="cp-shift-ask">
       {n > 0 && (
@@ -100,9 +114,9 @@ function ShiftAsk() {
           </span>
           <span className="cp-ask__text">
             <b>Не вышло вовремя: {n}</b>
-            <span className="cp-muted">Дата прошла, а «Вышло» не отмечено. Наверстать — в свободные слоты, остальной план на месте.</span>
+            <span className="cp-muted">Дата прошла, а «Вышло» не отмечено. Наверстать — на ближайшие дни, остальное сдвинется по очереди; «Отменить» вернёт.</span>
           </span>
-          <button type="button" className="nr-btn nr-btn--primary nr-btn--sm" onClick={openCatchUp}>
+          <button type="button" className="nr-btn nr-btn--primary nr-btn--sm" onClick={catchUp}>
             Наверстать
           </button>
         </section>
@@ -128,7 +142,7 @@ function PlanningAsk() {
       <span className="cp-ask__text">
         <b>Неделя {weekRange(next)}: уточните темы</b>
         <span className="cp-muted">
-          Без темы: {slots.length} до {shortDate(planningEnd(t))}. Подставим ближайшие черновики по хэштегу.
+          Без темы: {slots.length} до {shortDate(planningEnd(t))}. Подставим ближайшие черновики по рубрике.
         </span>
       </span>
       <button type="button" className="nr-btn nr-btn--primary nr-btn--sm" onClick={openPlanning}>
@@ -312,9 +326,9 @@ function AddTag({ channelId, sectionId, where, have }: { channelId: string; sect
   const { plan, dispatch, toast } = usePlan()
   return (
     <TagInput
-      label={`Добавить хэштег: ${where}`}
+      label={`Добавить рубрику: ${where}`}
       value=""
-      placeholder={`+ хэштег в ${where}`}
+      placeholder={`+ рубрика в ${where}`}
       options={plan.rubrics.filter((r) => !have.includes(r.id))}
       onPick={(p) => {
         const rubricId = 'rubric' in p ? p.rubric.id : newId('k')
@@ -339,12 +353,12 @@ const tagsOf = (plan: { rules: Rule[]; rubrics: Rubric[] }, channelId: string, s
   return plan.rubrics.filter((r) => ids.has(r.id))
 }
 
-/** Хэштеги канала или раздела: кнопками (нажать — календарь только по ним) или, в «Править», с периодичностью. */
+/** Рубрики канала или раздела: кнопками (нажать — календарь только по ним) или, в «Править», с периодичностью. */
 function TopicTags({ channelId, sectionId, where, edit, soon }: { channelId: string; sectionId?: string; where: string; edit: boolean; soon: Map<string, number> }) {
   const { plan, filters, setFilters, show, dispatch } = usePlan()
   const tags = tagsOf(plan, channelId, sectionId)
   const only = (r: Rubric) => {
-    setFilters({ ...filters, hiddenRubrics: plan.rubrics.filter((x) => x.id !== r.id).map((x) => x.id) })
+    setFilters({ ...filters, pickedRubrics: [r.id] })
     show()
   }
   if (!edit)
@@ -367,7 +381,7 @@ function TopicTags({ channelId, sectionId, where, edit, soon }: { channelId: str
         <div key={r.id} className="cp-tagedit">
           <input
             className="cp-tag-in"
-            aria-label={`Хэштег ${tagOf(r.name)}`}
+            aria-label={`Рубрика ${tagOf(r.name)}`}
             defaultValue={r.name}
             size={Math.max(6, r.name.length + 1)}
             onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== r.name && dispatch({ type: 'rubric', id: r.id, patch: { name: e.target.value.trim().replace(/^#/, '') } })}
@@ -402,7 +416,7 @@ function TopicsPanel() {
           {edit ? 'Готово' : 'Править'}
         </button>
       </div>
-      {edit && <p className="cp-hint">Дни недели у хэштега — периодичность: слоты без темы встают в расписание, а за неделю дашборд попросит уточнить темы.</p>}
+      {edit && <p className="cp-hint">Дни недели у рубрики — периодичность: слоты без темы встают в расписание, а за неделю дашборд попросит уточнить темы.</p>}
       <div className="cp-topics">
         {plan.channels.map((c) => {
           const own = tagsOf(plan, c.id)

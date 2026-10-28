@@ -10,6 +10,9 @@ import type { Unit } from '../model/units'
  *  Выбирается в левой панели, как фильтр. */
 export type Mode = 'time' | 'channels' | 'platforms' | 'topics' | 'feed'
 
+/** Сколько видно: неделя (в одном из видов выше) или месяц — в дне все карточки. */
+export type Span = 'week' | 'month'
+
 export type Drag = { kind: 'item' | 'bank'; id: string }
 
 export interface ToastAction {
@@ -52,6 +55,8 @@ export interface Ctx {
   show: (date?: ISODate) => void
   mode: Mode
   setMode: (m: Mode) => void
+  span: Span
+  setSpan: (s: Span) => void
   /** Дашборд — панелью справа. */
   openDashboard: () => void
   /** Черновики (банк идей) — во вкладке «+». */
@@ -59,7 +64,6 @@ export interface Ctx {
   /** Планирование недели: уточнить темы пустых слотов. */
   openPlanning: () => void
   /** Наверстать просроченное, не двигая остальной план. */
-  openCatchUp: () => void
   /** Перенести период (отпуск): на следующие слоты или в свободные места. */
   openPeriod: () => void
   dropOn: (date: ISODate, drag: Drag, time?: string) => void

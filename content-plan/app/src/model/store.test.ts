@@ -248,7 +248,7 @@ describe('T-CP-027 FR-CP-027 копия и версии для других пл
   })
 })
 
-describe('T-CP-031 FR-CP-031 периодичность хэштега, планирование недели, черновики', () => {
+describe('T-CP-031 FR-CP-031 периодичность рубрики, планирование недели, черновики', () => {
   const thesisSlots = (p: ReturnType<typeof smallPlan>) => p.items.filter((x) => x.ruleId === 'sh_thesis' && x.title === '…').map((x) => x.date).sort()
   it('новый день недели ставит слоты без темы до конца плана; снятый — убирает пустые, тема остаётся', () => {
     const p = smallPlan()
@@ -272,7 +272,7 @@ describe('T-CP-031 FR-CP-031 периодичность хэштега, план
     expect(p.items.some((x) => x.id === 'slot' || x.id === 'slot-teaser' || x.id === 'slot2')).toBe(false)
     expect(byId(p, 'demo').title).toBe('Стратегия')
   })
-  it('планирование — пустые слоты до конца следующей недели; ближайший черновик того же хэштега — по порядку дат', () => {
+  it('планирование — пустые слоты до конца следующей недели; ближайший черновик той же рубрики — по порядку дат', () => {
     const p = smallPlan()
     expect(planningSlots(p, '2026-10-24').map((x) => x.id)).toEqual(['th-slot'])
     expect(planningSlots(p, '2026-10-27').map((x) => x.id)).toEqual(['th-slot', 'slot'])
@@ -291,7 +291,7 @@ describe('T-CP-031 FR-CP-031 периодичность хэштега, план
     expect(byId(next, 'slot').title).toBe('Агент продаж')
     expect(byId(next, 'slot-teaser').title).toBe('Агент продаж')
   })
-  it('новые площадка, канал и хэштег; повтор не заводится', () => {
+  it('новые площадка, канал и рубрика; повтор не заводится', () => {
     const p = addPlatform(smallPlan(), 'VK')
     expect(p.platforms).toContain('VK')
     expect(p.channels.every((c) => c.platforms.includes('VK'))).toBe(true)

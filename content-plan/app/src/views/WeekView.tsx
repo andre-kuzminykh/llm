@@ -11,6 +11,7 @@ import { usePlan, type Mode } from '../ui/ctx'
 import { autoScroll, hintBox, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
 import { Icon } from '../ui/Icon'
 import { useInfinite } from '../ui/infinite'
+import { AddInline, ChannelMenu, ChannelRename } from '../ui/ChannelEdit'
 import { DateJump, TopBar } from '../ui/TopBar'
 
 interface Lane {
@@ -50,7 +51,7 @@ export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
   return out
 }
 
-const HOUR = 64 // px на час
+const HOUR = 80 // px на час: в получасовую карточку помещаются две строки — рубрика со временем и тема
 const PPM = HOUR / 60 // px на минуту
 const HEAD = 52 // высота шапки дней
 const GUT = 56 // колонка часов
@@ -430,6 +431,8 @@ function TimeGrid({ days, count, col, drag, grab }: { days: { date: ISODate; i: 
 function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; left: number; width: number; now: { show: boolean; topMin: number }; drag: TimeDrag | null; grab: Grab }) {
   const { unitsOn, dropOn, openNew } = usePlan()
   const at = (clientY: number, el: HTMLElement) => minutesToClock(snapMin(((clientY - el.getBoundingClientRect().top) / HOUR) * 60))
+  // слот под указателем — получас, в который попали: щёлкнули в 11:40 — контент на 11:30
+  const slotAt = (clientY: number, el: HTMLElement) => minutesToClock(Math.floor(((clientY - el.getBoundingClientRect().top) / HOUR) * 2) * 30)
   // тему из банка тянут на час
   const drop = useDrop((d, e) => dropOn(date, d, at(e.clientY, e.currentTarget as HTMLElement)))
   // пересекающиеся по времени — рядом, по колонкам; все видны
@@ -448,9 +451,17 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
       data-hour={HOUR}
       style={{ left, width }}
       {...drop.props}
-      onDoubleClick={(e) => {
+      title="Щёлкнуть по пустому месту — новый контент на это время"
+      // подсветка получаса под указателем — без перерисовки React: только переменная стиля
+      onMouseMove={(e) => {
         if (e.target !== e.currentTarget) return
-        openNew({ date, time: at(e.clientY, e.currentTarget) })
+        const y = e.clientY - e.currentTarget.getBoundingClientRect().top
+        e.currentTarget.style.setProperty('--cp-slot', `${Math.floor(y / (HOUR / 2)) * (HOUR / 2)}px`)
+      }}
+      // щелчок по пустому получасу — новый контент на него; лист тянули — щелчок проглочен (endGesture)
+      onClick={(e) => {
+        if (e.target !== e.currentTarget) return
+        openNew({ date, time: slotAt(e.clientY, e.currentTarget) })
       }}
     >
       {now.show && <span className="cp-tg__now" style={{ top: now.topMin * PPM }} aria-hidden="true" />}
@@ -488,7 +499,11 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
 // ── дорожками ────────────────────────────────────────────────────────────────
 
 function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }: { days: { date: ISODate; i: number }[]; count: number; col: number; gutter: number; mode: Mode; hidden: string[]; shown: [ISODate, ISODate] }) {
-  const { plan, filters, unitsOn, rules } = usePlan()
+  const { plan, filters, unitsOn, rules, channels, dispatch, toast } = usePlan()
+  // в «Каналах» канал правят прямо в дорожке: «⋯» — переименовать, выше, ниже, удалить; внизу — «Добавить канал»
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [menu, setMenu] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
   const [closed, setClosed] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('cp:week-closed') ?? '[]') as string[]
@@ -509,7 +524,7 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
     mode === 'channels'
       ? channelLanes(plan, hidden)
       : mode === 'topics'
-        ? plan.rubrics.filter((r) => !filters.hiddenRubrics.includes(r.id)).map((r) => ({ id: r.id, label: tagOf(r.name), match: (it: Item) => it.rubricId === r.id }))
+        ? plan.rubrics.filter((r) => !filters.pickedRubrics?.length || filters.pickedRubrics.includes(r.id)).map((r) => ({ id: r.id, label: tagOf(r.name), match: (it: Item) => it.rubricId === r.id }))
         : plan.platforms.filter((p) => !filters.hiddenPlatforms.includes(p)).map((p) => ({ id: p, label: p, match: (it: Item) => it.platforms.includes(p) }))
   // по каналам карточка стоит в дорожке своего главного материала (FULL — в «FULL», тизер внутри неё);
   // по площадкам — строкой на каждой площадке, где она выходит, с тем, что там выходит
@@ -525,9 +540,9 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
       }),
     })),
   }))
-  // дорожки и числа — по дням на экране: пустые дорожки не показываются
+  // дорожки и числа — по дням на экране: пустые дорожки не показываются; каналы — все, даже пустой новый
   const onScreen = (d: { date: ISODate }) => d.date >= from && d.date <= to
-  const shown = cells.filter((c) => c.days.some((d) => onScreen(d) && d.rows.length))
+  const shown = mode === 'channels' ? cells : cells.filter((c) => c.days.some((d) => onScreen(d) && d.rows.length))
   const first = days[0]?.i ?? 0
   const cols = `${gutter}px ${first * col}px repeat(${days.length}, ${col}px) ${Math.max(0, count - first - days.length) * col}px`
   return (
@@ -543,14 +558,22 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
       {shown.map(({ lane, days: row }) => {
         const open = !closed.includes(lane.id)
         const n = row.reduce((k, d) => k + (onScreen(d) ? d.rows.length : 0), 0)
+        const ch = mode === 'channels' && lane.channelId === lane.id ? channels.get(lane.id) : undefined
         return (
           <Fragment key={lane.id}>
-            <div className="cp-lane" role="rowheader" style={{ '--cp-c': lane.color } as CSSProperties}>
-              <button type="button" className="cp-lane__btn cp-fold" aria-expanded={open} aria-label={`${open ? 'Свернуть' : 'Развернуть'}: ${lane.label}`} onClick={() => toggle(lane.id)}>
-                <Icon name="chev-right" size={14} />
-                <span className="cp-lane__name">{lane.label}</span>
-                <span className="cp-muted">{n}</span>
-              </button>
+            <div className={`cp-lane${menu === lane.id ? ' cp-lane--open' : ''}`} role="rowheader" style={{ '--cp-c': lane.color } as CSSProperties}>
+              {ch && renaming === ch.id ? (
+                <ChannelRename c={ch} onDone={() => setRenaming(null)} className="cp-lane__rename" />
+              ) : (
+                <>
+                  <button type="button" className="cp-lane__btn cp-fold" aria-expanded={open} aria-label={`${open ? 'Свернуть' : 'Развернуть'}: ${lane.label}`} onClick={() => toggle(lane.id)}>
+                    <Icon name="chev-right" size={14} />
+                    <span className="cp-lane__name">{lane.label}</span>
+                    <span className="cp-muted">{n}</span>
+                  </button>
+                  {ch && <ChannelMenu c={ch} onRename={() => setRenaming(ch.id)} onOpen={(o) => setMenu(o ? ch.id : null)} className="cp-lane__more" />}
+                </>
+              )}
             </div>
             <div aria-hidden="true" />
             {row.map(({ date, rows }) => (
@@ -560,6 +583,30 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
           </Fragment>
         )
       })}
+      {mode === 'channels' && (
+        <>
+          <div className="cp-lane cp-lane--add">
+            {adding ? (
+              <AddInline
+                label="Новый канал"
+                placeholder="Название канала"
+                className="cp-lane__rename"
+                onDone={() => setAdding(false)}
+                onAdd={(name) => {
+                  dispatch({ type: 'addChannel', name, start: today() })
+                  toast(`Канал «${name}» добавлен`, true)
+                }}
+              />
+            ) : (
+              <button type="button" className="cp-lane__btn cp-lane__add" onClick={() => setAdding(true)}>
+                <Icon name="plus" size={14} />
+                Добавить канал
+              </button>
+            )}
+          </div>
+          <div aria-hidden="true" className="cp-lane__fill" style={{ gridColumn: '2 / -1' }} />
+        </>
+      )}
       {shown.length === 0 && <p className="cp-empty" style={{ gridColumn: '1 / -1' }}>На этой неделе ничего нет — или всё скрыто фильтрами.</p>}
     </div>
   )

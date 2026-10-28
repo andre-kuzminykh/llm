@@ -8,7 +8,7 @@ import type { ISODate } from './types'
 export type Span = 'day' | '3day' | 'week'
 export const SPAN_DAYS: Record<Span, number> = { day: 1, '3day': 3, week: 7 }
 export const DAY_MINUTES = 1440
-export const DEFAULT_MINUTES = 60
+export const DEFAULT_MINUTES = 30 // карточка без конца занимает полчаса
 export const SNAP_STEP = 15
 
 /** Дни окна: день, три дня от якоря или неделя Пн–Вс, в которой якорь. */

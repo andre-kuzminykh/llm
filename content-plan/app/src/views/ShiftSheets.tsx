@@ -1,9 +1,9 @@
-// Наверстать и перенести период — листы справа. Сначала видно, что куда встанет, потом «Перенести» — одним шагом,
-// ⌘Z возвращает. Остальной план не двигается (или сдвигается очередью — по выбору в «Перенести период»).
+// Перенести период (отпуск) — лист справа. Сначала видно, что куда встанет, потом «Перенести» — одним шагом,
+// ⌘Z возвращает. «Наверстать» листа не открывает: одна кнопка в дашборде.
 import { useMemo, useState, type CSSProperties } from 'react'
 import { addDays, today } from '../model/dates'
 import { plural } from '../model/hint'
-import { catchUpPlan, overdueOf, shiftPeriod, type CatchUpHow, type CatchUpStep, type PeriodMode } from '../model/catchup'
+import { shiftPeriod, type CatchUpHow, type CatchUpStep, type PeriodMode } from '../model/catchup'
 import { dateText } from '../model/schedule'
 import { colorOf, isSlot, shownTitle, timeOf, type Item } from '../model/types'
 import { IconButton, PickText, Seg } from '../ui/bits'
@@ -16,81 +16,26 @@ const HOW: Record<CatchUpHow, string> = {
   queue: 'следующий слот',
   later: 'за концом сетки',
   group: 'вместе со своей группой',
+  shift: 'сдвиг по очереди',
 }
 const cards = (n: number) => `${n} ${plural(n, 'карточка', 'карточки', 'карточек')}`
 
-/** Строка: канал, хэштег и формат, тема; ниже — «26 окт → 2 ноя 12:00 · в пустой слот». */
-function StepRow({ it, step, t, check }: { it: Item; step?: CatchUpStep; t: string; check?: { on: boolean; toggle: () => void } }) {
+/** Строка: канал, рубрика и формат, тема; ниже — «26 окт → 2 ноя 12:00 · следующий слот». */
+function StepRow({ it, step, t }: { it: Item; step: CatchUpStep; t: string }) {
   const { channels, rules, labelOf } = usePlan()
   const c = channels.get(it.channelId)
-  const label = `${labelOf(it)}: ${shownTitle(it)}`
   return (
     <li className="cp-shift__row" style={{ '--cp-c': colorOf(c, it.sectionId) } as CSSProperties}>
-      {check && <input type="checkbox" className="cp-sched__check" aria-label={`Перенести: ${label}`} checked={check.on} onChange={check.toggle} />}
       <span className="cp-shift__main">
         <span className="cp-shift__where">
           {c?.name} · {labelOf(it)}
         </span>
         <span className={isSlot(it) ? 'cp-sched__title--slot' : undefined}>{shownTitle(it)}</span>
         <span className="cp-shift__when">
-          {step ? (
-            <>
-              {dateText(step.from, t)} → <b>{dateText(step.date, t)} {step.time ?? timeOf(it, rules.get(it.ruleId))}</b> · {HOW[step.how]}
-            </>
-          ) : (
-            <>{dateText(it.date!, t)} · остаётся</>
-          )}
+          {dateText(step.from, t)} → <b>{dateText(step.date, t)} {step.time ?? timeOf(it, rules.get(it.ruleId))}</b> · {HOW[step.how]}
         </span>
       </span>
     </li>
-  )
-}
-
-/** Наверстать: просроченное — дата прошла, «Вышло» не отмечено. Список не прыгает, пока лист открыт. */
-export function CatchUpSheet({ onClose, onBack }: { onClose: () => void; onBack?: () => void }) {
-  const { plan, dispatch, toast } = usePlan()
-  const t = today()
-  const [ids] = useState(() => overdueOf(plan, t).map((x) => x.id))
-  const [off, setOff] = useState<Set<string>>(new Set())
-  const items = ids.map((id) => plan.items.find((x) => x.id === id)).filter((x): x is Item => !!x && !!x.date && x.date < t)
-  const chosen = items.filter((x) => !off.has(x.id)).map((x) => x.id)
-  const steps = useMemo(() => catchUpPlan(plan, chosen, t), [plan, chosen.join('|'), t]) // eslint-disable-line react-hooks/exhaustive-deps
-  const byId = new Map(steps.map((s) => [s.id, s]))
-  const toggle = (id: string) => setOff((s) => (s.has(id) ? new Set([...s].filter((x) => x !== id)) : new Set(s).add(id)))
-  return (
-    <aside className="cp-sheet" aria-label="Наверстать">
-      <div className="cp-sheet__head">
-        {onBack && <IconButton icon="chev-left" label="Назад" onClick={onBack} size="sm" />}
-        <h2 className="cp-sheet__title">Наверстать</h2>
-        <IconButton icon="close" label="Закрыть" onClick={onClose} />
-      </div>
-      <div className="cp-sheet__body nr-scroll">
-        <p className="cp-hint">
-          Просрочено — дата прошла, а «Вышло» не отмечено. Остальной план не двигается: карточка встаёт в ближайший пустой слот своего формата, нет
-          слота — на ближайший день, где сетка не против, нет и такого — вне сетки, лишней в день. Снимите галочку, если вышло или не нужно.
-        </p>
-        {!items.length && <p className="cp-empty">Просроченного нет.</p>}
-        <ol className="cp-shift">
-          {items.map((it) => (
-            <StepRow key={it.id} it={it} step={byId.get(it.id)} t={t} check={{ on: !off.has(it.id), toggle: () => toggle(it.id) }} />
-          ))}
-        </ol>
-        {items.length > 0 && (
-          <button
-            type="button"
-            className="nr-btn nr-btn--primary nr-btn--sm cp-shift__go"
-            disabled={!steps.length}
-            onClick={() => {
-              dispatch({ type: 'catchUp', moves: steps.filter((s) => s.how !== 'group') })
-              toast(`Наверстали: ${cards(steps.length)} — остальной план на месте`, true)
-              ;(onBack ?? onClose)()
-            }}
-          >
-            Перенести: {steps.length}
-          </button>
-        )}
-      </div>
-    </aside>
   )
 }
 

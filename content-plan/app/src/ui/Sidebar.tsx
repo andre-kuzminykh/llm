@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
-import { plural } from '../model/hint'
-import { channelParts } from '../model/store'
 import { FORMAT_ICON, FORMATS, GRAY, statusOf, tagOf, type Channel } from '../model/types'
 import { IconButton, PlatformIcon, StatusFilter, Switch } from './bits'
+import { AddInline, ChannelMenu, ChannelRename, useDismiss } from './ChannelEdit'
 import { usePlan, type Ctx } from './ctx'
+import { SLOP, swallowClick } from './drag'
 import { Icon } from './Icon'
 
 /** Фильтры по умолчанию: видно всё, и ежедневные авто-публикации тоже. */
@@ -30,16 +30,12 @@ export function activeFilters({ plan, filters: f, setFilters }: Pick<Ctx, 'plan'
       label: f.hiddenFormats.length === 1 ? `Скрыт формат: ${f.hiddenFormats[0].toLowerCase()}` : `Скрыто форматов: ${f.hiddenFormats.length}`,
       clear: () => set({ hiddenFormats: [] }),
     })
-  if (f.hiddenRubrics.length)
+  const picked = plan.rubrics.filter((r) => f.pickedRubrics?.includes(r.id))
+  if (picked.length && picked.length < plan.rubrics.length)
     out.push({
       id: 'rb',
-      label:
-        f.hiddenRubrics.length === plan.rubrics.length - 1
-          ? `Только ${tagOf(plan.rubrics.find((r) => !f.hiddenRubrics.includes(r.id))?.name ?? '')}`
-          : f.hiddenRubrics.length > 2
-            ? `Скрыто хэштегов: ${f.hiddenRubrics.length}`
-            : `Без ${names(f.hiddenRubrics.map((id) => tagOf(plan.rubrics.find((r) => r.id === id)?.name ?? id)))}`,
-      clear: () => set({ hiddenRubrics: [] }),
+      label: picked.length > 2 ? `Рубрик: ${picked.length}` : `Только ${names(picked.map((r) => tagOf(r.name)))}`,
+      clear: () => set({ pickedRubrics: [] }),
     })
   if (f.statuses.length) out.push({ id: 'st', label: `Только «${f.statuses.map((s) => statusOf(s).label).join('», «')}»`, clear: () => set({ statuses: [] }) })
   if (f.onlySlots) out.push({ id: 'slots', label: 'Только без темы', clear: () => set({ onlySlots: false }) })
@@ -64,34 +60,6 @@ export function FilterChips() {
   )
 }
 
-/** Поле «добавить» под заголовком блока: Enter — добавить, Esc — передумать. */
-function AddInline({ label, placeholder, onAdd, onDone }: { label: string; placeholder: string; onAdd: (v: string) => void; onDone: () => void }) {
-  const [v, setV] = useState('')
-  return (
-    <form
-      className="cp-side__add"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (v.trim()) onAdd(v.trim())
-        onDone()
-      }}
-    >
-      <input
-        className="nr-field nr-field--sm"
-        aria-label={label}
-        placeholder={placeholder}
-        value={v}
-        autoFocus
-        onChange={(e) => setV(e.target.value)}
-        onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), onDone())}
-      />
-      <button type="submit" className="nr-btn nr-btn--ghost nr-btn--sm" disabled={!v.trim()}>
-        Добавить
-      </button>
-    </form>
-  )
-}
-
 /** Цвета на выбор: серый — первым, им по умолчанию отмечены разделы. */
 const PALETTE: { color: string; name: string }[] = [
   { color: GRAY, name: 'Серый' },
@@ -109,27 +77,6 @@ const PALETTE: { color: string; name: string }[] = [
 ]
 
 /** Точка цвета у канала или раздела: нажали — палитра, выбрали — карточки перекрасились. Esc или щелчок мимо — закрыть. */
-/** Всплывающее закрывается щелчком мимо и Esc — на уровне документа: в Safari кнопки фокус не получают. */
-function useDismiss(ref: RefObject<HTMLElement>, open: boolean, close: () => void) {
-  const last = useRef(close)
-  last.current = close
-  useEffect(() => {
-    if (!open) return
-    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && last.current()
-    const esc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.stopPropagation() // панель фильтров на узком экране не закрывается
-      last.current()
-    }
-    document.addEventListener('pointerdown', away)
-    window.addEventListener('keydown', esc, true)
-    return () => {
-      document.removeEventListener('pointerdown', away)
-      window.removeEventListener('keydown', esc, true)
-    }
-  }, [open, ref])
-}
-
 function ColorPick({ label, color, onPick, reset }: { label: string; color: string; onPick: (c: string) => void; reset?: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLSpanElement>(null)
@@ -168,113 +115,72 @@ function ColorPick({ label, color, onPick, reset }: { label: string; color: stri
   )
 }
 
-/** Строка канала: точка цвета, фильтр и «⋯» — переименовать или удалить (с подтверждением; вернуть — ⌘Z). */
-function ChannelRow({ c, off, onToggle, children }: { c: Channel; off: boolean; onToggle: () => void; children?: ReactNode }) {
-  const { plan, dispatch, toast, filters, setFilters } = usePlan()
-  const [mode, setMode] = useState<'view' | 'menu' | 'rename' | 'delete'>('view')
-  const [name, setName] = useState(c.name)
-  const ref = useRef<HTMLDivElement>(null)
-  useDismiss(ref, mode === 'menu' || mode === 'delete', () => setMode('view'))
-  const last = plan.channels.length <= 1
-
-  const rename = () => {
-    const n = name.trim().replace(/\s+/g, ' ')
-    if (!n || n === c.name) return setMode('view')
-    if (plan.channels.some((x) => x.id !== c.id && x.name.toLowerCase() === n.toLowerCase())) return toast(`Канал «${n}» уже есть`)
-    dispatch({ type: 'channel', id: c.id, patch: { name: n } })
-    toast(`Канал переименован: «${n}»`, true)
-    setMode('view')
-  }
-  const remove = () => {
-    const n = channelParts(plan, c.id).items.length
-    dispatch({ type: 'removeChannel', id: c.id })
-    if (filters.hiddenChannels.includes(c.id)) setFilters({ ...filters, hiddenChannels: filters.hiddenChannels.filter((x) => x !== c.id) })
-    toast(`Канал «${c.name}» удалён${n ? ` вместе с ${n} ${plural(n, 'материалом', 'материалами', 'материалами')}` : ''}`, true)
-  }
-
-  if (mode === 'rename')
-    return (
-      <form
-        className="cp-side__rename"
-        onSubmit={(e) => {
-          e.preventDefault()
-          rename()
-        }}
-      >
-        <input
-          className="nr-field nr-field--sm"
-          aria-label={`Новое название канала «${c.name}»`}
-          value={name}
-          autoFocus
-          onFocus={(e) => e.target.select()}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setMode('view'))}
-        />
-        <button type="submit" className="nr-btn nr-btn--ghost nr-btn--sm">
-          Готово
-        </button>
-      </form>
-    )
-
-  const parts = mode === 'delete' ? channelParts(plan, c.id) : null
+/** Строка канала: точка цвета, фильтр, «⋯» (переименовать, выше, ниже, удалить); мышью строку можно перетащить. */
+function ChannelRow({ c, off, onToggle, onGrab, drag, children }: {
+  c: Channel
+  off: boolean
+  onToggle: () => void
+  onGrab: (e: ReactPointerEvent) => void
+  drag?: { dy?: number; before?: boolean; after?: boolean }
+  children?: ReactNode
+}) {
+  const [renaming, setRenaming] = useState(false)
+  const [open, setOpen] = useState(false)
+  if (renaming) return <ChannelRename c={c} onDone={() => setRenaming(false)} />
+  const cls = [
+    'cp-side__row',
+    off && 'cp-side__row--off',
+    open && 'cp-side__row--open',
+    drag?.dy !== undefined && 'cp-side__row--drag',
+    drag?.before && 'cp-side__row--before',
+    drag?.after && 'cp-side__row--after',
+  ]
   return (
-    <div ref={ref} className={`cp-side__row${off ? ' cp-side__row--off' : ''}${mode !== 'view' ? ' cp-side__row--open' : ''}`}>
+    <div className={cls.filter(Boolean).join(' ')} data-reorder={c.id} style={drag?.dy !== undefined ? { transform: `translateY(${drag.dy}px)` } : undefined}>
       {children}
-      <button type="button" className="nr-row" aria-pressed={!off} onClick={onToggle}>
+      <button type="button" className="nr-row" aria-pressed={!off} onClick={onToggle} onPointerDown={onGrab} title="Щёлкнуть — показать или скрыть; потянуть — поменять порядок">
         {c.name}
-        {c.start > plan.start && <span className="cp-side__count">с {c.start.slice(8)}.{c.start.slice(5, 7)}</span>}
       </button>
-      <button
-        type="button"
-        className="cp-side__more"
-        aria-label={`Ещё: ${c.name}`}
-        title="Переименовать или удалить"
-        aria-haspopup="menu"
-        aria-expanded={mode === 'menu'}
-        onClick={() => setMode(mode === 'menu' ? 'view' : 'menu')}
-      >
-        <Icon name="more" size={16} />
-      </button>
-      {mode === 'menu' && (
-        <div className="cp-side__menu" role="menu" aria-label={`Канал «${c.name}»`}>
-          <button type="button" role="menuitem" className="cp-menu__item" onClick={() => (setName(c.name), setMode('rename'))}>
-            <Icon name="pencil" size={16} />
-            Переименовать
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="cp-menu__item cp-menu__item--danger"
-            disabled={last}
-            title={last ? 'Последний канал не удалить' : undefined}
-            onClick={() => setMode('delete')}
-          >
-            <Icon name="trash" size={16} />
-            Удалить
-          </button>
-        </div>
-      )}
-      {parts && (
-        <div className="cp-side__menu cp-side__confirm" role="group" aria-label={`Удалить канал «${c.name}»?`}>
-          <p>
-            Удалить «{c.name}»?{' '}
-            {parts.items.length
-              ? `Уйдут ${parts.items.length} ${plural(parts.items.length, 'материал', 'материала', 'материалов')} и форматы канала.`
-              : 'Материалов в нём нет.'}{' '}
-            Вернуть — ⌘Z.
-          </p>
-          <div className="cp-side__confirm-btns">
-            <button type="button" className="nr-btn nr-btn--danger nr-btn--sm" onClick={remove}>
-              Удалить
-            </button>
-            <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setMode('view')}>
-              Отмена
-            </button>
-          </div>
-        </div>
-      )}
+      <ChannelMenu c={c} onRename={() => setRenaming(true)} onOpen={setOpen} className="cp-side__more" />
     </div>
   )
+}
+
+/** Перетащить строку мышью: она едет за указателем, линия показывает, куда встанет; отпустили — порядок поменялся. */
+function useReorder(onMove: (id: string, to: number) => void) {
+  const list = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<{ id: string; dy: number; to: number } | null>(null)
+  const start = (e: ReactPointerEvent, id: string) => {
+    if (e.button !== 0 || e.pointerType !== 'mouse') return // пальцем — «⋯» → «Выше» / «Ниже»: панель листается
+    const rows = [...(list.current?.querySelectorAll<HTMLElement>('[data-reorder]') ?? [])]
+    const from = rows.findIndex((r) => r.dataset.reorder === id)
+    if (from < 0) return
+    const mids = rows.map((r) => {
+      const b = r.getBoundingClientRect()
+      return b.top + b.height / 2
+    })
+    const y0 = e.clientY
+    let live = false
+    let to = from
+    const move = (ev: PointerEvent) => {
+      const dy = ev.clientY - y0
+      if (!live && Math.abs(dy) <= SLOP) return
+      live = true
+      to = mids.filter((m, i) => i !== from && m < mids[from] + dy).length
+      setDrag({ id, dy, to })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setDrag(null)
+      if (!live) return
+      swallowClick() // отпущенная кнопка — не щелчок по фильтру
+      if (to !== from) onMove(id, to)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  return { list, drag, start }
 }
 
 /** Заголовок блока фильтров с «+»: каналы, площадки и хэштеги можно добавлять прямо здесь. */
@@ -291,6 +197,10 @@ function BlockHead({ label, add, adding, onAdd }: { label: string; add: string; 
  *  кнопкой «Фильтры» в шапке; на узком экране — поверх календаря. «+» у каналов, площадок и хэштегов — добавить новый. */
 export function Sidebar({ onClose }: { onClose: () => void }) {
   const { plan, filters, setFilters, narrow, dispatch, toast } = usePlan()
+  const reorder = useReorder((id, to) => {
+    dispatch({ type: 'moveChannel', id, to })
+    toast(`«${plan.channels.find((c) => c.id === id)?.name}» — на ${to + 1}-м месте`, true)
+  })
   const [adding, setAdding] = useState<'channel' | 'platform' | 'tag' | null>(null)
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   const changed = activeFilters({ plan, filters, setFilters }).length > 0
@@ -323,13 +233,25 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
             }}
           />
         )}
-        {plan.channels.map((c) => {
+        <div ref={reorder.list} className="cp-side__list">
+        {plan.channels.map((c, i) => {
           const off = filters.hiddenChannels.includes(c.id)
           const setSection = (id: string, color?: string) =>
             dispatch({ type: 'channel', id: c.id, patch: { sections: c.sections.map((s) => (s.id === id ? { ...s, color } : s)) } })
+          // куда встанет перетаскиваемый: линия над строкой с этим местом среди остальных (или под последней)
+          const d = reorder.drag
+          const from = d ? plan.channels.findIndex((x) => x.id === d.id) : -1
+          const place = i > from ? i - 1 : i
+          const mark = d && (d.id === c.id ? { dy: d.dy } : { before: place === d.to, after: place === plan.channels.length - 2 && d.to === plan.channels.length - 1 })
           return (
             <div key={c.id} className="cp-side__ch">
-              <ChannelRow c={c} off={off} onToggle={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}>
+              <ChannelRow
+                c={c}
+                off={off}
+                onToggle={() => setFilters({ ...filters, hiddenChannels: toggle(filters.hiddenChannels, c.id) })}
+                onGrab={(e) => reorder.start(e, c.id)}
+                drag={mark || undefined}
+              >
                 <ColorPick label={`Цвет: ${c.name}`} color={c.color} onPick={(color) => dispatch({ type: 'channel', id: c.id, patch: { color } })} />
               </ChannelRow>
               {!off &&
@@ -358,6 +280,7 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
             </div>
           )
         })}
+        </div>
       </div>
       <div className="cp-side__block">
         <BlockHead label="Площадки" add="Добавить площадку" adding={adding === 'platform'} onAdd={() => open('platform')} />
@@ -408,30 +331,46 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
         ))}
       </div>
       <div className="cp-side__block">
-        <BlockHead label="Хэштеги" add="Добавить хэштег" adding={adding === 'tag'} onAdd={() => open('tag')} />
+        <BlockHead label="Рубрики" add="Добавить рубрику" adding={adding === 'tag'} onAdd={() => open('tag')} />
         {adding === 'tag' && (
           <AddInline
-            label="Новый хэштег"
-            placeholder="#хэштег"
+            label="Новая рубрика"
+            placeholder="#рубрика"
             onDone={() => setAdding(null)}
             onAdd={(name) => {
               dispatch({ type: 'addRubric', name })
-              toast(`Хэштег ${tagOf(name.replace(/^#/, ''))} добавлен — периодичность в канале задаётся в дашборде, в «Темах»`, true)
+              toast(`Рубрика ${tagOf(name.replace(/^#/, ''))} добавлена — периодичность в канале задаётся в дашборде, в «Темах»`, true)
             }}
           />
         )}
-        <div className="cp-pills">
+        {/* щелчок выделяет рубрику — видны только выделенные; ничего не выделено — видны все */}
+        <div className="cp-pills cp-side__rubrics" role="group" aria-label="Рубрики">
           {plan.rubrics.map((r) => (
             <button
               key={r.id}
               type="button"
               className="nr-pill"
-              aria-pressed={!filters.hiddenRubrics.includes(r.id)}
-              onClick={() => setFilters({ ...filters, hiddenRubrics: toggle(filters.hiddenRubrics, r.id) })}
+              aria-pressed={!!filters.pickedRubrics?.includes(r.id)}
+              onClick={() => setFilters({ ...filters, pickedRubrics: toggle(filters.pickedRubrics ?? [], r.id) })}
             >
               {tagOf(r.name)}
             </button>
           ))}
+        </div>
+        <div className="cp-side__picks">
+          <button
+            type="button"
+            className="nr-btn nr-btn--ghost nr-btn--sm"
+            disabled={plan.rubrics.every((r) => filters.pickedRubrics?.includes(r.id))}
+            onClick={() => setFilters({ ...filters, pickedRubrics: plan.rubrics.map((r) => r.id) })}
+          >
+            Выделить все
+          </button>
+          {!!filters.pickedRubrics?.length && (
+            <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setFilters({ ...filters, pickedRubrics: [] })}>
+              Снять выделение
+            </button>
+          )}
         </div>
       </div>
       <div className="cp-side__block">

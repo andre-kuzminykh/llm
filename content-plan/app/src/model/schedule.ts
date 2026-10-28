@@ -1,6 +1,5 @@
-// Программа — что выпускаем: каналы (разделы — как отдельные каналы), в них хэштеги, по каждому — темы материалов
-// по порядку. Общая тема — заголовком над несколькими материалами хэштега разных форматов. Не шкала времени:
-// время — подписью у строки. Потоки 24/7 сюда не идут; одно и то же, что выходит много раз («Исследование дня»), —
+// Программа — что выпускаем: каналы (разделы — как отдельные каналы), в них рубрики, по каждой — темы материалов
+// по порядку. Не шкала времени: время — подписью у строки. Потоки 24/7 сюда не идут; одно и то же, что выходит много раз («Исследование дня»), —
 // одной строкой с днями.
 import { shortDate, WEEKDAYS, weekday } from './dates'
 import { plural } from './hint'
@@ -10,7 +9,7 @@ import type { Unit } from './units'
 export interface SchedRow {
   key: string
   id: string // что открыть по щелчку: материал (у слитой строки — ближайший)
-  ids: string[] // все материалы строки — с тизерами и анонсами карточки и со всеми повторами: им ставится тема
+  ids: string[] // все материалы строки — с тизерами и анонсами карточки и со всеми повторами
   date: ISODate
   time: string
   title: string
@@ -22,13 +21,12 @@ export interface SchedRow {
   channel: string
   color?: string
   tag: string
-  theme?: string // общая тема над несколькими материалами
   days: ISODate[] // в какие дни выходит; больше одного — строка слита из повторов
 }
 
 export interface SchedTag {
   id: string
-  tag: string // «#тезисы»; без хэштега — название формата
+  tag: string // рубрика «#тезисы»; без рубрики — название формата
   rows: SchedRow[]
 }
 
@@ -38,9 +36,6 @@ export interface SchedGroup {
   color?: string
   tags: SchedTag[]
 }
-
-/** Внутри хэштега: строка без общей темы или общая тема со своими строками — по первому выходу. */
-export type SchedEntry = { row: SchedRow } | { theme: string; rows: SchedRow[] }
 
 /** Карточки за период → строки по порядку: потоки 24/7 не идут. */
 function rowsOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, rubrics: Map<string, Rubric>, order: string[]): SchedRow[] {
@@ -71,25 +66,24 @@ function rowsOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, ru
         channel: sec?.web ?? c.name,
         color: colorOf(c, sec?.id),
         tag: rubric ? tagOf(rubric.name) : rule?.name ?? it.format,
-        theme: it.theme ?? u.items.find((x) => x.theme)?.theme,
         days: [u.date!],
       }
       return [row]
     })
 }
 
-/** Строка — к списку: повтор того же (канал, хэштег, тема, время, формат, общая тема) сливается; пустые слоты — нет. */
+/** Строка — к списку: повтор того же (канал, рубрика, тема, время, формат) сливается; пустые слоты — нет. */
 function push(list: SchedRow[], r: SchedRow) {
   const same =
     !r.slot &&
-    list.find((x) => !x.slot && x.group === r.group && x.tag === r.tag && x.title === r.title && x.time === r.time && x.format === r.format && x.theme === r.theme)
+    list.find((x) => !x.slot && x.group === r.group && x.tag === r.tag && x.title === r.title && x.time === r.time && x.format === r.format)
   if (!same) return list.push({ ...r, ids: [...r.ids], platforms: [...r.platforms] })
   same.days.push(r.date)
   same.ids.push(...r.ids)
   for (const p of r.platforms) if (!same.platforms.includes(p)) same.platforms.push(p)
 }
 
-/** Каналы и разделы (в порядке плана) → хэштеги (по первому выходу) → строки. */
+/** Каналы и разделы (в порядке плана) → рубрики (по первому выходу) → строки. */
 export function scheduleOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, rubrics: Map<string, Rubric>, platforms: string[] = []): SchedGroup[] {
   const groups = new Map<string, SchedGroup>()
   for (const c of channels) {
@@ -106,26 +100,6 @@ export function scheduleOf(channels: Channel[], units: Unit[], rules: Map<string
     push(tag.rows, r)
   }
   return [...groups.values()].filter((g) => g.tags.length)
-}
-
-/** Строки хэштега → строки и общие темы: тема встаёт там, где выходит её первый материал, и собирает остальные. */
-export function entriesOf(rows: SchedRow[]): SchedEntry[] {
-  const out: SchedEntry[] = []
-  const themes = new Map<string, { theme: string; rows: SchedRow[] }>()
-  for (const r of rows) {
-    if (!r.theme) {
-      out.push({ row: r })
-      continue
-    }
-    const t = themes.get(r.theme)
-    if (t) t.rows.push(r)
-    else {
-      const e = { theme: r.theme, rows: [r] }
-      themes.set(r.theme, e)
-      out.push(e)
-    }
-  }
-  return out
 }
 
 /** «26 окт», а не в этом году — «26 окт 2027». */

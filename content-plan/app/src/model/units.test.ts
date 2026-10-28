@@ -54,14 +54,17 @@ describe('T-CP-017 FR-CP-017 карточка — материал целико�
 describe('T-CP-018 FR-CP-018 неделя по времени', () => {
   it('совпадающие по времени стоят рядом, остальные — во всю ширину; освободившееся место занимает следующий', () => {
     const p = smallPlan()
-    p.items.push(item({ id: 'x', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'В то же время', time: '12:30' }))
+    // карточка — полчаса: FULL 12:00–12:30, x 12:15–12:45, y 12:40–13:10, анонс Andre AIT 13:00–13:30
+    p.items.push(item({ id: 'x', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'В то же время', time: '12:15' }))
+    p.items.push(item({ id: 'y', ruleId: 'sh_thesis', rubricId: 'thesis', title: 'Чуть позже', time: '12:40' }))
     const units = unitsOf(indexByDate(p).get('2026-10-26')!, rulesOf(p))
     const placed = layoutBlocks(units, (u) => blockGeometry(u.time, u.end)).map((x) => [x.item.head.id, x.col, x.cols])
     expect(placed).toEqual([
       ['thesis', 0, 1],
       ['demo', 0, 2],
       ['x', 1, 2],
-      ['ait', 0, 2], // FULL кончился в 13:00 — анонс встаёт на его место
+      ['y', 0, 2], // FULL кончился в 12:30 — y встаёт на его место
+      ['ait', 1, 2], // x кончился в 12:45 — анонс встаёт на его
     ])
   })
 })

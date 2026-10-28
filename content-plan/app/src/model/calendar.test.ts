@@ -27,10 +27,10 @@ describe('T-CP-029 дни окна (T-MCL-001)', () => {
 })
 
 describe('T-CP-029 геометрия блока (T-MCL-002)', () => {
-  it('начало и конец в минутах; без конца — час', () => {
+  it('начало и конец в минутах; без конца — полчаса', () => {
     expect(minutesFromMidnight('09:30')).toBe(570)
     expect(blockGeometry('09:30', '11:00')).toEqual({ topMin: 570, heightMin: 90 })
-    expect(blockGeometry('09:00')).toEqual({ topMin: 540, heightMin: 60 })
+    expect(blockGeometry('09:00')).toEqual({ topMin: 540, heightMin: 30 })
   })
   it('конец не раньше начала + 15 минут; через полночь не переваливает', () => {
     expect(blockGeometry('09:00', '09:00')).toEqual({ topMin: 540, heightMin: 15 })
@@ -97,9 +97,9 @@ describe('T-CP-029 перенос и растягивание по 15 минут
     expect(minutesToClock(570)).toBe('09:30')
     expect(minutesToClock(1440)).toBe('24:00')
   })
-  it('перенос сохраняет длительность; без конца — час; у полуночи конец — 24:00', () => {
+  it('перенос сохраняет длительность; без конца — полчаса; у полуночи конец — 24:00', () => {
     expect(reschedule('09:30', '11:00', '2026-11-13', 612)).toEqual({ date: '2026-11-13', start: '10:15', end: '11:45' })
-    expect(reschedule('09:00', undefined, '2026-11-13', 600)).toEqual({ date: '2026-11-13', start: '10:00', end: '11:00' })
+    expect(reschedule('09:00', undefined, '2026-11-13', 600)).toEqual({ date: '2026-11-13', start: '10:00', end: '10:30' })
     expect(reschedule('09:00', undefined, '2026-11-13', 1439)).toEqual({ date: '2026-11-13', start: '23:45', end: '24:00' })
   })
   it('нижний край: по 15 минут, не короче 15 минут, не дальше полуночи', () => {

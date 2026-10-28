@@ -9,7 +9,7 @@ import { initialState, reducer, type Action } from './model/store'
 import { labelOf, timeOf, type ISODate, type Item, type Plan } from './model/types'
 import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
-import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type ToastOpts } from './ui/ctx'
+import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type Span, type ToastOpts } from './ui/ctx'
 import { Icon } from './ui/Icon'
 import { SelectionBar } from './ui/SelectionBar'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
@@ -21,8 +21,9 @@ import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
 import { ItemEditor } from './views/ItemEditor'
 import { PlanningSheet } from './views/PlanningSheet'
-import { CatchUpSheet, PeriodSheet } from './views/ShiftSheets'
+import { PeriodSheet } from './views/ShiftSheets'
 import { TaskSheet } from './views/TaskSheet'
+import { MonthView } from './views/MonthView'
 import { WeekView } from './views/WeekView'
 
 /** Куда вернуться из формы или задачи: к дню, дашборду, черновикам или планированию. */
@@ -32,16 +33,22 @@ type Sheet =
   | { kind: 'item'; id: string; back?: Back }
   | { kind: 'new'; draft: Partial<Item>; back?: Back }
   | { kind: 'task'; id: string; back?: Back }
-  | { kind: 'catchup'; back?: Back }
   | { kind: 'period'; back?: Back }
   | { kind: 'help' }
   | null
 
 /** Открыли форму или задачу поверх листа — «назад» ведёт к нему. */
 const backOf = (s: Sheet): Back | undefined =>
-  !s || s.kind === 'help' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' || s.kind === 'catchup' || s.kind === 'period' ? s.back : s
+  !s || s.kind === 'help' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' || s.kind === 'period' ? s.back : s
 
 const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
+const readSpan = (): Span => {
+  try {
+    return localStorage.getItem('cp:span') === 'month' ? 'month' : 'week'
+  } catch {
+    return 'week'
+  }
+}
 const readMode = (): Mode => {
   try {
     const m = localStorage.getItem('cp:week-mode') as Mode
@@ -177,6 +184,7 @@ interface WorkspaceProps {
 function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: WorkspaceProps) {
   // SMM — это календарь: неделя по часам или дорожками, как оставили; дашборд открывается панелью справа
   const [mode, setModeState] = useState<Mode>(readMode)
+  const [span, setSpanState] = useState<Span>(readSpan)
   // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
   const [anchor, setAnchorState] = useState<ISODate>(() => readLS('cp:anchor', today()))
   const [jump, setJump] = useState({ date: anchor, n: 0 })
@@ -210,6 +218,14 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       localStorage.setItem('cp:week-mode', m)
     } catch {
       /* вид проживёт до перезагрузки */
+    }
+  }
+  const setSpan = (s: Span) => {
+    setSpanState(s)
+    try {
+      localStorage.setItem('cp:span', s)
+    } catch {
+      /* период проживёт до перезагрузки */
     }
   }
   const setAnchor = useCallback((d: ISODate) => {
@@ -364,10 +380,11 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     },
     mode: phone || mode !== 'feed' ? mode : 'time',
     setMode,
+    span: phone ? 'week' : span, // на телефоне месяц не помещается — лента и неделя
+    setSpan,
     openDashboard: () => setSheet({ kind: 'dashboard' }),
     openDrafts: () => setSheet({ kind: 'drafts' }),
     openPlanning: () => setSheet((s) => ({ kind: 'planning', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
-    openCatchUp: () => setSheet((s) => ({ kind: 'catchup', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
     openPeriod: () => setSheet((s) => ({ kind: 'period', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
     dropOn,
     setStatus: (unit, status) => {
@@ -444,12 +461,11 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
         {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
         {sideOpen && <Sidebar onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
-          {ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
+          {ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'dashboard' && <DashboardSheet onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'planning' && <PlanningSheet onClose={closeSheet} onBack={back} />}
-          {sheet?.kind === 'catchup' && <CatchUpSheet onClose={closeSheet} onBack={back} />}
           {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} onBack={back} />}
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}

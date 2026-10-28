@@ -1,17 +1,17 @@
-// Наверстать и перенести период, не ломая остальной план.
-// Наверстать: просроченное — дата прошла, а «Вышло» не отмечено — встаёт в ближайший пустой слот того же формата
-// (слот уходит); нет слота — на ближайший день, где проверка сетки ничего не отметит; нет и такого — на ближайший день
-// «вне сетки», не больше одной лишней карточки формата в день.
+// Наверстать и перенести период.
+// Наверстать — одной кнопкой: просроченное (дата прошла, а «Вышло» не отмечено) встаёт на ближайшие места сетки своего
+// формата, а то, что там стояло, сдвигается по очереди дальше — до первого пустого слота (его занимают) или за конец
+// сетки. «Отменить» возвращает всё одним шагом; дальше можно переставлять руками.
 // Перенести период (отпуск): «очередь» — темы с этих дней встают в следующие слоты своего формата, за ними сдвигается вся
 // очередь, сетка на месте, в периоде пусто; «в свободные места» — материалы периода — как при «Наверстать», после периода.
 // Ежедневные авто-публикации и потоки 24/7 не переносятся: они выходят сами.
-import { addDays, daysBetween } from './dates'
+import { addDays, daysBetween, weekday } from './dates'
 import { AUTO_RULES, indexByDate } from './filters'
 import { moveHint } from './hint'
-import { catchUp, moveGroups, removeItem, type Action, type CatchUpMove } from './store'
+import { catchUp, moveGroups, removeItem, updateMany, type Action, type CatchUpMove } from './store'
 import { isSlot, timeOf, type ISODate, type Item, type Plan } from './types'
 
-export type CatchUpHow = 'slot' | 'free' | 'off' | 'queue' | 'later' | 'group'
+export type CatchUpHow = 'slot' | 'free' | 'off' | 'queue' | 'later' | 'group' | 'shift'
 
 export interface CatchUpStep extends CatchUpMove {
   from: ISODate
@@ -29,6 +29,85 @@ const movable = (plan: Plan) => {
 export function overdueOf(plan: Plan, today: ISODate): Item[] {
   const ok = movable(plan)
   return plan.items.filter((it) => ok(it) && it.date! < today && !isSlot(it)).sort((a, b) => a.date!.localeCompare(b.date!) || a.rank - b.rank)
+}
+
+export interface CatchUpResult {
+  plan: Plan // план после переноса
+  moved: CatchUpStep[] // просроченные — куда встали
+  shifted: CatchUpStep[] // что из-за них сдвинулось по очереди
+  filled: number // пустых слотов занято
+  actions: Action[] // те же правки — одним шагом истории (batch)
+}
+
+const cardOf = (x: Item) => (x.group ? `g|${x.group}|${x.date}` : `i|${x.id}`) // группа едет целиком
+
+/** Тизеры, анонсы и кросс-посты едут со своей карточкой («в день FULL»): встали на день, которого нет в их сетке, —
+ *  становятся разовыми, чтобы проверка не ругалась на то, что так и задумано. */
+function companions(before: Plan, after: Plan, actions: Action[]): Plan {
+  const was = new Map(before.items.map((x) => [x.id, x.date]))
+  const rules = new Map(after.rules.map((r) => [r.id, r]))
+  const ids = after.items
+    .filter((x) => x.derive && x.date && !x.offGrid && was.get(x.id) !== x.date && rules.get(x.ruleId) && !rules.get(x.ruleId)!.days[weekday(x.date)])
+    .map((x) => x.id)
+  if (!ids.length) return after
+  actions.push({ type: 'updateMany', ids, patch: { offGrid: true } })
+  return updateMany(after, ids, { offGrid: true })
+}
+
+/** Наверстать: у каждого формата просроченные встают на ближайшие с today места его сетки, стоявшие там сдвигаются
+ *  на следующие — пока очередь не дойдёт до пустого слота (он занят, дальше всё на месте) или до конца (тогда — на
+ *  ближайшие дни, где проверка ничего не отметит, как у разовых форматов без дней в сетке). Сначала форматы с FULL:
+ *  их группа везёт тизеры, анонсы и письма — те второй раз не едут. Места — по плану до переноса, одним проходом. */
+export function catchUpQueue(plan: Plan, today: ISODate): CatchUpResult {
+  const ok = movable(plan)
+  const rules = [...plan.rules].sort((a, b) => Number(!!b.full) - Number(!!a.full))
+  const taken = new Set<string>()
+  const moves: { id: string; date: ISODate; time?: string }[] = []
+  const remove: string[] = []
+  const moved: CatchUpStep[] = []
+  const shifted: CatchUpStep[] = []
+  const tails: { from: ISODate; ids: string[] }[] = [] // кому не хватило мест в сетке и просроченные разовых форматов
+  for (const rule of rules) {
+    const line = plan.items
+      .filter((it) => it.ruleId === rule.id && ok(it) && !taken.has(cardOf(it)))
+      .sort((a, b) => a.date!.localeCompare(b.date!) || timeOf(a, rule).localeCompare(timeOf(b, rule)) || a.rank - b.rank)
+    const late = line.filter((it) => it.date! < today && !isSlot(it))
+    if (!late.length) continue
+    if (!rule.days.some(Boolean)) {
+      tails.push({ from: today, ids: late.map((x) => x.id) })
+      continue
+    }
+    const place = (it: Item, date: ISODate, time: string | undefined, how: CatchUpHow) => {
+      taken.add(cardOf(it))
+      moves.push({ id: it.id, date, time })
+      ;(it.date! < today ? moved : shifted).push({ id: it.id, date, time, from: it.date!, how: it.date! < today ? how : 'shift' })
+    }
+    const ahead = line.filter((it) => it.date! >= today)
+    const carry = [...late]
+    for (const at of ahead) {
+      if (!carry.length) break
+      place(carry.shift()!, at.date!, timeOf(at, rule), isSlot(at) ? 'slot' : 'queue')
+      if (isSlot(at)) {
+        taken.add(cardOf(at))
+        remove.push(at.id) // пустой слот занят — дальше очередь не идёт
+      } else carry.push(at)
+    }
+    if (carry.length) tails.push({ from: ahead.length ? addDays(ahead[ahead.length - 1].date!, 1) : today, ids: carry.map((x) => x.id) })
+  }
+  let next = moveGroups(plan, moves, remove)
+  const actions: Action[] = moves.length || remove.length ? [{ type: 'moveGroups', moves, remove }] : []
+  // не хватило мест — после последнего, на ближайший день, где сетка не против
+  for (const t of tails) {
+    const steps = catchUpPlan(next, t.ids, t.from)
+    const go = steps.filter((m) => m.how !== 'group')
+    if (go.length) {
+      next = catchUp(next, go)
+      actions.push({ type: 'catchUp', moves: go })
+    }
+    for (const m of steps) (m.from < today ? moved : shifted).push(m.from < today ? m : { ...m, how: 'shift' })
+  }
+  next = companions(plan, next, actions)
+  return { plan: next, moved, shifted, filled: remove.length, actions }
 }
 
 /** Куда встанет каждая карточка, начиная с from: по очереди, на плане после предыдущих переносов.
@@ -137,6 +216,6 @@ export function shiftPeriod(plan: Plan, from: ISODate, to: ISODate, channels: st
     })
   }
   const actions: Action[] = moves.length || remove.length ? [{ type: 'moveGroups', moves, remove }] : []
-  return { plan: moveGroups(plan, moves, remove), moved, cleared: remove.length, actions }
+  return { plan: companions(plan, moveGroups(plan, moves, remove), actions), moved, cleared: remove.length, actions }
 }
 

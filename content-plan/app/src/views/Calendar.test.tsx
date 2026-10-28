@@ -15,7 +15,7 @@ describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
     const cards = [...day('2026-10-26').querySelectorAll('.cp-card__open')].map((b) => b.getAttribute('aria-label'))
     expect(cards).toEqual(['Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ, 11:00', 'Демо · FULL: Стратегия, 12:00', 'Демо · Анонс от Andre AIT: Стратегия, 13:00'])
     const card = within(day('2026-10-26')).getByRole('button', { name: /^Демо · FULL: Стратегия/ })
-    expect(within(card).getByLabelText('Хэштег: #демо')).toBeInTheDocument()
+    expect(within(card).getByLabelText('Рубрика: #демо')).toBeInTheDocument()
     expect(card.closest('.cp-card')).toHaveClass('cp-card--main')
     // слот без темы — пунктиром «Нужна тема»
     expect(within(day('2026-10-27')).getByRole('button', { name: /^Тезисы · Тезис дня: Нужна тема/ }).closest('.cp-card')).toHaveClass('cp-card--slot')
@@ -48,7 +48,7 @@ describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
 })
 
 describe('T-CP-028 FR-CP-028 оболочка: отделы, панель слева, дашборд справа вверху', () => {
-  it('слева — отделы и фильтры; вид календаря с иконками — справа от поиска; «Месяца», окон дней и «Отменить» в шапке нет', async () => {
+  it('слева — отделы и фильтры; справа от поиска — «Неделя / Месяц» и вид недели значками; окон дней и «Отменить» в шапке нет', async () => {
     renderApp()
     await ready()
     const nav = screen.getByRole('navigation', { name: 'Отделы' })
@@ -60,14 +60,18 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     expect(within(views).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['Время', 'Каналы', 'Площадки', 'Темы'])
     expect(within(views).getByRole('radio', { name: 'Время' }).querySelector('svg')).not.toBeNull()
     // справа от поиска, а значок дашборда — в самом углу
-    const order = [...top.querySelectorAll('[role="search"], [aria-label="Вид календаря"], [aria-label="Дашборд"]')].map((el) => (el.getAttribute('role') === 'search' ? 'search' : el.getAttribute('aria-label')))
-    expect(order).toEqual(['search', 'Вид календаря', 'Дашборд'])
+    const order = [...top.querySelectorAll('[role="search"], [aria-label="Неделя или месяц"], [aria-label="Вид календаря"], [aria-label="Дашборд"]')].map((el) => (el.getAttribute('role') === 'search' ? 'search' : el.getAttribute('aria-label')))
+    expect(order).toEqual(['search', 'Неделя или месяц', 'Вид календаря', 'Дашборд'])
     await userEvent.click(within(views).getByRole('radio', { name: 'Темы' }))
     expect(await screen.findByRole('grid', { name: 'Неделя по темам' })).toBeInTheDocument()
     await userEvent.click(within(views).getByRole('radio', { name: 'Время' }))
     await ready()
     expect(within(side()).queryByRole('radiogroup', { name: /Вид|Показать/ })).toBeNull()
-    expect(within(top).queryByRole('radio', { name: 'Месяц' })).toBeNull()
+    // месяц — не вид недели, а свой переключатель «Неделя / Месяц» значками
+    expect(within(within(top).getByRole('radiogroup', { name: 'Неделя или месяц' })).getAllByRole('radio').map((r) => [r.getAttribute('aria-label'), !!r.querySelector('svg')])).toEqual([
+      ['Неделя', true],
+      ['Месяц', true],
+    ])
     expect(within(top).queryByRole('button', { name: /Отменить/ })).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: /Сколько дней/ })).toBeNull()
     expect(screen.queryByRole('group', { name: 'Лента дней' })).toBeNull()
@@ -99,7 +103,7 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     expect(within(side()).getByRole('button', { name: 'Andre AIT' })).toHaveAttribute('aria-pressed', 'false')
     expect(localStorage.getItem('cp:side')).toBe('true')
   })
-  it('каналы, площадки и хэштеги добавляются в панели слева и сразу фильтруются', async () => {
+  it('каналы, площадки и рубрики добавляются в панели слева и сразу фильтруются', async () => {
     renderApp()
     await ready()
     await userEvent.click(within(side()).getByRole('button', { name: 'Добавить площадку' }))
@@ -109,8 +113,8 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     await userEvent.type(within(side()).getByRole('textbox', { name: 'Новый канал' }), 'Антрополис{Enter}')
     await userEvent.click(within(side()).getByRole('button', { name: /^Антрополис/ }))
     expect(within(side()).getByRole('button', { name: /^Антрополис/ })).toHaveAttribute('aria-pressed', 'false')
-    await userEvent.click(within(side()).getByRole('button', { name: 'Добавить хэштег' }))
-    await userEvent.type(within(side()).getByRole('textbox', { name: 'Новый хэштег' }), '#исследования{Enter}')
+    await userEvent.click(within(side()).getByRole('button', { name: 'Добавить рубрику' }))
+    await userEvent.type(within(side()).getByRole('textbox', { name: 'Новая рубрика' }), '#исследования{Enter}')
     expect(within(side()).getByRole('button', { name: '#исследования' })).toBeInTheDocument()
   })
 })

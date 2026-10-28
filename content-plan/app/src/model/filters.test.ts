@@ -5,10 +5,13 @@ describe('T-CP-009 FR-CP-009 фильтры', () => {
   const p = smallPlan()
   const ids = (f = NO_FILTERS) => p.items.filter((it) => visible(it, f)).map((it) => it.id)
 
-  it('скрытая рубрика — вместе с её тизером и анонсами', () => {
-    const shown = ids({ ...NO_FILTERS, hiddenRubrics: ['demo'] })
+  it('выделенные рубрики — видны только они (с тизерами и анонсами); ничего не выделено — все', () => {
+    const shown = ids({ ...NO_FILTERS, pickedRubrics: ['thesis'] })
     expect(shown).not.toContain('teaser')
     expect(shown).toContain('thesis')
+    expect(ids({ ...NO_FILTERS, pickedRubrics: ['demo'] })).toEqual(expect.arrayContaining(['demo', 'teaser']))
+    expect(ids({ ...NO_FILTERS, pickedRubrics: ['demo'] })).not.toContain('thesis')
+    expect(ids({ ...NO_FILTERS, pickedRubrics: [] })).toEqual(ids())
   })
   it('скрытый канал', () => {
     expect(ids({ ...NO_FILTERS, hiddenChannels: ['andre'] })).not.toContain('ait')

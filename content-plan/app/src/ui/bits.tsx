@@ -70,7 +70,7 @@ export function PlatformIcon({ platform, size = 14 }: { platform: string; size?:
 /** Тема — хэштегом: «#демо». Формат и время — рядом мелко. */
 export function RubricChip({ name }: { name: string }) {
   return (
-    <span className="cp-rub" aria-label={`Хэштег: ${tagOf(name)}`}>
+    <span className="cp-rub" aria-label={`Рубрика: ${tagOf(name)}`}>
       {tagOf(name)}
     </span>
   )

@@ -422,6 +422,17 @@ export const updateChannel = (plan: Plan, id: string, patch: Partial<Channel>): 
   channels: plan.channels.map((c) => (c.id === id ? { ...c, ...patch } : c)),
 })
 
+/** Канал — на место to (0 — первым): в фильтрах, дорожках, программе и выгрузке — тот же порядок. */
+export const moveChannel = (plan: Plan, id: string, to: number): Plan => {
+  const from = plan.channels.findIndex((c) => c.id === id)
+  const at = Math.max(0, Math.min(plan.channels.length - 1, to))
+  if (from < 0 || from === at) return plan
+  const channels = [...plan.channels]
+  const [c] = channels.splice(from, 1)
+  channels.splice(at, 0, c)
+  return { ...plan, channels }
+}
+
 /** Что уйдёт вместе с каналом: его форматы и материалы — и материалы других каналов по этим форматам. */
 export function channelParts(plan: Plan, id: string) {
   const rules = new Set(plan.rules.filter((r) => r.channelId === id).map((r) => r.id))
@@ -486,6 +497,7 @@ export type Action =
   | { type: 'channel'; id: string; patch: Partial<Channel> }
   | { type: 'addChannel'; name: string; start: ISODate; id?: string }
   | { type: 'removeChannel'; id: string }
+  | { type: 'moveChannel'; id: string; to: number }
   | { type: 'catchUp'; moves: CatchUpMove[] }
   | { type: 'moveGroups'; moves: { id: string; date: ISODate; time?: string }[]; remove?: string[] }
   | { type: 'addPlatform'; name: string }
@@ -528,6 +540,7 @@ function apply(plan: Plan, a: Action): Plan {
     case 'channel': return updateChannel(plan, a.id, a.patch)
     case 'addChannel': return addChannel(plan, a.name, a.start, a.id)
     case 'removeChannel': return removeChannel(plan, a.id)
+    case 'moveChannel': return moveChannel(plan, a.id, a.to)
     case 'catchUp': return catchUp(plan, a.moves)
     case 'moveGroups': return moveGroups(plan, a.moves, a.remove)
     case 'addPlatform': return addPlatform(plan, a.name)
