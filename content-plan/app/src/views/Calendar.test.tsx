@@ -48,7 +48,7 @@ describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
 })
 
 describe('T-CP-028 FR-CP-028 оболочка: отделы, панель слева, дашборд справа вверху', () => {
-  it('слева — отделы и фильтры; справа от поиска — «Неделя / Месяц» и вид недели значками; окон дней и «Отменить» в шапке нет', async () => {
+  it('слева — отделы и фильтры; справа от поиска — вид недели, справа — дашборд, в углу «Неделя / Месяц»; окон дней и «Отменить» в шапке нет', async () => {
     renderApp()
     await ready()
     const nav = screen.getByRole('navigation', { name: 'Отделы' })
@@ -61,7 +61,7 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     expect(within(views).getByRole('radio', { name: 'Время' }).querySelector('svg')).not.toBeNull()
     // справа от поиска, а значок дашборда — в самом углу
     const order = [...top.querySelectorAll('[role="search"], [aria-label="Неделя или месяц"], [aria-label="Вид календаря"], [aria-label="Дашборд"]')].map((el) => (el.getAttribute('role') === 'search' ? 'search' : el.getAttribute('aria-label')))
-    expect(order).toEqual(['search', 'Неделя или месяц', 'Вид календаря', 'Дашборд'])
+    expect(order).toEqual(['search', 'Вид календаря', 'Дашборд', 'Неделя или месяц'])
     await userEvent.click(within(views).getByRole('radio', { name: 'Темы' }))
     expect(await screen.findByRole('grid', { name: 'Неделя по темам' })).toBeInTheDocument()
     await userEvent.click(within(views).getByRole('radio', { name: 'Время' }))

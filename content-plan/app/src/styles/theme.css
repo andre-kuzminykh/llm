@@ -288,7 +288,6 @@ select.nr-field {
 }
 .cp-top__left, .cp-top__mid, .cp-top__right { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .cp-top__mid { gap: 24px; }
-.cp-top__views { display: flex; align-items: center; gap: 8px; }
 .cp-top__right { justify-content: flex-end; }
 .cp-top__nav { display: flex; align-items: center; gap: 4px; }
 .cp-top__spacer { flex: 1; }

@@ -57,14 +57,15 @@ check(
 const placed = () =>
   page.evaluate(() => {
     const x = (sel) => document.querySelector(`.cp-top ${sel}`)?.getBoundingClientRect()
-    const [t, l, m, s, v, d] = [x(''), x('.cp-top__left'), x('.cp-top__mid'), x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]')]
+    const [t, l, m, s, v, d, w] = [x(''), x('.cp-top__left'), x('.cp-top__mid'), x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]'), x('[aria-label="Неделя или месяц"]')]
     return {
-      // посередине шапки — или, если слева тесно, с отступом от даты; между поиском и видом — заметный промежуток; дашборд — в углу
-      ok: m && s && v && d && (Math.abs(m.left + m.width / 2 - (t.left + t.width / 2)) < 30 || m.left - l.right >= 24) && v.left - s.right >= 20 && Math.abs(s.top - v.top) < 12 && d.right > window.innerWidth - 40,
+      // посередине шапки — или, если слева тесно, с отступом от даты; между поиском и видом — заметный промежуток;
+      // справа — дашборд, в самом углу — «Неделя / Месяц»
+      ok: m && s && v && d && w && (Math.abs(m.left + m.width / 2 - (t.left + t.width / 2)) < 30 || m.left - l.right >= 24) && v.left - s.right >= 20 && Math.abs(s.top - v.top) < 12 && w.right > window.innerWidth - 40 && d.right <= w.left && w.left - d.right < 24 && Math.abs(d.top + d.height / 2 - (w.top + w.height / 2)) < 6,
       off: Math.round(m.left + m.width / 2 - (t.left + t.width / 2)),
     }
   })
-check((await placed()).ok, 'поиск и вид — посередине шапки, между ними промежуток; в углу — дашборд, в одну строку', 'поиск, вид и дашборд стоят не так')
+check((await placed()).ok, 'поиск и вид — посередине шапки, между ними промежуток; справа — дашборд, в углу — «Неделя / Месяц», в одну строку', 'поиск, вид, дашборд и «Неделя / Месяц» стоят не так')
 const bw = await modes.getByRole('radio', { checked: true }).evaluate((el) => {
   const c = getComputedStyle(el)
   const lum = (rgb) => rgb.match(/\d+/g).slice(0, 3).reduce((a, b) => a + Number(b), 0) / 3

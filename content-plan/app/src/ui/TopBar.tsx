@@ -16,7 +16,8 @@ const SAVED: Record<string, string> = {
 }
 
 /** Шапка календаря: слева «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки; посередине —
- *  поиск, «Неделя / Месяц» и вид недели (время, каналы, площадки, темы); справа в углу — значок дашборда (открывается панелью справа).
+ *  поиск и вид недели (время, каналы, площадки, темы); справа — значок дашборда (открывается панелью справа), в самом углу —
+ *  «Неделя / Месяц».
  *  «+» — круглая кнопка справа внизу. Отмена — ⌘Z и кнопкой во всплывашке после правки. */
 export function TopBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
   const ctx = usePlan()
@@ -43,13 +44,10 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
       {typeof title === 'string' ? <h1 className="nr-title">{title}</h1> : title}
       {children}
       </div>
-      {/* поиск, неделя или месяц и вид недели — посередине шапки (если слева тесно — сразу за датой); справа в углу — дашборд */}
+      {/* поиск и вид недели — посередине шапки (если слева тесно — сразу за датой); справа — дашборд, в углу — неделя или месяц */}
       <div className="cp-top__mid">
         <Search />
-        <div className="cp-top__views">
-          {!phone && <SpanSwitch />}
-          {span === 'week' && <ViewSwitch />}
-        </div>
+        {span === 'week' && <ViewSwitch />}
       </div>
       <div className="cp-top__right">
       {!sideOpen && <FilterChips />}
@@ -71,6 +69,7 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
           {need > 0 && <span className="cp-top__dot" aria-hidden="true" />}
         </button>
       )}
+      {!phone && <SpanSwitch />}
       </div>
     </header>
   )
