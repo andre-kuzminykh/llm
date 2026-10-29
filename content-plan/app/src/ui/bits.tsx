@@ -211,8 +211,11 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const fit = Math.floor((room + 3 - (formats.length && plats.some((p) => !isHome(p.platform)) ? 6 : 0)) / 15)
   // сайт и письмо — форматы: их значок уже стоит первым
   const where = plats.filter((p) => !isHome(p.platform))
-  const shownPlats = formats.length + where.length > fit ? where.slice(0, Math.max(0, fit - formats.length - 1)) : where
-  const restPlats = where.slice(shownPlats.length)
+  // не влезло — «+N» (около 20 px); в тесной карточке он сворачивает и форматы
+  const keep = formats.length + where.length > fit ? Math.max(1, Math.floor((room + 3 - 6 - 20) / 15)) : Infinity
+  const shownFormats = formats.slice(0, keep)
+  const shownPlats = where.slice(0, Math.max(0, keep - formats.length))
+  const rest = [...formats.slice(shownFormats.length).map((f) => FORMAT_ICON[f].label), ...where.slice(shownPlats.length).map((p) => p.platform)]
   const withIcons = icons && (formats.length > 0 || where.length > 0)
   const cls = ['cp-card', `cp-card--${variant}`, withIcons && 'cp-card--icons', narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', picked && 'cp-card--picked', done && 'cp-card--done', head.status === 'progress' && 'cp-card--progress', className]
     .filter(Boolean)
@@ -281,7 +284,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
         )}
         {withIcons && (
           <span className={`cp-card__icons${iconRoom === undefined ? '' : ' cp-card__icons--one'}`} aria-hidden="true">
-            {formats.map((f) => (
+            {shownFormats.map((f) => (
               <span key={f} className="cp-card__f" title={FORMAT_ICON[f].label}>
                 <Icon name={FORMAT_ICON[f].icon} size={12} />
               </span>
@@ -289,9 +292,9 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
             {shownPlats.map(({ platform }) => (
               <PlatformIcon key={platform} platform={platform} size={12} />
             ))}
-            {restPlats.length > 0 && (
-              <span className="cp-card__more" title={restPlats.map((p) => p.platform).join(', ')}>
-                +{restPlats.length}
+            {rest.length > 0 && (
+              <span className="cp-card__more" title={rest.join(', ')}>
+                +{rest.length}
               </span>
             )}
           </span>

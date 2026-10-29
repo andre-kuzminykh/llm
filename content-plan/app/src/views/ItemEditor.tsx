@@ -334,12 +334,15 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
               )}
               {canRepeat && (
                 <>
-                  <span className="cp-task__sep" aria-hidden="true">·</span>
-                  <select className="cp-repeat__sel" aria-label="Повтор" value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
-                    {REPEATS.map((r) => (
-                      <option key={r.id} value={r.id}>{r.label}</option>
-                    ))}
-                  </select>
+                  {/* повтор — плашкой со стрелками по кругу, чтобы было видно, что материал можно поставить на регулярку */}
+                  <label className={`cp-repeat__pick${repeat !== 'none' ? ' cp-repeat__pick--on' : ''}`} title="Поставить на регулярку: каждую неделю, через неделю или раз в месяц">
+                    <Icon name="repeat" size={15} />
+                    <select className="cp-repeat__sel" aria-label="Повтор" value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
+                      {REPEATS.map((r) => (
+                        <option key={r.id} value={r.id}>{r.label}</option>
+                      ))}
+                    </select>
+                  </label>
                 </>
               )}
             </>
