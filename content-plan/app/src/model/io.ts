@@ -1,6 +1,6 @@
 // Выгрузка и загрузка: JSON целиком и CSV-календарь в формате out/4_calendar.csv.
 import { addDays, MONTHS, WEEKDAYS, weekday } from './dates'
-import { formatOf, GRAY, isFormat, lineOf, MAIL, PLACEHOLDER, TEXT_IMAGE, timeOf, WEB_PAGE, type Channel, type ISODate, type Item, type Plan, type Rule } from './types'
+import { formatOf, GRAY, isFormat, lineOf, MAIL, OLD_MAIL, PLACEHOLDER, TEXT_IMAGE, timeOf, WEB_PAGE, type Channel, type ISODate, type Item, type Plan, type Rule } from './types'
 
 export const exportJSON = (plan: Plan) => JSON.stringify(plan)
 
@@ -248,10 +248,19 @@ const splits = (format: string, platforms: string[]) => {
 }
 const isSlotItem = (it: Item) => it.title.trim() === PLACEHOLDER
 
-/** Сайт и письмо стали форматами: формат и материал, где они вместе с другими площадками, делятся на части —
+/** Сайт и рассылка стали форматами: формат и материал, где они вместе с другими площадками, делятся на части —
  *  одна карточка (группа), тот же день и время; главная часть остаётся со своим id, остальные — «id~mail», «id~post».
  *  Уже разделённый план возвращается как есть. */
-export function webAndMail(p: Plan): Plan {
+export function webAndMail(plan: Plan): Plan {
+  // письмо теперь называется «Рассылка»
+  const renamed = plan.rules.some((r) => r.format === OLD_MAIL) || plan.items.some((it) => it.format === OLD_MAIL)
+  const p = !renamed
+    ? plan
+    : {
+        ...plan,
+        rules: plan.rules.map((r) => (r.format === OLD_MAIL ? { ...r, format: MAIL } : r)),
+        items: plan.items.map((it) => (it.format === OLD_MAIL ? { ...it, format: MAIL } : it)),
+      }
   if (!p.rules.some((r) => splits(r.format, r.platforms)) && !p.items.some((it) => splits(it.format, it.platforms))) return p
   const kinds = new Map<string, Map<Part['kind'], string>>() // формат → часть → id формата
   const rules = p.rules.flatMap((r) => {

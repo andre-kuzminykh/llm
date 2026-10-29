@@ -6,7 +6,7 @@ import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, webAnd
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
-import { isHome, labelOf, timeOf, type ISODate, type Item, type Plan } from './model/types'
+import { isHome, labelOf, MAIL, OLD_MAIL, timeOf, type ISODate, type Item, type Plan } from './model/types'
 import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
 import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type Span, type ToastOpts } from './ui/ctx'
@@ -190,7 +190,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   const [filters, setFiltersState] = useState<Filters>(() => {
     const f = { ...DEFAULT_FILTERS, ...readLS<Partial<Filters>>('cp:filters', {}) }
     // сайт и письмо стали форматами: старый фильтр по ним как по площадкам больше не включить и не выключить
-    return { ...f, hiddenPlatforms: f.hiddenPlatforms.filter((p) => !isHome(p)) }
+    return { ...f, hiddenPlatforms: f.hiddenPlatforms.filter((p) => !isHome(p)), hiddenFormats: f.hiddenFormats?.map((x) => (x === OLD_MAIL ? MAIL : x)) }
   })
   const [sheet, setSheet] = useState<Sheet>(null)
   const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)

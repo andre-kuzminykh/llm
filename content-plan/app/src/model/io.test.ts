@@ -187,3 +187,14 @@ describe('T-CP-050 FR-CP-050 сайт и письмо — форматы', () =>
       expect(unitsOf(indexByDate(after).get(d) ?? [], rules(after)).length).toBe(unitsOf(indexByDate(before).get(d) ?? [], rules(before)).length)
   })
 })
+
+describe('T-CP-050 FR-CP-050 письмо называется «Рассылка»', () => {
+  it('формат «Письмо» в сохранённом плане становится «Рассылкой»; повторно — то же', () => {
+    const p = webAndMail(smallPlan())
+    const old: Plan = { ...p, rules: p.rules.map((r) => (r.format === MAIL ? { ...r, format: 'Письмо' } : r)), items: p.items.map((it) => (it.format === MAIL ? { ...it, format: 'Письмо' } : it)) }
+    const back = webAndMail(old)
+    expect(back.items.find((x) => x.id === 'ait~mail')!.format).toBe('Рассылка')
+    expect(back.rules.find((r) => r.id === 'ait~mail')!.format).toBe('Рассылка')
+    expect(webAndMail(back)).toBe(back)
+  })
+})

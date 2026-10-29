@@ -375,7 +375,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         </label>
         {existing && (
           <>
-            <button type="button" className="nr-btn nr-btn--danger nr-btn--icon" onClick={remove} aria-label="Удалить" title="Удалить">
+            <button type="button" className="nr-btn nr-btn--ghost nr-btn--icon cp-trash" onClick={remove} aria-label="Удалить" title="Удалить">
               <Icon name="trash" size={18} />
             </button>
             {!isBank && (

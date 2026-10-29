@@ -9,6 +9,8 @@ import { grabCard } from './drag'
 import { Icon } from './Icon'
 
 const MIME = 'application/x-content-plan'
+/** Экран без наведения (палец): кнопки на карточке крупнее. */
+const TOUCH = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches
 
 export const PLATFORM_SHORT: Record<string, string> = {
   Web: 'Web', YouTube: 'YT', Instagram: 'IG', TikTok: 'TT', Threads: 'Th', X: 'X', Telegram: 'TG', LinkedIn: 'in', Mail: 'Mail',
@@ -197,21 +199,24 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const full = !!rule?.full && !head.derive
   // готово и вышло — бледнее сразу; в работе — подсвечена и «дышит»
   const done = head.status === 'ready' || head.status === 'published'
-  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', picked && 'cp-card--picked', done && 'cp-card--done', head.status === 'progress' && 'cp-card--progress', className]
-    .filter(Boolean)
-    .join(' ')
   const st = statusOf(head.status)
   const label = `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
   const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
   // форматы карточки: главного материала первым, остальные — по порядку (горизонталь, вертикаль, веб, пост)
   const own = new Set(unit.items.map((it) => it.format))
   const formats = [head.format, ...Object.keys(FORMAT_ICON).filter((f) => f !== head.format && own.has(f))].filter((f) => FORMAT_ICON[f])
-  // на шкале ряд не переносится: значок с промежутком — 15 px, черта между форматом и площадками — 6; не влезло — «+N»
-  const fit = iconRoom === undefined ? Infinity : Math.floor((iconRoom + 3 - (formats.length && plats.some((p) => !isHome(p.platform)) ? 6 : 0)) / 15)
+  // ряд одной строкой: значок с промежутком — 15 px, черта между форматом и площадками — 6; не влезло — «+N»;
+  // пальцем кнопка ▶ крупнее — ряду значков остаётся меньше места
+  const room = iconRoom === undefined ? Infinity : iconRoom - (TOUCH ? 8 : 0)
+  const fit = Math.floor((room + 3 - (formats.length && plats.some((p) => !isHome(p.platform)) ? 6 : 0)) / 15)
   // сайт и письмо — форматы: их значок уже стоит первым
   const where = plats.filter((p) => !isHome(p.platform))
   const shownPlats = formats.length + where.length > fit ? where.slice(0, Math.max(0, fit - formats.length - 1)) : where
   const restPlats = where.slice(shownPlats.length)
+  const withIcons = icons && (formats.length > 0 || where.length > 0)
+  const cls = ['cp-card', `cp-card--${variant}`, withIcons && 'cp-card--icons', narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', picked && 'cp-card--picked', done && 'cp-card--done', head.status === 'progress' && 'cp-card--progress', className]
+    .filter(Boolean)
+    .join(' ')
   const line = variant === 'line' || variant === 'chip'
   // растянутая на шкале карточка — с концом: «12:00–13:30»
   const time = when ?? (unit.end && !unit.stream && variant === 'compact' ? `${unit.time}–${unit.end}` : timeText(unit))
@@ -274,7 +279,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
             <span className="cp-card__title">{title}</span>
           </>
         )}
-        {icons && (formats.length > 0 || where.length > 0) && (
+        {withIcons && (
           <span className={`cp-card__icons${iconRoom === undefined ? '' : ' cp-card__icons--one'}`} aria-hidden="true">
             {formats.map((f) => (
               <span key={f} className="cp-card__f" title={FORMAT_ICON[f].label}>

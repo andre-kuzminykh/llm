@@ -53,8 +53,8 @@ describe('T-CP-036 FR-CP-036 форматы: видео и текст (сайт 
     const video = within(side()).getByRole('group', { name: 'Видео' })
     expect(within(video).getAllByRole('button').map((b) => b.textContent)).toEqual(['Полное горизонтальное видео', 'Короткое вертикальное видео'])
     const text = within(side()).getByRole('group', { name: 'Текст' })
-    // сайт и письмо — форматы; сайт — последним
-    expect(within(text).getAllByRole('button').map((b) => b.textContent)).toEqual(['Текст с картинкой', 'Письмо', 'Страница на сайте'])
+    // сайт и рассылка — форматы: сначала веб, потом рассылка
+    expect(within(text).getAllByRole('button').map((b) => b.textContent)).toEqual(['Текст с картинкой', 'Страница на сайте', 'Рассылка'])
     expect(within(day('2026-10-26')).getByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeInTheDocument()
     await userEvent.click(within(video).getByRole('button', { name: 'Короткое вертикальное видео' }))
     expect(within(day('2026-10-26')).queryByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeNull()

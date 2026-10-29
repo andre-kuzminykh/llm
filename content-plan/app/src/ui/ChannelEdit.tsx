@@ -93,6 +93,44 @@ export function ChannelRename({ c, onDone, className = 'cp-side__rename' }: { c:
 }
 
 /** «⋯» у канала: переименовать, выше, ниже, удалить. Удаление — с подтверждением: сколько материалов уйдёт. */
+/** «⋯» у дорожки «Тем» и «Площадок»: выше, ниже — порядок тот же в фильтрах и форме. */
+export function LaneMenu({ label, onUp, onDown, onOpen, className = '' }: { label: string; onUp?: () => void; onDown?: () => void; onOpen?: (open: boolean) => void; className?: string }) {
+  const [open, setOpenRaw] = useState(false)
+  const setOpen = (o: boolean) => {
+    setOpenRaw(o)
+    onOpen?.(o)
+  }
+  const ref = useRef<HTMLSpanElement>(null)
+  useDismiss(ref, open, () => setOpen(false))
+  const pick = (f?: () => void) => {
+    setOpen(false)
+    f?.()
+  }
+  return (
+    <span ref={ref} className={`cp-chmenu${open ? ' cp-chmenu--open' : ''} ${className}`}>
+      <button type="button" className="cp-chmenu__btn" aria-label={`Ещё: ${label}`} title="Выше, ниже" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name="more" size={16} />
+      </button>
+      {open && (
+        <span className="cp-chmenu__pop" role="menu" aria-label={`Дорожка «${label}»`}>
+          <button type="button" role="menuitem" className="cp-menu__item" disabled={!onUp} onClick={() => pick(onUp)}>
+            <span className="cp-ico-up" aria-hidden="true">
+              <Icon name="chev-left" size={16} />
+            </span>
+            Выше
+          </button>
+          <button type="button" role="menuitem" className="cp-menu__item" disabled={!onDown} onClick={() => pick(onDown)}>
+            <span className="cp-ico-down" aria-hidden="true">
+              <Icon name="chev-left" size={16} />
+            </span>
+            Ниже
+          </button>
+        </span>
+      )}
+    </span>
+  )
+}
+
 export function ChannelMenu({ c, onRename, onOpen, className = '' }: { c: Channel; onRename: () => void; onOpen?: (open: boolean) => void; className?: string }) {
   const { plan, dispatch, toast, filters, setFilters } = usePlan()
   const [mode, setModeRaw] = useState<'closed' | 'menu' | 'delete'>('closed')

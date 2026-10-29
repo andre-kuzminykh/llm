@@ -5,13 +5,14 @@ import {
 import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
 import { whereText } from '../model/hint'
 import { FORMAT_SHORT, FULL_VIDEO, realPlatforms, SHORT_VIDEO, shownTitle, type ISODate, type Item, type Plan } from '../model/types'
+import { type Order } from '../model/store'
 import { type Unit } from '../model/units'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan, type Mode } from '../ui/ctx'
 import { autoScroll, hintBox, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
 import { Icon } from '../ui/Icon'
 import { useInfinite } from '../ui/infinite'
-import { AddInline, ChannelMenu, ChannelRename } from '../ui/ChannelEdit'
+import { AddInline, ChannelMenu, ChannelRename, LaneMenu } from '../ui/ChannelEdit'
 import { DateJump, TopBar } from '../ui/TopBar'
 
 interface Lane {
@@ -482,8 +483,8 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
               unit={u}
               variant="compact"
               narrow={w < 110}
-              // ряд значков — во всю ширину карточки, под кнопкой ▶ тоже: полоска 3 px и отступ 8 px слева, 4 px справа
-              iconRoom={w - 2 - 3 - 8 - 4}
+              // ряд значков: полоска 3 px, отступы 8 px слева и справа, место под кнопку ▶ справа внизу — 18 px
+              iconRoom={w - 2 - 3 - 8 - 8 - 18}
               className={lifted ? 'cp-card--lifted' : undefined}
               when={lifted ? (moving ? minutesToClock(Math.max(0, Math.min(topMin + moving.dMin, 1425))) : `${u.time}–${minutesToClock(end)}`) : undefined}
               style={{ position: 'absolute', ...box, height: Math.max(18, (end - topMin) * PPM - 2), ...ghost }}
@@ -506,6 +507,42 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
   const [renaming, setRenaming] = useState<string | null>(null)
   const [menu, setMenu] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  // дорожки двигают: «⋯» → «Выше / Ниже» или мышью за название — порядок каналов, рубрик и площадок тот же везде
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [lift, setLift] = useState<{ id: string; target: string; after: boolean } | null>(null)
+  const moveLane = (what: Order, id: string, target: string, after: boolean, label: string) => {
+    dispatch({ type: 'reorder', what, id, target, after })
+    toast(`«${label}» — на новом месте`, true)
+  }
+  const grabLane = (e: ReactPointerEvent, what: Order, id: string, label: string) => {
+    if (e.button !== 0 || e.pointerType !== 'mouse') return // пальцем — «⋯» → «Выше» / «Ниже»
+    const heads = [...(gridRef.current?.querySelectorAll<HTMLElement>(`[data-lane-kind="${what}"]`) ?? [])].map((h) => {
+      const b = h.getBoundingClientRect()
+      return { id: h.dataset.laneId!, mid: b.top + b.height / 2 }
+    })
+    const y0 = e.clientY
+    let live = false
+    let drop: { target: string; after: boolean } | null = null
+    const move = (ev: PointerEvent) => {
+      if (!live && Math.abs(ev.clientY - y0) <= SLOP) return
+      live = true
+      // встанет после последней дорожки, чья середина выше указателя; выше всех — перед первой
+      const others = heads.filter((h) => h.id !== id)
+      const above = others.filter((h) => h.mid < ev.clientY)
+      drop = above.length ? { target: above[above.length - 1].id, after: true } : others.length ? { target: others[0].id, after: false } : null
+      setLift(drop ? { id, ...drop } : null)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setLift(null)
+      if (!live) return
+      swallowClick() // отпущенная кнопка — не свернуть дорожку
+      if (drop) moveLane(what, id, drop.target, drop.after, label)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const [closed, setClosed] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('cp:week-closed') ?? '[]') as string[]
@@ -543,7 +580,7 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
   const first = days[0]?.i ?? 0
   const cols = `${gutter}px ${first * col}px repeat(${days.length}, ${col}px) ${Math.max(0, count - first - days.length) * col}px`
   return (
-    <div className="cp-week" role="grid" aria-label={`Неделя по ${mode === 'channels' ? 'каналам' : mode === 'topics' ? 'темам' : 'площадкам'}`} style={{ gridTemplateColumns: cols }}>
+    <div ref={gridRef} className="cp-week" role="grid" aria-label={`Неделя по ${mode === 'channels' ? 'каналам' : mode === 'topics' ? 'темам' : 'площадкам'}`} style={{ gridTemplateColumns: cols }}>
       <div className="cp-week__corner" />
       <div aria-hidden="true" className="cp-week__pad" />
       {days.map(({ date }) => (
@@ -556,26 +593,50 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
         const open = !closed.includes(lane.id)
         const n = row.reduce((k, d) => k + (onScreen(d) ? d.rows.length : 0), 0)
         const ch = mode === 'channels' && lane.channelId === lane.id ? channels.get(lane.id) : undefined
+        // что двигаем: канал (его первую дорожку), рубрику или площадку; соседи — среди видимых дорожек того же рода
+        const what: Order | null = mode === 'topics' ? 'rubrics' : mode === 'platforms' ? 'platforms' : ch ? 'channels' : null
+        const same = what === 'channels' ? shown.filter((x) => x.lane.channelId === x.lane.id) : shown
+        const at = same.findIndex((x) => x.lane.id === lane.id)
+        const prev = same[at - 1]?.lane
+        const next = same[at + 1]?.lane
+        const lcls = ['cp-lane', menu === lane.id && 'cp-lane--open', lift?.id === lane.id && 'cp-lane--lifted', lift?.target === lane.id && (lift.after ? 'cp-lane--after' : 'cp-lane--before')].filter(Boolean).join(' ')
         return (
           <Fragment key={lane.id}>
-            <div className={`cp-lane${menu === lane.id ? ' cp-lane--open' : ''}`} role="rowheader" style={{ '--cp-c': lane.color } as CSSProperties}>
+            <div className={lcls} role="rowheader" style={{ '--cp-c': lane.color } as CSSProperties} data-lane-kind={what ?? undefined} data-lane-id={lane.id}>
               {ch && renaming === ch.id ? (
                 <ChannelRename c={ch} onDone={() => setRenaming(null)} className="cp-lane__rename" />
               ) : (
                 <>
-                  <button type="button" className="cp-lane__btn cp-fold" aria-expanded={open} aria-label={`${open ? 'Свернуть' : 'Развернуть'}: ${lane.label}`} onClick={() => toggle(lane.id)}>
+                  <button
+                    type="button"
+                    className="cp-lane__btn cp-fold"
+                    aria-expanded={open}
+                    aria-label={`${open ? 'Свернуть' : 'Развернуть'}: ${lane.label}`}
+                    title={what ? 'Щёлкнуть — свернуть; потянуть — выше или ниже' : undefined}
+                    onClick={() => toggle(lane.id)}
+                    onPointerDown={what ? (e) => grabLane(e, what, lane.id, lane.label) : undefined}
+                  >
                     <Icon name="chev-right" size={14} />
                     <span className="cp-lane__name">{lane.label}</span>
                     <span className="cp-muted">{n}</span>
                   </button>
                   {ch && <ChannelMenu c={ch} onRename={() => setRenaming(ch.id)} onOpen={(o) => setMenu(o ? ch.id : null)} className="cp-lane__more" />}
+                  {(what === 'rubrics' || what === 'platforms') && (
+                    <LaneMenu
+                      label={lane.label}
+                      onUp={prev && (() => moveLane(what, lane.id, prev.id, false, lane.label))}
+                      onDown={next && (() => moveLane(what, lane.id, next.id, true, lane.label))}
+                      onOpen={(o) => setMenu(o ? lane.id : null)}
+                      className="cp-lane__more"
+                    />
+                  )}
                 </>
               )}
             </div>
             <div aria-hidden="true" />
             {row.map(({ date, rows }) => (
-              // ряд значков на карточке — одной строкой: ячейка 6 + 6 px, черта 1 px, полоска 3 px, отступ 8 px слева и 6 справа
-              <LaneCell key={date} lane={lane} date={date} rows={rows} open={open} iconRoom={col - 30} />
+              // ряд значков на карточке — одной строкой: ячейка 6 + 6 px, черта 1 px, полоска 3 px, отступы 8 + 8 px, кнопка ▶ — 18 px
+              <LaneCell key={date} lane={lane} date={date} rows={rows} open={open} iconRoom={col - 50} />
             ))}
             <div aria-hidden="true" />
           </Fragment>

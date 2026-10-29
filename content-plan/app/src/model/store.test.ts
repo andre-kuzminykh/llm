@@ -1,5 +1,6 @@
 import { byId, item, smallPlan } from '../test/fixtures'
 import {
+  reorder,
   addChannel,
   addPlatform,
   addRubric,
@@ -278,5 +279,16 @@ describe('T-CP-040 FR-CP-040 канал: удалить', () => {
     expect(st.plan!.channels.some((c) => c.id === 'andre')).toBe(false)
     st = reducer(st, { type: 'undo' })
     expect(st.plan!.channels.some((c) => c.id === 'andre')).toBe(true)
+  })
+})
+
+describe('T-CP-052 FR-CP-052 порядок каналов, рубрик и площадок', () => {
+  it('поставить перед другой или после; на своём месте — тот же план', () => {
+    const p = smallPlan()
+    expect(reorder(p, 'rubrics', 'thesis', 'demo', false).rubrics.map((r) => r.id)).toEqual(['thesis', 'demo', 'tech', 'updates'])
+    expect(reorder(p, 'rubrics', 'demo', 'tech', true).rubrics.map((r) => r.id)).toEqual(['tech', 'demo', 'thesis', 'updates'])
+    expect(reorder(p, 'platforms', 'X', 'YouTube', false).platforms).toEqual(['Web', 'X', 'YouTube', 'Instagram', 'Telegram', 'LinkedIn', 'Mail'])
+    expect(reorder(p, 'channels', 'landao', 'dataist', false).channels.map((c) => c.id)).toEqual(['landao', 'dataist', 'andre'])
+    expect(reorder(p, 'rubrics', 'tech', 'demo', true)).toBe(p)
   })
 })

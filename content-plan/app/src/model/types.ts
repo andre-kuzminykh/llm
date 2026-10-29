@@ -134,25 +134,27 @@ export function lineOf(rubric: Rubric | undefined, rule: Rule | undefined, title
 }
 
 /** Форматы — какой это материал по виду. Что именно выходит на площадке (Reels, строка письма) — в типах правила.
- *  Сайт и письмо — тоже форматы, а не площадки: у такого материала площадка одна и своя (Web, Mail), выбирать нечего. */
+ *  Сайт и рассылка — тоже форматы, а не площадки: у такого материала площадка одна и своя (Web, Mail), выбирать нечего. */
 export const FULL_VIDEO = 'Полное горизонтальное видео'
 export const SHORT_VIDEO = 'Короткое вертикальное видео'
 export const WEB_PAGE = 'Страница на сайте'
 export const TEXT_IMAGE = 'Текст с картинкой'
-export const MAIL = 'Письмо'
+export const MAIL = 'Рассылка'
+/** Так рассылка называлась раньше: план с ним переводится сам (webAndMail). */
+export const OLD_MAIL = 'Письмо'
 export const FORMATS: { group: string; items: string[] }[] = [
   { group: 'Видео', items: [FULL_VIDEO, SHORT_VIDEO] },
-  { group: 'Текст', items: [TEXT_IMAGE, MAIL, WEB_PAGE] },
+  { group: 'Текст', items: [TEXT_IMAGE, WEB_PAGE, MAIL] },
 ]
 /** Коротко — в подписях дорожек и расписания и как название нового формата рубрики: «#кейсы · Текст с картинкой». */
-export const FORMAT_SHORT: Record<string, string> = { [FULL_VIDEO]: 'Полное видео', [SHORT_VIDEO]: 'Короткое видео', [TEXT_IMAGE]: 'Текст с картинкой', [MAIL]: 'Письмо', [WEB_PAGE]: 'Страница на сайте' }
-/** Значок и короткая подпись формата: горизонталь, вертикаль, пост, письмо, веб — в форме формат выбирают ими (веб — последним). */
+export const FORMAT_SHORT: Record<string, string> = { [FULL_VIDEO]: 'Полное видео', [SHORT_VIDEO]: 'Короткое видео', [TEXT_IMAGE]: 'Текст с картинкой', [WEB_PAGE]: 'Страница на сайте', [MAIL]: 'Рассылка' }
+/** Значок и короткая подпись формата: горизонталь, вертикаль, пост, веб, рассылка — в форме формат выбирают ими. */
 export const FORMAT_ICON: Record<string, { icon: string; label: string }> = {
   [FULL_VIDEO]: { icon: 'f-horizontal', label: 'Горизонталь' },
   [SHORT_VIDEO]: { icon: 'f-vertical', label: 'Вертикаль' },
   [TEXT_IMAGE]: { icon: 'f-post', label: 'Пост' },
-  [MAIL]: { icon: 'p-Mail', label: 'Письмо' },
   [WEB_PAGE]: { icon: 'f-web', label: 'Веб' },
+  [MAIL]: { icon: 'p-Mail', label: 'Рассылка' },
 }
 /** Своя площадка формата: страница — на сайте, письмо — в рассылке. В списках площадок их нет. */
 export const FORMAT_HOME: Record<string, string> = { [WEB_PAGE]: 'Web', [MAIL]: 'Mail' }

@@ -395,6 +395,28 @@ export const moveChannel = (plan: Plan, id: string, to: number): Plan => {
   return { ...plan, channels }
 }
 
+/** Строку — рядом с другой: перед ней или после. Порядок тот же, что в дорожках недели, фильтрах и форме. */
+export function placeNear<T>(list: T[], key: (x: T) => string, id: string, target: string, after: boolean): T[] {
+  const item = list.find((x) => key(x) === id)
+  const rest = list.filter((x) => key(x) !== id)
+  const at = rest.findIndex((x) => key(x) === target)
+  if (!item || at < 0) return list
+  rest.splice(at + (after ? 1 : 0), 0, item)
+  return rest.every((x, i) => x === list[i]) ? list : rest
+}
+export type Order = 'channels' | 'rubrics' | 'platforms'
+/** Дорожку «Каналов», «Тем» или «Площадок» — выше или ниже: перед другой или после неё. */
+export const reorder = (plan: Plan, what: Order, id: string, target: string, after: boolean): Plan => {
+  const next =
+    what === 'channels'
+      ? { channels: placeNear(plan.channels, (c) => c.id, id, target, after) }
+      : what === 'rubrics'
+        ? { rubrics: placeNear(plan.rubrics, (r) => r.id, id, target, after) }
+        : { platforms: placeNear(plan.platforms, (p) => p, id, target, after) }
+  const [k, v] = Object.entries(next)[0] as [Order, unknown]
+  return v === plan[k] ? plan : { ...plan, ...next }
+}
+
 /** Что уйдёт вместе с каналом: его форматы и материалы — и материалы других каналов по этим форматам. */
 export function channelParts(plan: Plan, id: string) {
   const rules = new Set(plan.rules.filter((r) => r.channelId === id).map((r) => r.id))
@@ -460,6 +482,7 @@ export type Action =
   | { type: 'addChannel'; name: string; start: ISODate; id?: string }
   | { type: 'removeChannel'; id: string }
   | { type: 'moveChannel'; id: string; to: number }
+  | { type: 'reorder'; what: Order; id: string; target: string; after: boolean }
   | { type: 'catchUp'; moves: CatchUpMove[] }
   | { type: 'moveGroups'; moves: { id: string; date: ISODate; time?: string }[]; remove?: string[] }
   | { type: 'addPlatform'; name: string }
@@ -501,6 +524,7 @@ function apply(plan: Plan, a: Action): Plan {
     case 'addChannel': return addChannel(plan, a.name, a.start, a.id)
     case 'removeChannel': return removeChannel(plan, a.id)
     case 'moveChannel': return moveChannel(plan, a.id, a.to)
+    case 'reorder': return reorder(plan, a.what, a.id, a.target, a.after)
     case 'catchUp': return catchUp(plan, a.moves)
     case 'moveGroups': return moveGroups(plan, a.moves, a.remove)
     case 'addPlatform': return addPlatform(plan, a.name)

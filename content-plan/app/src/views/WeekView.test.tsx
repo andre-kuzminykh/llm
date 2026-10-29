@@ -316,7 +316,8 @@ describe('T-CP-048 FR-CP-048 внизу карточки — значок фор
     vi.useRealTimers()
   })
 
-  const icons = (el: Element) => [...el.querySelectorAll('.cp-card__icons > [title]')].map((x) => x.getAttribute('title'))
+  // не влезло — «+N», в его подсказке — остальные площадки по порядку
+  const icons = (el: Element) => [...el.querySelectorAll('.cp-card__icons > [title]')].flatMap((x) => x.getAttribute('title')!.split(', '))
   // FULL с тизером и анонсом (страница и пост) — одна карточка: четыре формата, площадки — в порядке плана; сайт — формат, не площадка
   const demo = ['Горизонталь', 'Вертикаль', 'Пост', 'Веб', 'YouTube', 'Instagram', 'Telegram']
 
@@ -341,5 +342,40 @@ describe('T-CP-048 FR-CP-048 внизу карточки — значок фор
     await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Неделя или месяц' })).getByRole('radio', { name: 'Месяц' }))
     const month = screen.getByRole('grid', { name: 'Месяц: Октябрь 2026' })
     expect(month.querySelector('.cp-card__icons')).toBeNull()
+  })
+})
+
+describe('T-CP-052 FR-CP-052 дорожки «Темы», «Площадки», «Каналы» двигают выше и ниже', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+  const heads = (grid: HTMLElement) => within(grid).getAllByRole('rowheader').map((h) => h.textContent?.replace(/\d+$/, ''))
+
+  it('«⋯» → «Выше / Ниже»: порядок рубрик и площадок меняется и в фильтрах; ⌘Z возвращает', async () => {
+    renderApp(undefined, { 'cp:week-mode': 'topics' })
+    const grid = await screen.findByRole('grid', { name: 'Неделя по темам' })
+    // на неделе — только дорожки с карточками: Демо и Тезисы
+    expect(heads(grid)).toEqual(['Демо', 'Тезисы'])
+    await userEvent.click(within(grid).getByRole('button', { name: 'Ещё: Тезисы' }))
+    const menu = within(grid).getByRole('menu', { name: 'Дорожка «Тезисы»' })
+    expect(within(menu).getByRole('menuitem', { name: 'Ниже' })).toBeDisabled()
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Выше' }))
+    expect(heads(grid)).toEqual(['Тезисы', 'Демо'])
+    await userEvent.keyboard('{Control>}z{/Control}')
+    expect(heads(grid)).toEqual(['Демо', 'Тезисы'])
+
+    await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Вид календаря' })).getByRole('radio', { name: 'Площадки' }))
+    const byPlatform = await screen.findByRole('grid', { name: 'Неделя по площадкам' })
+    const first = heads(byPlatform)[0]!
+    await userEvent.click(within(byPlatform).getByRole('button', { name: `Ещё: ${first}` }))
+    await userEvent.click(within(byPlatform).getByRole('menuitem', { name: 'Ниже' }))
+    expect(heads(byPlatform).indexOf(first)).toBe(1)
+    // фильтры слева — в том же порядке
+    const side = [...screen.getByRole('complementary', { name: 'Фильтры' }).querySelector('.cp-pills')!.querySelectorAll('button')].map((b) => b.textContent)
+    expect(side.indexOf(first)).toBeGreaterThan(side.indexOf(heads(byPlatform)[0]!))
   })
 })

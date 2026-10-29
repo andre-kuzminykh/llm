@@ -280,8 +280,29 @@ check(((await page.locator('.cp-drag-hint').textContent()) ?? '').startsWith('Ч
 await page.mouse.up()
 check(await target.locator('.cp-card__title', { hasText: laneTitle }).count(), 'перенос в дорожках указателем', 'в дорожках карточка не переехала')
 await page.keyboard.press('Control+z')
+// «Темы»: дорожку тянут мышью за название — встаёт выше; «Отменить» возвращает
+await modes.getByRole('radio', { name: 'Темы' }).click()
+await page.getByRole('grid', { name: 'Неделя по темам' }).waitFor()
+const rubricLanes = () => page.locator('[data-lane-kind="rubrics"]').evaluateAll((els) => els.map((e) => e.dataset.laneId))
+const lanesBefore = await rubricLanes()
+const third = page.locator('[data-lane-kind="rubrics"] .cp-lane__btn').nth(2)
+const thb = await third.boundingBox()
+const firstLane = await page.locator('[data-lane-kind="rubrics"]').first().boundingBox()
+await page.mouse.move(thb.x + 30, thb.y + 10)
+await page.mouse.down()
+await page.mouse.move(thb.x + 30, firstLane.y + 4, { steps: 10 })
+const dropLine = await page.locator('.cp-lane--before').count()
+await page.mouse.up()
+const lanesAfter = await rubricLanes()
+check(dropLine && lanesAfter[0] === lanesBefore[2] && lanesAfter.length === lanesBefore.length, '«Темы»: дорожку тянут за название — линия показывает место, встаёт выше', `дорожки: ${lanesBefore.slice(0, 3)} → ${lanesAfter.slice(0, 3)}`)
+await toast().getByRole('button', { name: 'Отменить' }).click()
+check((await rubricLanes()).join() === lanesBefore.join(), '«Отменить» возвращает порядок дорожек', 'порядок дорожек не вернулся')
 await modes.getByRole('radio', { name: 'Время' }).click()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
+// ▶ / ⏸ на карточке — справа внизу
+const tb2 = await cell('2026-11-10').locator('.cp-card').first().boundingBox()
+const bb2 = await cell('2026-11-10').locator('.cp-card').first().locator('.cp-task-btn').boundingBox()
+check(bb2 && Math.abs(bb2.x + bb2.width - (tb2.x + tb2.width)) < 6 && Math.abs(bb2.y + bb2.height - (tb2.y + tb2.height)) < 6, '▶ / ⏸ на карточке — справа внизу', `кнопка: ${JSON.stringify(bb2)}, карточка: ${JSON.stringify(tb2)}`)
 
 // панель дня: карточки по каналам, под площадками — что выходит
 await page.getByRole('button', { name: 'Открыть день 2026-11-09' }).click()
@@ -361,8 +382,8 @@ const fmtGroup = form.getByRole('radiogroup', { name: 'Формат' })
 const fmtLabels = (await fmtGroup.getByRole('radio').allTextContents()).join('|')
 const fmtOn = await fmtGroup.getByRole('radio', { checked: true }).getAttribute('aria-label')
 check(
-  fmtLabels === 'Горизонталь|Вертикаль|Пост|Письмо|Веб' && (await fmtGroup.locator('svg').count()) === 5 && fmtOn === 'Полное горизонтальное видео',
-  'форма: формат — значками «Горизонталь / Вертикаль / Пост / Письмо / Веб» (веб — последним), щёлкнуть один; у FULL — горизонталь',
+  fmtLabels === 'Горизонталь|Вертикаль|Пост|Веб|Рассылка' && (await fmtGroup.locator('svg').count()) === 5 && fmtOn === 'Полное горизонтальное видео',
+  'форма: формат — значками «Горизонталь / Вертикаль / Пост / Веб / Рассылка», щёлкнуть один; у FULL — горизонталь',
   `формат в форме не тот: ${fmtLabels}, выбран ${fmtOn}`,
 )
 // площадки — одной строкой, названия целиком, даже у вертикали (их больше всего)
@@ -376,10 +397,10 @@ check(platRow.n >= 5 && platRow.rows === 1 && !platRow.cut, `площадки в
 // у сайта и письма площадок нет: выбирать нечего
 await fmtGroup.getByRole('radio', { name: 'Страница на сайте' }).click()
 const webPlats = await form.getByRole('group', { name: 'Площадки' }).count()
-await fmtGroup.getByRole('radio', { name: 'Письмо' }).click()
+await fmtGroup.getByRole('radio', { name: 'Рассылка' }).click()
 const mailPlats = await form.getByRole('group', { name: 'Площадки' }).count()
 await fmtGroup.getByRole('radio', { name: 'Полное горизонтальное видео' }).click()
-check(!webPlats && !mailPlats, 'формат «Веб» или «Письмо» — площадок нет', `площадки у веба: ${webPlats}, у письма: ${mailPlats}`)
+check(!webPlats && !mailPlats, 'формат «Веб» или «Рассылка» — площадок нет', `площадки у веба: ${webPlats}, у письма: ${mailPlats}`)
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOTS}/5-editor.png` })
 await form.getByRole('button', { name: 'Отмена' }).click()
@@ -558,8 +579,8 @@ const pills = side.locator('.cp-pills').first()
 check((await pills.locator('svg').count()) === (await pills.getByRole('button').count()), 'у площадок в фильтрах — иконки', 'у площадок нет иконок')
 const fmts = async (g) => (await side.getByRole('group', { name: g }).getByRole('button').allTextContents()).join('|')
 check(
-  (await fmts('Видео')) === 'Полное горизонтальное видео|Короткое вертикальное видео' && (await fmts('Текст')) === 'Текст с картинкой|Письмо|Страница на сайте',
-  'форматы в фильтрах: Видео (полное горизонтальное, короткое вертикальное), Текст (текст с картинкой, письмо, страница на сайте)',
+  (await fmts('Видео')) === 'Полное горизонтальное видео|Короткое вертикальное видео' && (await fmts('Текст')) === 'Текст с картинкой|Страница на сайте|Рассылка',
+  'форматы в фильтрах: Видео (полное горизонтальное, короткое вертикальное), Текст (текст с картинкой, страница на сайте, рассылка)',
   `форматы не те: ${await fmts('Видео')} / ${await fmts('Текст')}`,
 )
 // «⋯» у канала: переименовать, выше, ниже, удалить

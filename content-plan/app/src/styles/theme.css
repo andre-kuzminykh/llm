@@ -379,7 +379,7 @@ body.cp-grabbing, body.cp-grabbing * { cursor: grabbing !important; }
 .cp-card--chip .cp-card__time { order: -1; margin: 0; color: var(--nr-text-3); }
 .cp-card--chip .cp-card__title { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-card--chip .cp-card__bad { order: 1; }
-.cp-card--chip .cp-task-btn { top: 1px; right: 1px; width: 18px; height: 18px; }
+.cp-card--chip .cp-task-btn { bottom: 1px; right: 1px; width: 18px; height: 18px; }
 /* строка дорожки: время и рубрика — мелко, под ними тема, внизу значки */
 .cp-card--line .cp-card__time { order: -1; margin: 0; color: var(--nr-text-3); }
 .cp-card--line .cp-rub { font-weight: var(--nr-fw-medium); color: var(--nr-text-3); }
@@ -388,8 +388,11 @@ body.cp-grabbing, body.cp-grabbing * { cursor: grabbing !important; }
 .cp-card__f { display: inline-grid; place-items: center; flex: none; color: var(--nr-text-2); }
 .cp-card__f + .cp-pi, .cp-card__f + .cp-card__more { margin-left: 1px; padding-left: 5px; border-left: 1px solid var(--nr-sep); }
 .cp-card__more { flex: none; font-size: 10.5px; font-weight: var(--nr-fw-medium); font-variant-numeric: tabular-nums; }
-/* одной строкой во всю ширину карточки (кнопка ▶ — вверху справа, ряду не мешает); что не влезло — «+N» */
-.cp-card__icons--one { flex-wrap: nowrap; height: 12px; margin-right: -16px; overflow: hidden; }
+/* одной строкой; что не влезло — «+N». Справа внизу — кнопка ▶ / ⏸: ряд оставляет ей место, верхняя строка — во всю ширину */
+.cp-card--icons .cp-card__open { padding-right: 8px; }
+.cp-card--icons .cp-card__icons { margin-right: 18px; }
+@media (hover: none) { .cp-card--icons .cp-card__icons { margin-right: 26px; } }
+.cp-card__icons--one { flex-wrap: nowrap; height: 12px; overflow: hidden; }
 .cp-card--full .cp-card__open { padding: 6px 30px 7px 10px; font-size: var(--nr-fs-md); gap: 2px; }
 .cp-card--full .cp-card__rub { font-size: var(--nr-fs-sm); }
 .cp-card--mini .cp-card__open { padding-top: 2px; padding-bottom: 3px; }
@@ -413,9 +416,9 @@ body.cp-grabbing, body.cp-grabbing * { cursor: grabbing !important; }
 .cp-types__t + .cp-types__t::before { content: ', '; }
 .cp-types__list { white-space: nowrap; }
 
-/* кнопка задачи на карточке: статус значком; ▶ — начать, проявляется при наведении */
+/* кнопка задачи на карточке — справа внизу: статус значком; ▶ — начать, проявляется при наведении */
 .cp-task-btn {
-  position: absolute; top: 2px; right: 2px; display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0;
+  position: absolute; bottom: 2px; right: 2px; z-index: 1; display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0;
   border: 0; border-radius: 6px; background: transparent; color: var(--cp-st); cursor: pointer; opacity: 0;
   transition: opacity var(--nr-dur-1) var(--nr-ease), background var(--nr-dur-1) var(--nr-ease);
 }
@@ -505,7 +508,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-card--lifted .cp-tg__grip::after { opacity: 0.5; }
 .cp-tg__col .cp-card__open { gap: 1px; padding-top: 2px; padding-bottom: 2px; }
 .cp-tg__col .cp-card__title { -webkit-line-clamp: 1; }
-.cp-tg__col .cp-card__open { padding-right: 20px; }
+.cp-tg__col .cp-card__open { padding-right: 8px; }
 .cp-tg__col .cp-card__fmt { display: none; } /* на шкале места мало: рубрика, время, тема и значки; формат словом — в подсказке */
 .cp-week__daybtn { gap: 6px; padding: 0 6px; }
 .cp-week__wd { color: var(--nr-text-3); font-weight: var(--nr-fw-medium); }
@@ -543,7 +546,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-agenda__head--today { color: var(--nr-accent-text); }
 .cp-agenda .cp-card__open { padding: 5px 34px 6px 10px; font-size: var(--nr-fs-md); }
 .cp-agenda .cp-list { gap: 2px; }
-.cp-agenda .cp-task-btn { top: 6px; right: 6px; }
+.cp-agenda .cp-task-btn { bottom: 6px; right: 6px; }
 
 /* фильтр статуса — словами */
 .cp-stf { display: inline-flex; flex-wrap: wrap; gap: 2px; }
@@ -997,6 +1000,10 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-lane:hover .cp-lane__more, .cp-lane__more:focus-within, .cp-lane--open .cp-lane__more { opacity: 1; }
 @media (hover: none) { .cp-lane__more { opacity: 1; } }
 .cp-lane--open { z-index: 6; }
+/* дорожку тянут за название: она бледнее, линия показывает, куда встанет */
+.cp-lane--lifted .cp-lane__btn { opacity: 0.5; } /* фон дорожки остаётся плотным: она залипает слева поверх карточек */
+.cp-lane--before { box-shadow: inset 3px 0 0 var(--cp-c, transparent), inset 0 2px 0 var(--nr-accent); }
+.cp-lane--after { box-shadow: inset 3px 0 0 var(--cp-c, transparent), inset 0 -2px 0 var(--nr-accent); }
 .cp-lane__rename { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 2px; }
 .cp-lane__rename .nr-field { width: 100%; min-width: 0; }
 .cp-lane__rename .nr-btn { align-self: flex-start; }
@@ -1062,6 +1069,9 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-plat__label { font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 @media (max-width: 480px) { .cp-plat__label { font-size: 9.5px; letter-spacing: -0.01em; } }
 /* выбранная площадка — заметно: цветом «выбрано», а не серым */
+/* корзина в форме — без рамки, просто красный значок */
+.cp-trash { color: var(--nr-danger); }
+@media (hover: hover) { .cp-trash:hover { color: var(--nr-danger); background: color-mix(in srgb, var(--nr-danger) 10%, transparent); } }
 .cp-plat[aria-pressed='true'] { background: var(--nr-accent-soft); border-color: var(--nr-accent-line); color: var(--nr-accent-text); }
 
 /* «Не вышло вовремя» — тонкой плашкой под шапкой календаря; дашборда нет */
