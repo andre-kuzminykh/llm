@@ -46,7 +46,7 @@ export function CreateTabs({ current }: { current: 'new' | 'drafts' }) {
 }
 
 /** Черновики — банк идей во вкладке «+»: темы без даты по рубрикам. Добавить списком, «Разложить по слотам»,
- *  поставить в ближайший слот, вернуть; при планировании недели они подставляются сами — ближайшие по рубрике. */
+ *  поставить в ближайший слот, вернуть. */
 export function DraftsSheet({ onClose }: { onClose: () => void }) {
   const { plan } = usePlan()
   const from = today() < plan.start ? plan.start : today()
@@ -75,7 +75,7 @@ export function DraftsSheet({ onClose }: { onClose: () => void }) {
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
       <div className="cp-sheet__body nr-scroll">
-        <p className="cp-hint">Банк идей: темы без даты. Перетащите тему на день в календаре, разложите по слотам — или при планировании недели они подставятся сами.</p>
+        <p className="cp-hint">Банк идей: темы без даты. Перетащите тему на день в календаре, разложите по слотам или поставьте в ближайший слот.</p>
         <div className="cp-tags" role="group" aria-label="Рубрики черновиков">
           {rules.map((r) => {
             const n = bankOf(plan, r.id).length
