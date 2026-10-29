@@ -173,7 +173,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   narrow?: boolean
   /** Снизу в ряд: значок формата, за ним значки площадок, куда выходит. В месяце — без него: там тесно. */
   icons?: boolean
-  /** Ширина ряда значков, px (шкала времени): что не влезло — «+N». Без неё ряд переносится. */
+  /** Ширина ряда значков, px: ряд — одной строкой, что не влезло — «+N». Без неё ряд переносится (лента на телефоне). */
   iconRoom?: number
   /** Время на карточке вместо своего — пока её ведут по шкале, там время, куда она встанет. */
   when?: string
@@ -275,7 +275,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
           </>
         )}
         {icons && (formats.length > 0 || where.length > 0) && (
-          <span className="cp-card__icons" aria-hidden="true">
+          <span className={`cp-card__icons${iconRoom === undefined ? '' : ' cp-card__icons--one'}`} aria-hidden="true">
             {formats.map((f) => (
               <span key={f} className="cp-card__f" title={FORMAT_ICON[f].label}>
                 <Icon name={FORMAT_ICON[f].icon} size={12} />

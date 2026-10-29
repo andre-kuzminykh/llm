@@ -365,6 +365,14 @@ check(
   'форма: формат — значками «Горизонталь / Вертикаль / Пост / Письмо / Веб» (веб — последним), щёлкнуть один; у FULL — горизонталь',
   `формат в форме не тот: ${fmtLabels}, выбран ${fmtOn}`,
 )
+// площадки — одной строкой, названия целиком, даже у вертикали (их больше всего)
+await fmtGroup.getByRole('radio', { name: 'Короткое вертикальное видео' }).click()
+const platRow = await form.getByRole('group', { name: 'Площадки' }).evaluate((el) => ({
+  n: el.children.length,
+  rows: new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top))).size,
+  cut: [...el.querySelectorAll('.cp-plat__label')].filter((x) => x.scrollWidth > x.clientWidth).length,
+}))
+check(platRow.n >= 5 && platRow.rows === 1 && !platRow.cut, `площадки в форме — одной строкой (${platRow.n}), названия целиком`, `площадки: ${JSON.stringify(platRow)}`)
 // у сайта и письма площадок нет: выбирать нечего
 await fmtGroup.getByRole('radio', { name: 'Страница на сайте' }).click()
 const webPlats = await form.getByRole('group', { name: 'Площадки' }).count()
@@ -597,6 +605,18 @@ check(tabs.join('|') === 'Календарь|Профиль', 'телефон: �
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка в одну строку', `телефон: шапка ${head?.height}px`)
 check(!(await phone.locator('.cp-side').count()), 'телефон: фильтры свёрнуты', 'телефон: фильтры открыты сами')
+// телефон: площадки в форме — тоже одной строкой, названия целиком
+await phone.getByRole('button', { name: 'Новый контент' }).click()
+const phoneForm = phone.getByRole('complementary', { name: 'Новый контент' })
+await phoneForm.getByRole('radio', { name: 'Короткое вертикальное видео' }).click()
+const phoneRow = await phoneForm.getByRole('group', { name: 'Площадки' }).evaluate((el) => ({
+  n: el.children.length,
+  rows: new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top))).size,
+  cut: [...el.querySelectorAll('.cp-plat__label')].filter((x) => x.scrollWidth > x.clientWidth).length,
+  wide: el.scrollWidth > el.clientWidth,
+}))
+check(phoneRow.rows === 1 && !phoneRow.cut && !phoneRow.wide, `телефон: площадки в форме — одной строкой (${phoneRow.n}), названия целиком`, `телефон, площадки: ${JSON.stringify(phoneRow)}`)
+await phoneForm.getByRole('button', { name: 'Закрыть' }).click()
 await phone.getByRole('button', { name: 'Поиск', exact: true }).click()
 await phone.getByRole('searchbox', { name: 'Поиск по плану' }).fill('Landao')
 check(await phone.getByRole('region', { name: 'Найдено' }).count(), 'телефон: поиск значком, поле — поверх шапки', 'телефон: поиск не открылся')

@@ -574,7 +574,8 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
             </div>
             <div aria-hidden="true" />
             {row.map(({ date, rows }) => (
-              <LaneCell key={date} lane={lane} date={date} rows={rows} open={open} />
+              // ряд значков на карточке — одной строкой: ячейка 6 + 6 px, черта 1 px, полоска 3 px, отступ 8 px слева и 6 справа
+              <LaneCell key={date} lane={lane} date={date} rows={rows} open={open} iconRoom={col - 30} />
             ))}
             <div aria-hidden="true" />
           </Fragment>
@@ -609,13 +610,13 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
   )
 }
 
-function LaneCell({ lane, date, rows, open }: { lane: Lane; date: ISODate; rows: Unit[]; open: boolean }) {
+function LaneCell({ lane, date, rows, open, iconRoom }: { lane: Lane; date: ISODate; rows: Unit[]; open: boolean; iconRoom: number }) {
   const { dropOn, openNew } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const cls = ['cp-cell', !open && 'cp-cell--closed', weekday(date) === SAT && 'cp-cell--rest', drop.over && 'cp-cell--drop'].filter(Boolean).join(' ')
   return (
     <div className={cls} role="gridcell" {...drop.props} data-date={date} data-drop={date} data-lane={lane.id}>
-      {open ? rows.map((u) => <UnitCard key={u.key} unit={u} variant="line" />) : rows.length > 0 && <span className="cp-cell__n">{rows.length}</span>}
+      {open ? rows.map((u) => <UnitCard key={u.key} unit={u} variant="line" iconRoom={iconRoom} />) : rows.length > 0 && <span className="cp-cell__n">{rows.length}</span>}
       {open && lane.channelId && (
         <button
           type="button"

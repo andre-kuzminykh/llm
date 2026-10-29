@@ -351,11 +351,12 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         {platformList.length > 0 && (
           <div className="cp-field">
             <span className="nr-label">Площадки</span>
-            <div className="cp-pills cp-pills--flush cp-plats" role="group" aria-label="Площадки">
+            {/* одной строкой, плитками как форматы: значок и название */}
+            <div className="cp-plats" role="group" aria-label="Площадки">
               {platformList.map((p) => (
-                <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
-                  <PlatformIcon platform={p} />
-                  {p}
+                <button key={p} type="button" className="cp-plat" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)} title={p}>
+                  <PlatformIcon platform={p} size={18} />
+                  <span className="cp-plat__label">{p}</span>
                 </button>
               ))}
             </div>
