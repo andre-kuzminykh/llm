@@ -78,6 +78,8 @@ export interface Item {
   due?: ISODate // подготовить к; без него — за несколько дней до выхода (leadOf)
   done?: string[] // готовые части задачи: «id материала|площадка»
   trigger?: string // версия для другой площадки: создаётся автоматически, когда выйдет оригинал (его id)
+  langs?: string[] // на каких языках выходит: «ru», «en»; без поля — по-русски
+  series?: string // повтор: у всех материалов одного повтора — один id
 }
 
 export interface Plan {
@@ -215,6 +217,19 @@ export function typeOf(rule: Rule | undefined, platform: string) {
   if (platform === 'YouTube' && rule?.format === SHORT_VIDEO) return 'Shorts'
   return DEFAULT_TYPES[platform] ?? platform
 }
+
+/** Языки контента — в форме одной строкой, можно несколько. Без поля у материала — русский. */
+export const LANGS: { id: string; code: string; name: string }[] = [
+  { id: 'ru', code: 'RU', name: 'Русский' },
+  { id: 'en', code: 'EN', name: 'English' },
+  { id: 'es', code: 'ES', name: 'Español' },
+  { id: 'de', code: 'DE', name: 'Deutsch' },
+  { id: 'fr', code: 'FR', name: 'Français' },
+  { id: 'pt', code: 'PT', name: 'Português' },
+  { id: 'zh', code: 'ZH', name: '中文' },
+]
+export const DEFAULT_LANGS = ['ru']
+export const langsOf = (it: Pick<Item, 'langs'>) => it.langs ?? DEFAULT_LANGS
 
 export const DEFAULT_TIME = '12:00'
 /** Как подписан поток вместо времени: «24/7». */

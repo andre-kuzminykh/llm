@@ -407,6 +407,21 @@ await form.getByRole('button', { name: 'Отмена' }).click()
 ok('форма материала')
 await page.keyboard.press('Escape')
 
+// новый контент: повтор рядом со временем, языки строкой (русский — по умолчанию)
+{
+  await page.getByRole('button', { name: 'Новый контент' }).click()
+  const nf = page.getByRole('complementary', { name: 'Новый контент' })
+  await nf.getByRole('combobox', { name: 'Повтор' }).selectOption('week')
+  const daysOn = await nf.getByRole('group', { name: 'Дни недели' }).locator('[aria-pressed="true"]').count()
+  const hint = (await nf.getByText(/каждую неделю: .* — ещё \d+ до конца плана/).textContent().catch(() => '')) ?? ''
+  const langs = await nf.getByRole('group', { name: 'Языки' }).evaluate((el) => ({
+    on: [...el.querySelectorAll('[aria-pressed="true"]')].map((b) => b.getAttribute('aria-label')),
+    rows: new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top))).size,
+  }))
+  check(daysOn === 1 && hint && langs.rows === 1 && langs.on.join() === 'Русский', `новый контент: повтор («${hint}»), языки строкой, русский по умолчанию`, `повтор: ${daysOn} дн., «${hint}»; языки: ${JSON.stringify(langs)}`)
+  await nf.getByRole('button', { name: 'Закрыть' }).click()
+}
+
 
 // черновики — банк идей во вкладке «+»: добавить списком
 await page.getByRole('button', { name: 'Новый контент' }).click()

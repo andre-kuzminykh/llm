@@ -1069,6 +1069,15 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-plat__label { font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 @media (max-width: 480px) { .cp-plat__label { font-size: 9.5px; letter-spacing: -0.01em; } }
 /* выбранная площадка — заметно: цветом «выбрано», а не серым */
+/* повтор — рядом со временем; дни недели — строкой */
+.cp-repeat__sel { border: 0; background: transparent; color: var(--nr-text-2); font: inherit; padding: 2px 4px; border-radius: 6px; cursor: pointer; max-width: 100%; }
+@media (hover: hover) { .cp-repeat__sel:hover { background: var(--nr-fill-2); color: var(--nr-text); } }
+.cp-repeat { display: grid; gap: 6px; margin-top: -4px; }
+.cp-repeat__days { display: flex; gap: 3px; }
+.cp-repeat__day { flex: 1 1 0; min-width: 0; height: 30px; border: 1px solid var(--nr-sep); border-radius: var(--nr-r-sm); background: transparent; color: var(--nr-text-2); font: var(--nr-fw-medium) 12px/1 var(--nr-font); cursor: pointer; }
+.cp-repeat__day[aria-pressed='true'] { background: var(--nr-accent-soft); border-color: var(--nr-accent-line); color: var(--nr-accent-text); }
+/* язык — кодом вместо значка: RU, EN */
+.cp-lang__code { font-size: 13px; line-height: 18px; font-weight: var(--nr-fw-semibold); letter-spacing: 0.02em; }
 /* корзина в форме — без рамки, просто красный значок */
 .cp-trash { color: var(--nr-danger); }
 @media (hover: hover) { .cp-trash:hover { color: var(--nr-danger); background: color-mix(in srgb, var(--nr-danger) 10%, transparent); } }

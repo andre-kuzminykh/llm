@@ -255,7 +255,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
         }}
         aria-pressed={picked || undefined}
         aria-label={`${label}: ${title}${showTime ? `, ${timeText(unit)}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}${picked ? ', выбрано' : ''}`}
-        title={variant === 'full' ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
+        title={variant === 'full' ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.time}\n${title}\n${platLabel}${head.langs ? `\nЯзыки: ${head.langs.map((l) => l.toUpperCase()).join(', ')}` : ''}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
       >
         {line ? (
           <>

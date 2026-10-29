@@ -1,7 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { dayTitle, shortDate, weekday } from '../model/dates'
+import { dateText, dayTitle, shortDate, today, weekday, WEEKDAYS } from '../model/dates'
+import { REPEATS, repeatDates, repeatText, type Repeat } from '../model/repeat'
 import { newId, type Action } from '../model/store'
-import { FORMAT_HOME, FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isHome, isSlot, PLACEHOLDER, platformsFor, rubricName, shownTitle, statusOf, TEXT_IMAGE, timeOf, type Channel, type Item, type Plan, type Rule, type Status } from '../model/types'
+import { FORMAT_HOME, FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isHome, isSlot, PLACEHOLDER, platformsFor, rubricName, shownTitle, statusOf, TEXT_IMAGE, timeOf, DEFAULT_LANGS, LANGS, langsOf, type Channel, type Item, type Plan, type Rule, type Status } from '../model/types'
 import { unitsOf } from '../model/units'
 import { IconButton, PickText, PlatformIcon, PlayPause } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
@@ -16,6 +17,24 @@ function presetPlatforms(plan: Plan, c: Channel | undefined, f: string, r?: Rule
   const can = platformsFor(f, plan.platforms)
   const tries = [c?.picks?.[f] ?? [], r?.format === f ? r.platforms : [], (FORMAT_PLATFORMS[f] ?? []).filter((p) => c?.platforms.includes(p)), c?.platforms ?? []]
   return tries.map((list) => list.filter((p) => can.includes(p))).find((list) => list.length) ?? []
+}
+
+/** Свои языки — у каждого человека свои, в этом браузере: что отметил в последний раз, то и стоит у нового контента. */
+const MY_LANGS = 'cp:langs'
+function myLangs(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(MY_LANGS) ?? 'null') as unknown
+    return Array.isArray(v) && v.length && v.every((x) => LANGS.some((l) => l.id === x)) ? (v as string[]) : DEFAULT_LANGS
+  } catch {
+    return DEFAULT_LANGS
+  }
+}
+function rememberLangs(v: string[]) {
+  try {
+    localStorage.setItem(MY_LANGS, JSON.stringify(v))
+  } catch {
+    /* не запомнится — в следующий раз снова русский */
+  }
 }
 
 interface Props {
@@ -59,6 +78,11 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [note, setNote] = useState(base.note ?? '')
   const [time, setTime] = useState(base.time ?? '')
   const [touched, setTouched] = useState(false) // площадки выбрали руками — канал их запомнит
+  const [langs, setLangs] = useState<string[]>(() => (existing ? langsOf(existing) : base.langs ?? myLangs()))
+  const [langsTouched, setLangsTouched] = useState(false) // языки отметили — запомним их как свои
+  // повтор рядом со временем: каждую неделю, через неделю, раз в месяц — по дням недели (по умолчанию — день даты)
+  const [repeat, setRepeat] = useState<Repeat>('none')
+  const [repeatDays, setRepeatDays] = useState<number[] | null>(null)
   const [error, setError] = useState('')
   const [newTag, setNewTag] = useState('') // рубрика, которой ещё нет: заведётся при сохранении
   const [format, setFormat] = useState(firstFormat)
@@ -155,6 +179,24 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     setTouched(true)
     setPlatforms((list) => (list.includes(p) ? list.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || list.includes(x))))
   }
+  const rDays = repeatDays ?? (date ? [weekday(date)] : [])
+  const canRepeat = !!date && !(existing && existing.date === null)
+  const repeats = canRepeat ? repeatDates(date, repeat, rDays, plan.end) : []
+  /** Дни повтора — хотя бы один остаётся. */
+  const toggleDay = (d: number) => setRepeatDays(rDays.includes(d) ? (rDays.length > 1 ? rDays.filter((x) => x !== d) : rDays) : [...rDays, d].sort())
+  /** Копии повтора: те же поля, свой день; в плане; вне сетки, если формат в этот день по сетке не выходит. */
+  const repeatCopies = (from: Item, ruleNow: Rule, newRule: boolean, series: string): Action[] =>
+    repeats.map((d) => {
+      const { group: _g, derive: _d, origDate: _o, done: _done, trigger: _t, due: _due, ...rest } = from
+      const copy: Item = { ...rest, id: newId(), date: d, status: 'planned', series, offGrid: newRule || !ruleNow.days[weekday(d)] || undefined }
+      if (!copy.offGrid) delete copy.offGrid
+      return { type: 'create', item: copy, withFamily: !newRule }
+    })
+  /** Языки — несколько; хотя бы один остаётся. */
+  const toggleLang = (id: string) => {
+    setLangsTouched(true)
+    setLangs((list) => (list.includes(id) ? (list.length > 1 ? list.filter((x) => x !== id) : list) : LANGS.map((l) => l.id).filter((x) => x === id || list.includes(x))))
+  }
   // площадки — по формату; у материала остаются и те, что выбраны раньше, даже если формат там обычно не выходит
   const platformList = FORMAT_HOME[format] ? [] : plan.platforms.filter((p) => platformsFor(format, plan.platforms).includes(p) || (platforms.includes(p) && !isHome(p)))
   const shownPlatforms = FORMAT_HOME[format] ? [FORMAT_HOME[format]] : platforms.filter((p) => !isHome(p))
@@ -196,6 +238,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       rubricId: ruleNow.rubricId ?? rubricId,
       platforms: shownPlatforms,
       status,
+      langs,
       note: note || undefined,
       format,
       time: time && time !== ruleNow.time ? time : undefined,
@@ -203,13 +246,17 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       offGrid: (existing && !isBank ? existing.offGrid : offDay || (needRule && !!day)) || undefined,
     }
     const run = (actions: Action[]) => dispatch(actions.length > 1 ? { type: 'batch', actions } : actions[0])
+    if (langsTouched) rememberLangs(langs)
     if (existing && isBank && date) {
       run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }])
       toast(`Тема поставлена на ${shortDate(date)}`, true)
     } else if (existing) {
+      // повтор от этого материала вперёд: копии со своим днём, общий series
+      const series = repeats.length ? existing.series ?? newId('s') : undefined
+      const edited = { ...patch, ...(series ? { series } : {}) }
       // карточка — одна: группа переносится вместе
-      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup: true }])
-      toast('Сохранено', true)
+      run([...setup, { type: 'edit', id: existing.id, patch: edited, date: date && date !== existing.date ? date : undefined, withGroup: true }, ...(series ? repeatCopies({ ...existing, ...edited, date }, ruleNow, needRule, series) : [])])
+      toast(series ? `Сохранено и повторится ещё ${repeats.length} раз — ${repeatText(repeat, rDays, date)}` : 'Сохранено', true)
     } else {
       const sample = plan.items.find((x) => x.ruleId === ruleNow!.id && x.date && !x.derive)
       const item: Item = {
@@ -223,16 +270,19 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         format,
         platforms: shownPlatforms,
         status,
+        langs,
         source: t === PLACEHOLDER ? 'нужна тема' : day ? 'вручную' : 'черновик',
         rank: sample?.rank ?? 50,
         note: patch.note,
         time: patch.time,
         offGrid: patch.offGrid,
       }
+      const series = day && repeats.length ? newId('s') : undefined
+      if (series) item.series = series
       for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
-      // тизер, анонсы и письма — как у ближайшего материала рубрики, без переключателя
-      run([...setup, { type: 'create', item, withFamily: !!day && !needRule }])
-      toast(day ? `Создано на ${shortDate(day)}` : 'Сохранено в черновики', true)
+      // тизер, анонсы и письма — как у ближайшего материала рубрики, без переключателя; повтор — тем же шагом истории
+      run([...setup, { type: 'create', item, withFamily: !!day && !needRule }, ...(series ? repeatCopies(item, ruleNow, needRule, series) : [])])
+      toast(day ? `Создано на ${shortDate(day)}${series ? ` и ещё ${repeats.length} раз — ${repeatText(repeat, rDays, day)}` : ''}` : 'Сохранено в черновики', true)
     }
     onClose()
   }
@@ -282,9 +332,34 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
               ) : (
                 <PickText type="time" label="Время выхода" value={time || (rule ? timeOf({}, rule) : '')} text={time || (rule ? timeOf({}, rule) : '')} onChange={setTime} />
               )}
+              {canRepeat && (
+                <>
+                  <span className="cp-task__sep" aria-hidden="true">·</span>
+                  <select className="cp-repeat__sel" aria-label="Повтор" value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
+                    {REPEATS.map((r) => (
+                      <option key={r.id} value={r.id}>{r.label}</option>
+                    ))}
+                  </select>
+                </>
+              )}
             </>
           )}
         </div>
+        {/* повтор: дни недели и сколько ещё раз до конца плана */}
+        {canRepeat && repeat !== 'none' && (
+          <div className="cp-repeat">
+            <div className="cp-repeat__days" role="group" aria-label="Дни недели">
+              {WEEKDAYS.map((w, i) => (
+                <button key={w} type="button" className="cp-repeat__day" aria-pressed={rDays.includes(i)} onClick={() => toggleDay(i)}>
+                  {w}
+                </button>
+              ))}
+            </div>
+            <p className="cp-hint">
+              {repeatText(repeat, rDays, date)} — ещё {repeats.length} до конца плана, {dateText(plan.end, today())}
+            </p>
+          </div>
+        )}
 
         <label className="cp-field">
           <span className="nr-label">Канал</span>
@@ -362,6 +437,18 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             </div>
           </div>
         )}
+        {/* языки — можно несколько; что отметили, то и стоит у нового контента в следующий раз */}
+        <div className="cp-field">
+          <span className="nr-label">Языки</span>
+          <div className="cp-plats" role="group" aria-label="Языки">
+            {LANGS.map((l) => (
+              <button key={l.id} type="button" className="cp-plat" aria-pressed={langs.includes(l.id)} aria-label={l.name} title={l.name} onClick={() => toggleLang(l.id)}>
+                <span className="cp-lang__code">{l.code}</span>
+                <span className="cp-plat__label">{l.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         {error && <p className="cp-hint" style={{ color: 'var(--nr-danger)' }} role="alert">{error}</p>}
       </div>
       <div className="cp-sheet__foot">

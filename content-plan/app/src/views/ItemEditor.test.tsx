@@ -325,3 +325,68 @@ describe('T-CP-051 FR-CP-051 «Готово» — карточка сразу б
     expect(full()).not.toHaveClass('cp-card--done')
   })
 })
+
+describe('T-CP-054 FR-CP-054 языки — несколько; свои запоминаются', () => {
+  it('у нового — русский; отметил английский — в следующий раз RU и EN уже стоят; у материала без языков — русский', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    const pressed = (form: HTMLElement) =>
+      within(within(form).getByRole('group', { name: 'Языки' }))
+        .getAllByRole('button')
+        .filter((b) => b.getAttribute('aria-pressed') === 'true')
+        .map((b) => b.getAttribute('aria-label'))
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    let form = screen.getByRole('complementary', { name: 'Новый контент' })
+    expect(within(within(form).getByRole('group', { name: 'Языки' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'RUРусский', 'ENEnglish', 'ESEspañol', 'DEDeutsch', 'FRFrançais', 'PTPortuguês', 'ZH中文',
+    ])
+    expect(pressed(form)).toEqual(['Русский'])
+    // последний язык не снять
+    await userEvent.click(within(form).getByRole('button', { name: 'Русский' }))
+    expect(pressed(form)).toEqual(['Русский'])
+    await userEvent.click(within(form).getByRole('button', { name: 'English' }))
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Двуязычный пост')
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    form = screen.getByRole('complementary', { name: 'Новый контент' })
+    expect(pressed(form)).toEqual(['Русский', 'English'])
+    await userEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    // материал из плана без языков — по-русски
+    await userEvent.click(within(day('2026-10-26')).getByRole('button', { name: /^Демо · FULL: Стратегия/ }))
+    expect(pressed(screen.getByRole('complementary', { name: 'Материал' }))).toEqual(['Русский'])
+  })
+})
+
+describe('T-CP-055 FR-CP-055 повтор рядом со временем', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+  it('каждую неделю по ср и пт — до конца плана, одним шагом; «Отменить» убирает все', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    expect(within(form).getByLabelText('Дата')).toHaveValue('2026-10-28')
+    const sel = within(form).getByRole('combobox', { name: 'Повтор' })
+    expect([...(sel as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Не повторять', 'Каждую неделю', 'Через неделю', 'Раз в месяц'])
+    expect(within(form).queryByRole('group', { name: 'Дни недели' })).toBeNull()
+    await userEvent.selectOptions(sel, 'Каждую неделю')
+    const days = within(form).getByRole('group', { name: 'Дни недели' })
+    expect(within(days).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent)).toEqual(['Ср'])
+    expect(within(form).getByText(/каждую неделю: ср — ещё 4 до конца плана, 30 ноя/)).toBeInTheDocument()
+    await userEvent.click(within(days).getByRole('button', { name: 'Пт' }))
+    expect(within(form).getByText(/каждую неделю: ср, пт — ещё 9 до конца плана, 30 ноя/)).toBeInTheDocument()
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Стрим с подписчиками')
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
+    expect(screen.getByText(/Создано на .* и ещё 9 раз — каждую неделю: ср, пт/)).toBeInTheDocument()
+    // FULL Демо — с анонсом Andre AIT, как у ближайшего материала рубрики: в каждом дне повтора — то же
+    const has = (d: string) => within(day(d)).queryAllByText('Стрим с подписчиками').length
+    expect([has('2026-10-28'), has('2026-10-30'), has('2026-10-29')]).toEqual([2, 2, 0])
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }))
+    expect([has('2026-10-28'), has('2026-10-30')]).toEqual([0, 0])
+  })
+})
