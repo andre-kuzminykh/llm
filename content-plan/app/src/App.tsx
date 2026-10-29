@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { addDays, fromMin, shortDate, toMin, today } from './model/dates'
 import { indexByDate, visible, type Filters } from './model/filters'
 import { moveHint, whereText } from './model/hint'
-import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, type AnyPlan } from './model/io'
+import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, webAndMail, type AnyPlan } from './model/io'
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
-import { labelOf, timeOf, type ISODate, type Item, type Plan } from './model/types'
+import { isHome, labelOf, timeOf, type ISODate, type Item, type Plan } from './model/types'
 import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
 import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type Span, type ToastOpts } from './ui/ctx'
@@ -92,7 +92,8 @@ async function fetchSeed(url: string): Promise<Plan> {
   if (!r.ok) throw new Error(`Не загрузился исходный план (${r.status})`)
   const p = parsePlan(await r.text())
   if (isV1(p) || p.version !== 3) throw new Error('Исходный план старого формата — перезапустите ../build.py')
-  return p
+  // сайт и письмо — форматы: генератор пишет их площадками, программа делит такие материалы на части
+  return webAndMail(p)
 }
 
 /** План из хранилища или файла; старые версии переводятся по новому исходному плану. */
@@ -186,7 +187,11 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
   const [anchor, setAnchorState] = useState<ISODate>(() => readLS('cp:anchor', today()))
   const [jump, setJump] = useState({ date: anchor, n: 0 })
-  const [filters, setFiltersState] = useState<Filters>(() => ({ ...DEFAULT_FILTERS, ...readLS<Partial<Filters>>('cp:filters', {}) }))
+  const [filters, setFiltersState] = useState<Filters>(() => {
+    const f = { ...DEFAULT_FILTERS, ...readLS<Partial<Filters>>('cp:filters', {}) }
+    // сайт и письмо стали форматами: старый фильтр по ним как по площадкам больше не включить и не выключить
+    return { ...f, hiddenPlatforms: f.hiddenPlatforms.filter((p) => !isHome(p)) }
+  })
   const [sheet, setSheet] = useState<Sheet>(null)
   const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)
   const narrow = useMedia('(max-width: 900px)')

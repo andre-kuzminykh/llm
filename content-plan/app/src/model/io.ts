@@ -1,6 +1,6 @@
 // Выгрузка и загрузка: JSON целиком и CSV-календарь в формате out/4_calendar.csv.
 import { addDays, MONTHS, WEEKDAYS, weekday } from './dates'
-import { formatOf, GRAY, isFormat, lineOf, PLACEHOLDER, timeOf, type Channel, type ISODate, type Item, type Plan, type Rule } from './types'
+import { formatOf, GRAY, isFormat, lineOf, MAIL, PLACEHOLDER, TEXT_IMAGE, timeOf, WEB_PAGE, type Channel, type ISODate, type Item, type Plan, type Rule } from './types'
 
 export const exportJSON = (plan: Plan) => JSON.stringify(plan)
 
@@ -136,9 +136,9 @@ export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
 
 /** Любая версия → текущая. Для старых нужен новый исходный план: из него берутся новые поля правил. */
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
-  if (isV1(p)) return splitDataist(renameAndFormats(migrateV1(p, await seed())))
-  if (isV2(p)) return splitDataist(renameAndFormats(migrateV2(p, await seed())))
-  return splitDataist(renameAndFormats(await addStreams(p, seed)))
+  if (isV1(p)) return webAndMail(splitDataist(renameAndFormats(migrateV1(p, await seed()))))
+  if (isV2(p)) return webAndMail(splitDataist(renameAndFormats(migrateV2(p, await seed()))))
+  return webAndMail(splitDataist(renameAndFormats(await addStreams(p, seed))))
 }
 
 // Разделы Dataist теперь называются полностью и по умолчанию серые; «Кабинет» стал «Офисом Датаиста»
@@ -225,6 +225,72 @@ export function splitDataist(p: Plan): Plan {
     return { id, name: s.web, color: s.color ?? GRAY, start: old.start, platforms: platforms.length ? platforms : old.platforms, sections: [] }
   })
   return { ...p, channels: p.channels.flatMap((c) => (c === old ? made : [c])), rules, items }
+}
+
+type Part = { kind: 'web' | 'mail' | 'post'; format: string; platforms: string[] }
+
+/** Части материала по формату: страница — только сайт, письмо — только рассылка, остальные площадки — свой формат
+ *  (у страницы и письма — пост). «Исследование дня» на сайте, в Telegram, X… и строкой в письме — три части. */
+export function partsOf(format: string, platforms: string[]): Part[] {
+  const rest = platforms.filter((p) => p !== 'Web' && p !== 'Mail')
+  const parts: Part[] = []
+  if (platforms.includes('Web')) parts.push({ kind: 'web', format: WEB_PAGE, platforms: ['Web'] })
+  if (rest.length) parts.push({ kind: 'post', format: format === WEB_PAGE || format === MAIL ? TEXT_IMAGE : format, platforms: rest })
+  if (platforms.includes('Mail')) parts.push({ kind: 'mail', format: MAIL, platforms: ['Mail'] })
+  if (!parts.length) return [{ kind: 'post', format, platforms }]
+  // главная часть — по формату: у страницы — сайт, у остальных — площадки
+  const main = parts.find((x) => x.format === format) ?? parts.find((x) => x.kind === 'post') ?? parts[0]
+  return [main, ...parts.filter((x) => x !== main)]
+}
+const splits = (format: string, platforms: string[]) => {
+  const parts = partsOf(format, platforms)
+  return parts.length > 1 || parts[0].format !== format
+}
+const isSlotItem = (it: Item) => it.title.trim() === PLACEHOLDER
+
+/** Сайт и письмо стали форматами: формат и материал, где они вместе с другими площадками, делятся на части —
+ *  одна карточка (группа), тот же день и время; главная часть остаётся со своим id, остальные — «id~mail», «id~post».
+ *  Уже разделённый план возвращается как есть. */
+export function webAndMail(p: Plan): Plan {
+  if (!p.rules.some((r) => splits(r.format, r.platforms)) && !p.items.some((it) => splits(it.format, it.platforms))) return p
+  const kinds = new Map<string, Map<Part['kind'], string>>() // формат → часть → id формата
+  const rules = p.rules.flatMap((r) => {
+    const parts = partsOf(r.format, r.platforms)
+    const ids = new Map<Part['kind'], string>()
+    kinds.set(r.id, ids)
+    if (!splits(r.format, r.platforms)) return [r]
+    return parts.map((x, i): Rule => {
+      const id = i ? `${r.id}~${x.kind}` : r.id
+      ids.set(x.kind, id)
+      const types = Object.fromEntries(Object.entries(r.types).filter(([k]) => x.platforms.includes(k)))
+      const { bank, ...rest } = r
+      // название то же: части одного формата отличаются значком формата, а не подписью
+      return { ...rest, ...(i ? {} : bank ? { bank } : {}), id, format: x.format, platforms: x.platforms, types, full: !i && r.full }
+    })
+  })
+  const items = p.items.flatMap((it) => {
+    if (!splits(it.format, it.platforms)) return [it]
+    const parts = partsOf(it.format, it.platforms)
+    const ids = kinds.get(it.ruleId)
+    // свой id остаётся у части, что совпала с главной частью формата
+    const keep = parts.find((x) => ids?.get(x.kind) === it.ruleId) ?? parts[0]
+    // без группы части с той же темой и так одна карточка; у слота темы нет — ему группа
+    const group = it.group ?? (parts.length > 1 && isSlotItem(it) ? `g~${it.id}` : undefined)
+    return [keep, ...parts.filter((x) => x !== keep)].map((x, i): Item => {
+      const id = i ? `${it.id}~${x.kind}` : it.id
+      const out: Item = { ...it, id, format: x.format, platforms: x.platforms, ruleId: ids?.get(x.kind) ?? it.ruleId, group }
+      if (i) {
+        if (group) out.derive = it.derive ?? '{title}'
+        delete out.note
+        const done = it.done?.filter((d) => x.platforms.some((pl) => d === `${it.id}|${pl}`)).map((d) => `${id}|${d.split('|')[1]}`)
+        if (done?.length) out.done = done
+        else delete out.done
+      }
+      if (!out.group) delete out.group
+      return out
+    })
+  })
+  return { ...p, rules, items }
 }
 
 /** Порядок заголовков в ячейке: канал, его разделы в Telegram, его разделы на сайте. */

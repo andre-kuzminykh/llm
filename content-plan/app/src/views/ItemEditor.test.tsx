@@ -89,29 +89,41 @@ describe('T-CP-005 FR-CP-005 форма материала', () => {
     await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
     expect(within(day('2026-10-26')).getByRole('button', { name: /^Демо · FULL: Агент продаж/ })).toBeInTheDocument()
   })
-  it('площадки — один список у любого канала, значками, как в фильтрах; новая для канала — появится у канала', async () => {
+  it('площадки — по формату, значками, как в фильтрах; сайта и письма среди них нет; новая для канала — появится у канала', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
-    // тот же список, что в фильтрах слева
+    // в фильтрах слева — площадки без сайта и письма: это форматы
     const all = [...screen.getByRole('complementary', { name: 'Фильтры' }).querySelector('.cp-pills')!.querySelectorAll('button')].map((b) => b.textContent)
-    expect(all.length).toBeGreaterThan(5)
+    expect(all).toEqual(['YouTube', 'Instagram', 'Telegram', 'X', 'LinkedIn'])
     await userEvent.click(within(day('2026-10-26')).getByRole('button', { name: /^Демо · Анонс от Andre AIT: Стратегия/ }))
     const form = screen.getByRole('complementary', { name: 'Материал' })
     const plats = () => within(within(form).getByRole('group', { name: 'Площадки' })).getAllByRole('button')
-    expect(plats().map((b) => b.textContent)).toEqual(all)
+    // пост — только там, где пост выходит: без YouTube; строка в письме стала своей частью карточки
+    expect(plats().map((b) => b.textContent)).toEqual(['Instagram', 'Telegram', 'X', 'LinkedIn'])
     expect(plats().every((b) => b.querySelector('svg'))).toBe(true)
-    expect(plats().filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent)).toEqual(['LinkedIn', 'Mail'])
+    expect(plats().filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent)).toEqual(['LinkedIn'])
     await userEvent.click(within(within(form).getByRole('group', { name: 'Площадки' })).getByRole('button', { name: 'Instagram' }))
     await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
     await userEvent.click(within(day('2026-10-26')).getByRole('button', { name: /^Демо · Анонс от Andre AIT: Стратегия/ }))
     const again = screen.getByRole('complementary', { name: 'Материал' })
     expect(within(within(again).getByRole('group', { name: 'Площадки' })).getByRole('button', { name: 'Instagram' })).toHaveAttribute('aria-pressed', 'true')
-    // у нового контента любого канала — тот же список
+    // новый контент: список — по формату
     await userEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
     const fresh = screen.getByRole('complementary', { name: 'Новый контент' })
+    const list = () => within(within(fresh).getByRole('group', { name: 'Площадки' })).getAllByRole('button').map((b) => b.textContent)
+    const fmt = (name: string) => userEvent.click(within(within(fresh).getByRole('radiogroup', { name: 'Формат' })).getByRole('radio', { name }))
     await userEvent.selectOptions(within(fresh).getByRole('combobox', { name: 'Канал' }), 'Landao')
-    expect(within(within(fresh).getByRole('group', { name: 'Площадки' })).getAllByRole('button').map((b) => b.textContent)).toEqual(all)
+    expect(list()).toEqual(['Instagram', 'Telegram', 'X', 'LinkedIn'])
+    await fmt('Короткое вертикальное видео')
+    expect(list()).toEqual(['YouTube', 'Instagram', 'Telegram', 'X', 'LinkedIn'])
+    await fmt('Полное горизонтальное видео')
+    expect(list()).toEqual(['YouTube', 'Telegram', 'X', 'LinkedIn'])
+    // сайт и письмо — форматы: выбирать площадки не нужно, списка нет
+    await fmt('Страница на сайте')
+    expect(within(fresh).queryByRole('group', { name: 'Площадки' })).toBeNull()
+    await fmt('Письмо')
+    expect(within(fresh).queryByRole('group', { name: 'Площадки' })).toBeNull()
   })
 })
 
@@ -179,7 +191,7 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
     expect(within(day('2026-10-31')).queryByRole('img', { name: /Нарушений/ })).toBeNull()
   })
-  it('формат — значками: горизонталь, вертикаль, веб, пост, щёлкнуть один; общие форматы FULL достаются только рубрикам, у которых есть FULL', async () => {
+  it('формат — значками: горизонталь, вертикаль, пост, письмо, веб (последним), щёлкнуть один; общие форматы FULL достаются только рубрикам, у которых есть FULL', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
@@ -189,8 +201,9 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
     expect(radios.map((o) => [o.getAttribute('aria-label'), o.textContent, !!o.querySelector('svg')])).toEqual([
       ['Полное горизонтальное видео', 'Горизонталь', true],
       ['Короткое вертикальное видео', 'Вертикаль', true],
-      ['Страница на сайте', 'Веб', true],
       ['Текст с картинкой', 'Пост', true],
+      ['Письмо', 'Письмо', true],
+      ['Страница на сайте', 'Веб', true],
     ])
     // у Демо короткое видео — тизер FULL: формат уже есть, новым не заводится
     await pickTag(form, 'Демо')
@@ -205,7 +218,7 @@ describe('T-CP-019 FR-CP-019 разовый материал и форматы �
 })
 
 describe('T-CP-027 FR-CP-027 «+»: форма — только нужное', () => {
-  it('сверху тема и ▶, под ней рубрика (без «#»); дальше дата и время, формат, канал, площадки, заметка, внизу «Готово» — без «Подробнее»', async () => {
+  it('сверху тема и ▶, под ней дата и время; дальше канал, рубрика (без «#»), заметка, формат, площадки, внизу «Готово» — без «Подробнее»', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
@@ -213,12 +226,12 @@ describe('T-CP-027 FR-CP-027 «+»: форма — только нужное', (
     const order = [
       within(form).getByRole('textbox', { name: 'Тема' }),
       within(form).getByRole('button', { name: 'Начать' }),
-      within(form).getByRole('combobox', { name: 'Рубрика' }),
       within(form).getByLabelText('Дата'),
-      within(form).getByRole('radiogroup', { name: 'Формат' }),
       within(form).getByRole('combobox', { name: 'Канал' }),
-      within(form).getByRole('button', { name: 'YouTube' }),
+      within(form).getByRole('combobox', { name: 'Рубрика' }),
       within(form).getByRole('textbox', { name: 'Заметка' }),
+      within(form).getByRole('radiogroup', { name: 'Формат' }),
+      within(form).getByRole('group', { name: 'Площадки' }),
       within(form).getByRole('checkbox', { name: 'Готово' }),
     ]
     for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -238,7 +251,77 @@ describe('T-CP-027 FR-CP-027 «+»: форма — только нужное', (
     expect(within(form).getByRole('combobox', { name: 'Рубрика' })).toHaveValue('Демо')
     expect(within(form.querySelector('.cp-sheet__head') as HTMLElement).getByRole('textbox', { name: 'Тема' })).toHaveValue('Стратегия')
     expect(within(form).getByRole('button', { name: 'YouTube' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(form).getByRole('switch', { name: 'Переносить и удалять вместе с группой' })).toBeInTheDocument()
+    // ни состава группы, ни «Переносить и удалять вместе с группой»: карточка и так одна
+    expect(within(form).queryByText(/Группа|вместе с группой/)).toBeNull()
+    expect(within(form).queryByRole('switch')).toBeNull()
     expect(within(form).queryByRole('button', { name: 'Подробнее' })).toBeNull()
+  })
+})
+
+describe('T-CP-049 FR-CP-049 рубрика — поле со списком: рубрики канала первыми', () => {
+  it('щелчок открывает все рубрики: канала — первыми, ниже «Другие»; сменили канал — порядок свой', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    const input = within(form).getByRole('combobox', { name: 'Рубрика' })
+    const options = () => within(within(form).getByRole('listbox')).getAllByRole('option').map((o) => o.textContent)
+    await userEvent.click(input)
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(options()).toEqual(['Демо', 'Технологии', 'Тезисы', 'Обновления'])
+    expect(within(form).getByRole('listbox').textContent).toMatch(/В этом канале.*Тезисы.*Другие.*Обновления/)
+    await userEvent.click(within(form).getByRole('option', { name: 'Тезисы' }))
+    expect(input).toHaveValue('Тезисы')
+    expect(within(form).queryByRole('listbox')).toBeNull()
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Канал' }), 'Landao')
+    // у Landao тезисов нет — рубрика канала, и его рубрики теперь первыми
+    expect(input).toHaveValue('Обновления')
+    await userEvent.click(input)
+    expect(options()).toEqual(['Обновления', 'Демо', 'Технологии', 'Тезисы'])
+  })
+})
+
+describe('T-CP-050 FR-CP-050 канал помнит площадки формата', () => {
+  it('выбрали площадки руками — в следующий раз у этого канала и формата они уже выбраны; у другого канала — свои', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    const open = async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+      const form = screen.getByRole('complementary', { name: 'Новый контент' })
+      await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Канал' }), 'Landao')
+      return form
+    }
+    const pressed = (form: HTMLElement) =>
+      within(within(form).getByRole('group', { name: 'Площадки' }))
+        .getAllByRole('button')
+        .filter((b) => b.getAttribute('aria-pressed') === 'true')
+        .map((b) => b.textContent)
+    let form = await open()
+    expect(pressed(form)).toEqual(['Telegram']) // как у формата рубрики в канале
+    await userEvent.click(within(within(form).getByRole('group', { name: 'Площадки' })).getByRole('button', { name: 'Instagram' }))
+    await userEvent.click(within(within(form).getByRole('group', { name: 'Площадки' })).getByRole('button', { name: 'X' }))
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Запуск')
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
+    form = await open()
+    expect(pressed(form)).toEqual(['Instagram', 'Telegram', 'X'])
+    // другой канал — свои площадки: пост Демо у Dataist (анонс в Офисе) — Telegram, память Landao сюда не переходит
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Канал' }), 'Dataist')
+    expect(pressed(form)).toEqual(['Telegram'])
+  })
+})
+
+describe('T-CP-051 FR-CP-051 «Готово» — карточка сразу бледнеет, «В работе» — подсвечена', () => {
+  it('▶ рядом с темой — карточка «в работе»; галочка «Готово» — сразу бледная; снять — как была', async () => {
+    renderApp()
+    await userEvent.click(await screen.findByRole('button', { name: /^Демо · FULL: Стратегия/ }))
+    const form = screen.getByRole('complementary', { name: 'Материал' })
+    expect(full()).not.toHaveClass('cp-card--progress')
+    await userEvent.click(within(form).getByRole('button', { name: 'Начать' }))
+    expect(full()).toHaveClass('cp-card--progress')
+    await userEvent.click(within(form).getByRole('checkbox', { name: 'Готово' }))
+    expect(full()).toHaveClass('cp-card--done')
+    expect(full()).not.toHaveClass('cp-card--progress')
+    await userEvent.click(within(form).getByRole('checkbox', { name: 'Готово' }))
+    expect(full()).not.toHaveClass('cp-card--done')
   })
 })

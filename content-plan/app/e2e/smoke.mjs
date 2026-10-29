@@ -314,41 +314,64 @@ const yOf = async (loc) => (await loc.boundingBox())?.y ?? -1
 const formHead = form.locator('.cp-sheet__head')
 const formY = [
   await yOf(formHead.getByRole('textbox', { name: 'Тема' })),
+  await yOf(form.getByLabel('Дата', { exact: true })),
+  await yOf(form.getByRole('combobox', { name: 'Канал' })),
   await yOf(form.getByRole('combobox', { name: 'Рубрика' })),
+  await yOf(form.getByRole('textbox', { name: 'Заметка' })),
   await yOf(form.getByRole('radiogroup', { name: 'Формат' })),
   await yOf(form.getByRole('group', { name: 'Площадки' })),
   await yOf(form.getByRole('checkbox', { name: 'Готово' })),
 ]
-const gone = await form.getByText(/Подробнее|Кто делает|Подготовить к|Вне сетки|Копии на другие|Пересоздать|Общая тема|исходной сетке|^Материал$|^Статус$/).count()
+const gone = await form.getByText(/Подробнее|Кто делает|Подготовить к|Вне сетки|Копии на другие|Пересоздать|Общая тема|исходной сетке|^Материал$|^Статус$|Группа ·|вместе с группой/).count()
 check(
   formY.every((y, i) => y > 0 && (i === 0 || y > formY[i - 1])) && !gone && (await formHead.getByRole('button', { name: 'Пауза' }).count()),
-  'форма: тема вместо «Материал» (вписывается), рядом ⏸; ниже рубрика, формат, площадки; внизу «Готово» — без ряда статусов и лишнего',
+  'форма: тема вместо «Материал» (вписывается), рядом ⏸; ниже когда, канал, рубрика, заметка, формат, площадки; внизу «Готово» — без ряда статусов, группы и лишнего',
   `форма: ${formY.join(', ')}; лишнего: ${gone}`,
 )
-// площадки — тот же список, что в фильтрах, значками
+// площадки — по формату, из того же списка, что в фильтрах, значками; сайта и письма среди площадок нет — это форматы
 const sidePlats = await side.locator('.cp-pills').first().getByRole('button').allTextContents()
 const formPlats = form.getByRole('group', { name: 'Площадки' }).getByRole('button')
+const formList = await formPlats.allTextContents()
 check(
-  (await formPlats.allTextContents()).join('|') === sidePlats.join('|') && (await formPlats.locator('svg').count()) === sidePlats.length,
-  `площадки в форме — тот же список, что в фильтрах, значками (${sidePlats.length})`,
-  `площадки в форме: ${(await formPlats.allTextContents()).join(', ')}`,
+  formList.join('|') === sidePlats.filter((p) => ['YouTube', 'Telegram', 'X', 'LinkedIn'].includes(p)).join('|') && (await formPlats.locator('svg').count()) === formList.length && !sidePlats.includes('Web') && !sidePlats.includes('Mail'),
+  `площадки в форме — по формату (горизонталь: ${formList.join(', ')}), значками; в фильтрах — без сайта и письма`,
+  `площадки в форме: ${formList.join(', ')}; в фильтрах: ${sidePlats.join(', ')}`,
 )
+// рубрика — поле со списком: щелчок открывает все рубрики, рубрики канала — первыми
+await form.getByRole('combobox', { name: 'Рубрика' }).click()
+const rubricList = form.getByRole('listbox')
+const rubricOpts = await rubricList.getByRole('option').count()
+const rubricHead = (await rubricList.textContent()) ?? ''
+await page.keyboard.press('Escape')
+check(rubricOpts > 5 && rubricHead.startsWith('В этом канале'), `рубрика — поле со списком: щелчок — все рубрики (${rubricOpts}), рубрики канала первыми`, `список рубрик: ${rubricOpts}, «${rubricHead.slice(0, 40)}»`)
 // ⏸ рядом с темой — на паузу сразу, ▶ — снова в работу; «Готово» — галочкой внизу (здесь сразу отменяем)
 await formHead.getByRole('button', { name: 'Пауза' }).click()
 const paused = await cell('2026-11-09').getByRole('button', { name: 'Продолжить: Neuronium (на паузе)' }).count()
 await formHead.getByRole('button', { name: 'Продолжить' }).click()
+const glowing = await cell('2026-11-09').locator('.cp-card--progress').first().evaluate((el) => getComputedStyle(el).animationName).catch(() => '')
 await form.getByRole('checkbox', { name: 'Готово' }).check()
 const doneCard = await cell('2026-11-09').getByRole('button', { name: 'Задача: Neuronium (готово)' }).count()
+await page.mouse.move(5, 5) // наведённая готовая карточка — ярче; смотрим без наведения, когда переход закончился
+await page.waitForTimeout(350)
+const faded = await cell('2026-11-09').locator('.cp-card--done').first().evaluate((el) => Number(getComputedStyle(el).opacity)).catch(() => 1)
+check(glowing === 'cp-breathe' && faded < 0.6, '«В работе» — карточка подсвечена и «дышит»; галочка «Готово» — карточка сразу бледнеет', `анимация: «${glowing}», прозрачность готовой: ${faded}`)
 await toast().getByRole('button', { name: 'Отменить' }).click()
 check(paused && doneCard && (await cell('2026-11-09').getByRole('button', { name: 'Пауза: Neuronium (в работе)' }).count()), '⏸ / ▶ рядом с темой и «Готово» внизу — сразу на карточке; «Отменить» возвращает', `статус: пауза ${paused}, готово ${doneCard}`)
 const fmtGroup = form.getByRole('radiogroup', { name: 'Формат' })
 const fmtLabels = (await fmtGroup.getByRole('radio').allTextContents()).join('|')
 const fmtOn = await fmtGroup.getByRole('radio', { checked: true }).getAttribute('aria-label')
 check(
-  fmtLabels === 'Горизонталь|Вертикаль|Веб|Пост' && (await fmtGroup.locator('svg').count()) === 4 && fmtOn === 'Полное горизонтальное видео',
-  'форма: формат — значками «Горизонталь / Вертикаль / Веб / Пост», щёлкнуть один; у FULL — горизонталь',
+  fmtLabels === 'Горизонталь|Вертикаль|Пост|Письмо|Веб' && (await fmtGroup.locator('svg').count()) === 5 && fmtOn === 'Полное горизонтальное видео',
+  'форма: формат — значками «Горизонталь / Вертикаль / Пост / Письмо / Веб» (веб — последним), щёлкнуть один; у FULL — горизонталь',
   `формат в форме не тот: ${fmtLabels}, выбран ${fmtOn}`,
 )
+// у сайта и письма площадок нет: выбирать нечего
+await fmtGroup.getByRole('radio', { name: 'Страница на сайте' }).click()
+const webPlats = await form.getByRole('group', { name: 'Площадки' }).count()
+await fmtGroup.getByRole('radio', { name: 'Письмо' }).click()
+const mailPlats = await form.getByRole('group', { name: 'Площадки' }).count()
+await fmtGroup.getByRole('radio', { name: 'Полное горизонтальное видео' }).click()
+check(!webPlats && !mailPlats, 'формат «Веб» или «Письмо» — площадок нет', `площадки у веба: ${webPlats}, у письма: ${mailPlats}`)
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOTS}/5-editor.png` })
 await form.getByRole('button', { name: 'Отмена' }).click()
@@ -527,8 +550,8 @@ const pills = side.locator('.cp-pills').first()
 check((await pills.locator('svg').count()) === (await pills.getByRole('button').count()), 'у площадок в фильтрах — иконки', 'у площадок нет иконок')
 const fmts = async (g) => (await side.getByRole('group', { name: g }).getByRole('button').allTextContents()).join('|')
 check(
-  (await fmts('Видео')) === 'Полное горизонтальное видео|Короткое вертикальное видео' && (await fmts('Текст')) === 'Страница на сайте|Текст с картинкой',
-  'форматы в фильтрах: Видео (полное горизонтальное, короткое вертикальное), Текст (страница на сайте, текст с картинкой)',
+  (await fmts('Видео')) === 'Полное горизонтальное видео|Короткое вертикальное видео' && (await fmts('Текст')) === 'Текст с картинкой|Письмо|Страница на сайте',
+  'форматы в фильтрах: Видео (полное горизонтальное, короткое вертикальное), Текст (текст с картинкой, письмо, страница на сайте)',
   `форматы не те: ${await fmts('Видео')} / ${await fmts('Текст')}`,
 )
 // «⋯» у канала: переименовать, выше, ниже, удалить

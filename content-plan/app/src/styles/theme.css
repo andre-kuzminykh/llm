@@ -104,10 +104,12 @@ html.dark {
   --nr-backdrop: rgba(0, 0, 0, 0.55);
   --cp-rest: color-mix(in srgb, #ffffff 3%, transparent);
   --cp-tint: 22%; /* заливка карточки цветом канала: на тёмном нужно больше, чтобы читалась */
+  --cp-sheen: rgba(255, 255, 255, 0.1);
 }
 
 :root {
   --cp-tint: 12%; /* заливка карточки цветом канала на белом */
+  --cp-sheen: rgba(255, 255, 255, 0.75); /* блик, что пробегает по карточке в работе */
 }
 :root {
   --nr-accent-soft: color-mix(in srgb, var(--nr-accent) 10%, transparent);
@@ -324,9 +326,31 @@ select.nr-field {
   --cp-bg: color-mix(in srgb, var(--cp-c, var(--nr-accent)) var(--cp-tint), var(--nr-surface));
   position: relative; display: flex; width: 100%; min-width: 0; border-radius: 6px;
   border-left: 3px solid var(--cp-c, var(--nr-accent)); background: var(--cp-bg); cursor: grab; color: var(--nr-text);
-  transition: background-color var(--nr-dur-1) var(--nr-ease);
+  transition: background-color var(--nr-dur-1) var(--nr-ease), opacity var(--nr-dur-2) var(--nr-ease);
 }
 .cp-card:active { cursor: grabbing; }
+/* готово и вышло — сразу бледнее: сделанное уходит на второй план; навели — видно лучше */
+.cp-card--done { opacity: 0.42; }
+@media (hover: hover) { .cp-card--done:hover { opacity: 0.85; } }
+/* в работе — рамка цветом «в работе» дышит, по карточке пробегает блик */
+.cp-card--progress { animation: cp-breathe 2.4s ease-in-out infinite; }
+.cp-card--progress::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(100deg, transparent 38%, var(--cp-sheen) 50%, transparent 62%) no-repeat; background-size: 260% 100%;
+  animation: cp-sheen 3.2s ease-in-out infinite;
+}
+@keyframes cp-breathe {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--nr-accent) 35%, transparent); }
+  50% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--nr-accent) 80%, transparent), 0 0 14px 1px color-mix(in srgb, var(--nr-accent) 38%, transparent); }
+}
+@keyframes cp-sheen {
+  0% { background-position: 160% 0; }
+  55%, 100% { background-position: -60% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cp-card--progress { animation: none; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--nr-accent) 70%, transparent); }
+  .cp-card--progress::after { display: none; }
+}
 /* карточку переносят указателем (drag.ts): текст не выделяется, на телефоне — без меню по долгому нажатию */
 .cp-card { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .cp-ghost { position: fixed; z-index: 1000; margin: 0; pointer-events: none; box-shadow: var(--nr-shadow-3); opacity: 0.96; }
@@ -863,12 +887,18 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-search__row .cp-rub { flex: none; font-size: var(--nr-fs-sm); }
 .cp-search__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ── хэштег с подсказками при вводе ──────────────────────────────────────── */
+/* ── рубрика: поле со списком ────────────────────────────────────────────── */
 .cp-taginput { position: relative; display: block; min-width: 0; }
-.cp-taginput .nr-field { width: 100%; }
+.cp-taginput .nr-field { width: 100%; padding-right: 30px; cursor: pointer; }
+.cp-taginput .nr-field:focus { cursor: text; }
+.cp-taginput__chev { position: absolute; right: 9px; top: 50%; display: grid; transform: translateY(-50%) rotate(90deg); color: var(--nr-text-3); pointer-events: none; }
 .cp-taginput__list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 95; display: flex; flex-direction: column; gap: 1px; padding: 4px;
+  max-height: 300px; overflow-y: auto;
   border-radius: var(--nr-r-md); box-shadow: var(--nr-shadow-3); min-width: 180px; background: var(--nr-surface); border: 1px solid var(--nr-sep); }
-.cp-taginput__opt { padding: 6px 8px; border-radius: var(--nr-r-sm); cursor: pointer; font-size: var(--nr-fs-md); color: var(--nr-text); }
+.cp-taginput__head { padding: 8px 8px 3px; font-size: var(--nr-fs-xs); font-weight: var(--nr-fw-medium); color: var(--nr-text-3); }
+.cp-taginput__head:first-child { padding-top: 3px; }
+.cp-taginput__opt { flex: none; padding: 6px 8px; border-radius: var(--nr-r-sm); cursor: pointer; font-size: var(--nr-fs-md); color: var(--nr-text); }
+.cp-taginput__opt--cur { font-weight: var(--nr-fw-semibold); }
 .cp-taginput__opt[aria-selected='true'] { background: var(--nr-accent-soft); color: var(--nr-accent-text); }
 
 .cp-field__note { display: flex; align-items: center; min-height: var(--nr-ctl-md); font-size: var(--nr-fs-md); color: var(--nr-text-2); }
@@ -947,7 +977,11 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-pills--flush { padding: 0; }
 
 /* формат в форме — значками: горизонталь, вертикаль, веб, пост */
-.cp-fmt { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.cp-fmt { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; } /* пять форматов в ряд, веб — последним */
+.cp-fmt .cp-fmt__opt { padding-left: 0; padding-right: 0; }
+.cp-fmt .cp-fmt__label { font-size: 10.5px; }
+/* на телефоне в ряд не влезают: три и два */
+@media (max-width: 480px) { .cp-fmt { grid-template-columns: repeat(3, minmax(0, 1fr)); } .cp-fmt .cp-fmt__label { font-size: var(--nr-fs-xs); } }
 .cp-fmt__opt {
   display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 6px 2px 4px; border: 1px solid var(--nr-sep);
   border-radius: var(--nr-r-sm); background: transparent; color: var(--nr-text-2); cursor: pointer;
@@ -1019,6 +1053,9 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 @media (hover: hover) { .cp-done:hover { background: var(--nr-fill-3); } }
 .cp-done input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .cp-plats .nr-pill { gap: 6px; }
+/* выбранная площадка — заметно: цветом «выбрано», а не серым */
+.cp-plats .nr-pill[aria-pressed='true'] { background: var(--nr-accent-soft); color: var(--nr-accent-text); box-shadow: inset 0 0 0 1px var(--nr-accent-line); }
+.cp-plats .nr-pill[aria-pressed='false'] { color: var(--nr-text-2); }
 
 /* «Не вышло вовремя» — тонкой плашкой под шапкой календаря; дашборда нет */
 .cp-late {

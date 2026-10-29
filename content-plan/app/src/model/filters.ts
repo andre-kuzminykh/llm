@@ -1,5 +1,5 @@
 // Что показывать и в каком порядке.
-import { isSlot, type ISODate, type Item, type Plan, type Status } from './types'
+import { isHome, isSlot, type ISODate, type Item, type Plan, type Status } from './types'
 
 export interface Filters {
   hiddenChannels: string[]
@@ -21,7 +21,9 @@ export function visible(it: Item, f: Filters) {
   if (f.hiddenChannels.includes(it.channelId)) return false
   if (it.sectionId && f.hiddenSections?.includes(it.sectionId)) return false
   if (it.rubricId && f.pickedRubrics?.length && !f.pickedRubrics.includes(it.rubricId)) return false
-  if (f.hiddenPlatforms.length && !it.platforms.some((p) => !f.hiddenPlatforms.includes(p))) return false
+  // сайт и письмо — форматы: фильтр площадок их не прячет
+  const own = it.platforms.filter((p) => !isHome(p))
+  if (f.hiddenPlatforms.length && own.length && !own.some((p) => !f.hiddenPlatforms.includes(p))) return false
   if (f.hiddenFormats?.includes(it.format)) return false
   if (f.onlySlots && !isSlot(it)) return false
   if (f.hideAuto && AUTO_RULES.has(it.ruleId)) return false

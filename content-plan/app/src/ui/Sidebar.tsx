@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
-import { FORMAT_ICON, FORMATS, GRAY, rubricName, statusOf, type Channel } from '../model/types'
+import { FORMAT_ICON, FORMATS, GRAY, realPlatforms, rubricName, statusOf, type Channel } from '../model/types'
 import { IconButton, PlatformIcon, StatusFilter, Switch } from './bits'
 import { AddInline, ChannelMenu, ChannelRename, useDismiss } from './ChannelEdit'
 import { usePlan, type Ctx } from './ctx'
@@ -295,8 +295,9 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
             }}
           />
         )}
+        {/* сайт и письмо — не площадки, а форматы: они ниже, в «Форматах» */}
         <div className="cp-pills">
-          {plan.platforms.map((p) => (
+          {realPlatforms(plan.platforms).map((p) => (
             <button
               key={p}
               type="button"

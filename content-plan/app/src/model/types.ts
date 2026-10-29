@@ -21,6 +21,7 @@ export interface Channel {
   start: ISODate
   platforms: string[]
   sections: Section[]
+  picks?: Record<string, string[]> // какие площадки выбрали в последний раз у формата: в форме они открываются выбранными
 }
 
 export interface Rubric {
@@ -132,30 +133,52 @@ export function lineOf(rubric: Rubric | undefined, rule: Rule | undefined, title
   return titleIsFormat(title, rule) ? label : `${label}: ${title}`
 }
 
-/** Форматы — какой это материал по виду. Что именно выходит на площадке (Reels, строка письма) — в типах правила. */
+/** Форматы — какой это материал по виду. Что именно выходит на площадке (Reels, строка письма) — в типах правила.
+ *  Сайт и письмо — тоже форматы, а не площадки: у такого материала площадка одна и своя (Web, Mail), выбирать нечего. */
 export const FULL_VIDEO = 'Полное горизонтальное видео'
 export const SHORT_VIDEO = 'Короткое вертикальное видео'
 export const WEB_PAGE = 'Страница на сайте'
 export const TEXT_IMAGE = 'Текст с картинкой'
+export const MAIL = 'Письмо'
 export const FORMATS: { group: string; items: string[] }[] = [
   { group: 'Видео', items: [FULL_VIDEO, SHORT_VIDEO] },
-  { group: 'Текст', items: [WEB_PAGE, TEXT_IMAGE] },
+  { group: 'Текст', items: [TEXT_IMAGE, MAIL, WEB_PAGE] },
 ]
 /** Коротко — в подписях дорожек и расписания и как название нового формата рубрики: «#кейсы · Текст с картинкой». */
-export const FORMAT_SHORT: Record<string, string> = { [FULL_VIDEO]: 'Полное видео', [SHORT_VIDEO]: 'Короткое видео', [WEB_PAGE]: 'Страница на сайте', [TEXT_IMAGE]: 'Текст с картинкой' }
-/** Значок и короткая подпись формата: горизонталь, вертикаль, веб, пост — в форме формат выбирают ими. */
+export const FORMAT_SHORT: Record<string, string> = { [FULL_VIDEO]: 'Полное видео', [SHORT_VIDEO]: 'Короткое видео', [TEXT_IMAGE]: 'Текст с картинкой', [MAIL]: 'Письмо', [WEB_PAGE]: 'Страница на сайте' }
+/** Значок и короткая подпись формата: горизонталь, вертикаль, пост, письмо, веб — в форме формат выбирают ими (веб — последним). */
 export const FORMAT_ICON: Record<string, { icon: string; label: string }> = {
   [FULL_VIDEO]: { icon: 'f-horizontal', label: 'Горизонталь' },
   [SHORT_VIDEO]: { icon: 'f-vertical', label: 'Вертикаль' },
-  [WEB_PAGE]: { icon: 'f-web', label: 'Веб' },
   [TEXT_IMAGE]: { icon: 'f-post', label: 'Пост' },
+  [MAIL]: { icon: 'p-Mail', label: 'Письмо' },
+  [WEB_PAGE]: { icon: 'f-web', label: 'Веб' },
 }
-/** Где такой формат выходит, если канал там есть: полное видео — YouTube, страница — сайт… */
+/** Своя площадка формата: страница — на сайте, письмо — в рассылке. В списках площадок их нет. */
+export const FORMAT_HOME: Record<string, string> = { [WEB_PAGE]: 'Web', [MAIL]: 'Mail' }
+const HOMES = new Set(Object.values(FORMAT_HOME))
+export const isHome = (p: string) => HOMES.has(p)
+/** Площадки — без сайта и письма: это форматы. */
+export const realPlatforms = (all: string[]) => all.filter((p) => !isHome(p))
+/** Где формат может выйти. Площадки, добавленные вручную, — у любого формата. */
+const FORMAT_CAN: Record<string, string[]> = {
+  [FULL_VIDEO]: ['YouTube', 'Telegram', 'X', 'LinkedIn'],
+  [SHORT_VIDEO]: ['YouTube', 'Instagram', 'TikTok', 'Threads', 'X', 'Telegram', 'LinkedIn'],
+  [TEXT_IMAGE]: ['Instagram', 'Threads', 'X', 'Telegram', 'LinkedIn'],
+}
+const KNOWN = new Set(Object.values(FORMAT_CAN).flat())
+/** Список площадок в форме — по формату: у сайта и письма его нет совсем. */
+export function platformsFor(format: string, all: string[]): string[] {
+  if (FORMAT_HOME[format]) return []
+  return realPlatforms(all).filter((p) => !KNOWN.has(p) || !FORMAT_CAN[format] || FORMAT_CAN[format].includes(p))
+}
+/** Где такой формат выходит по умолчанию, если канал там есть: полное видео — YouTube, пост — Telegram… */
 export const FORMAT_PLATFORMS: Record<string, string[]> = {
   [FULL_VIDEO]: ['YouTube'],
   [SHORT_VIDEO]: ['YouTube', 'Instagram', 'TikTok'],
-  [WEB_PAGE]: ['Web'],
   [TEXT_IMAGE]: ['Telegram'],
+  [MAIL]: ['Mail'],
+  [WEB_PAGE]: ['Web'],
 }
 const FORMAT_NAMES = FORMATS.flatMap((g) => g.items)
 export const isFormat = (f: string) => FORMAT_NAMES.includes(f)

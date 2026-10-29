@@ -45,7 +45,7 @@ describe('T-CP-035 FR-CP-035 разделы Датаиста, цвета и ик
   })
 })
 
-describe('T-CP-036 FR-CP-036 четыре формата: видео и текст', () => {
+describe('T-CP-036 FR-CP-036 форматы: видео и текст (сайт и письмо — тоже форматы)', () => {
   it('в фильтрах — «Видео» и «Текст»; скрыли формат — карточки пропали, метка снимает', async () => {
     renderApp(undefined, { 'cp:side': 'false' })
     await screen.findByRole('grid', { name: 'Неделя по времени' })
@@ -53,7 +53,8 @@ describe('T-CP-036 FR-CP-036 четыре формата: видео и текс
     const video = within(side()).getByRole('group', { name: 'Видео' })
     expect(within(video).getAllByRole('button').map((b) => b.textContent)).toEqual(['Полное горизонтальное видео', 'Короткое вертикальное видео'])
     const text = within(side()).getByRole('group', { name: 'Текст' })
-    expect(within(text).getAllByRole('button').map((b) => b.textContent)).toEqual(['Страница на сайте', 'Текст с картинкой'])
+    // сайт и письмо — форматы; сайт — последним
+    expect(within(text).getAllByRole('button').map((b) => b.textContent)).toEqual(['Текст с картинкой', 'Письмо', 'Страница на сайте'])
     expect(within(day('2026-10-26')).getByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeInTheDocument()
     await userEvent.click(within(video).getByRole('button', { name: 'Короткое вертикальное видео' }))
     expect(within(day('2026-10-26')).queryByRole('button', { name: /Тезисы · Тезис дня: Я устал/ })).toBeNull()
@@ -86,7 +87,7 @@ describe('T-CP-040 FR-CP-040 канал: «⋯» — переименовать 
     await userEvent.click(within(side()).getByRole('button', { name: 'Ещё: Andre AIT' }))
     await userEvent.click(within(side()).getByRole('menuitem', { name: 'Удалить' }))
     const confirm = within(side()).getByRole('group', { name: 'Удалить канал «Andre AIT»?' })
-    expect(confirm).toHaveTextContent('Уйдут 1 материал и форматы канала')
+    expect(confirm).toHaveTextContent('Уйдут 2 материала и форматы канала') // анонс в LinkedIn и строка в письме — письмо теперь формат
     await userEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }))
     expect(within(side()).queryByRole('button', { name: 'Andre AIT' })).toBeNull()
     expect(within(day('2026-10-26')).queryByRole('button', { name: /Анонс от Andre AIT/ })).toBeNull()

@@ -1,13 +1,22 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { dayTitle, shortDate, weekday } from '../model/dates'
 import { newId, type Action } from '../model/store'
-import { FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, rubricName, shownTitle, statusOf, TEXT_IMAGE, timeOf, type Item, type Rule, type Status } from '../model/types'
+import { FORMAT_HOME, FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isHome, isSlot, PLACEHOLDER, platformsFor, rubricName, shownTitle, statusOf, TEXT_IMAGE, timeOf, type Channel, type Item, type Plan, type Rule, type Status } from '../model/types'
 import { unitsOf } from '../model/units'
-import { IconButton, PickText, PlatformIcon, PlayPause, Switch } from '../ui/bits'
+import { IconButton, PickText, PlatformIcon, PlayPause } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 import { TagInput, type TagPick } from '../ui/TagInput'
 import { CreateTabs } from './BankView'
+
+/** Какие площадки выбраны сразу: у сайта и письма — своя; иначе те, что канал запомнил для формата, или как у формата
+ *  рубрики в канале, или где формат обычно выходит, — из тех, где он может выйти. */
+function presetPlatforms(plan: Plan, c: Channel | undefined, f: string, r?: Rule) {
+  if (FORMAT_HOME[f]) return [FORMAT_HOME[f]]
+  const can = platformsFor(f, plan.platforms)
+  const tries = [c?.picks?.[f] ?? [], r?.format === f ? r.platforms : [], (FORMAT_PLATFORMS[f] ?? []).filter((p) => c?.platforms.includes(p)), c?.platforms ?? []]
+  return tries.map((list) => list.filter((p) => can.includes(p))).find((list) => list.length) ?? []
+}
 
 interface Props {
   id?: string
@@ -16,10 +25,12 @@ interface Props {
   onBack?: () => void
 }
 
-/** Форма материала: новый или существующий. Вверху — тема (вписывается прямо в заголовке) и ▶ / ⏸ рядом; внизу — «Готово».
+/** Форма материала: новый или существующий. Вверху — тема (вписывается прямо в заголовке) и ▶ / ⏸ рядом, под ней — когда;
+ *  дальше по порядку: канал, рубрика (рубрики канала — первыми), заметка, формат, площадки (по формату; у сайта и письма
+ *  их нет). Площадки, выбранные руками, канал запоминает для формата. Внизу — «Готово».
  *  Сохранение — один шаг истории; ▶ / ⏸ и «Готово» у материала — сразу, всей карточке. */
 export function ItemEditor({ id, draft, onClose, onBack }: Props) {
-  const { plan, byDate, dispatch, rubrics, rules, channels, toast, openItem } = usePlan()
+  const { plan, byDate, dispatch, rubrics, rules, channels, toast } = usePlan()
   const existing = id ? plan.items.find((x) => x.id === id) : undefined
   const base: Partial<Item> = existing ?? draft ?? {}
 
@@ -42,14 +53,15 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [rubricId, setRubricId] = useState<string | null>(firstRubric)
   const [ruleId, setRuleId] = useState(firstRule)
   const [sectionId, setSectionId] = useState<string | undefined>(base.sectionId ?? rules.get(firstRule)?.sectionId)
-  const [platforms, setPlatforms] = useState<string[]>(base.platforms ?? rules.get(firstRule)?.platforms ?? [])
+  const firstFormat = base.format ?? rules.get(firstRule)?.format ?? TEXT_IMAGE
+  const [platforms, setPlatforms] = useState<string[]>(() => base.platforms ?? presetPlatforms(plan, channels.get(firstChannel), firstFormat, rules.get(firstRule)))
   const [status, setStatus] = useState<Status>(base.status ?? 'planned')
   const [note, setNote] = useState(base.note ?? '')
   const [time, setTime] = useState(base.time ?? '')
-  const [withGroup, setWithGroup] = useState(true)
+  const [touched, setTouched] = useState(false) // площадки выбрали руками — канал их запомнит
   const [error, setError] = useState('')
   const [newTag, setNewTag] = useState('') // рубрика, которой ещё нет: заведётся при сохранении
-  const [format, setFormat] = useState(base.format ?? rules.get(firstRule)?.format ?? TEXT_IMAGE)
+  const [format, setFormat] = useState(firstFormat)
 
   const channel = channels.get(channelId)
   const rule = rules.get(ruleId)
@@ -76,6 +88,14 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     dispatch({ type: 'updateMany', ids: cardIds, patch: { status: s } })
     toast(`${statusOf(s).label}: ${shownTitle(existing)}`, true)
   }
+  const preset = (cid: string, f: string, r?: Rule) => presetPlatforms(plan, channels.get(cid), f, r)
+  /** Площадки под новый формат: у сайта и письма — своя; у материала — что было, если формат там может выйти. */
+  const platformsAfter = (cid: string, f: string, r?: Rule) => {
+    if (FORMAT_HOME[f]) return [FORMAT_HOME[f]]
+    const can = platformsFor(f, plan.platforms)
+    const kept = platforms.filter((p) => can.includes(p))
+    return (existing || touched) && kept.length ? kept : preset(cid, f, r)
+  }
   // тема в заголовке растёт по тексту
   const topicRef = useRef<HTMLTextAreaElement>(null)
   useLayoutEffect(() => {
@@ -88,11 +108,12 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   // новый материал на «чужой» день — разовый: проверка сетки его не трогает
   const offDay = !!date && !!rule && !rule.days[weekday(date)]
 
-  const takeRule = (r: Rule | undefined) => {
+  const takeRule = (r: Rule | undefined, cid = channelId) => {
     setRuleId(r?.id ?? '')
     if (r?.sectionId) setSectionId(r.sectionId)
-    if (r) setFormat(r.format)
-    if (!existing && r) setPlatforms(r.platforms)
+    if (!r) return
+    setFormat(r.format)
+    setPlatforms(platformsAfter(cid, r.format, r))
   }
   /** Формат рубрики в канале: такой же, как выбран, если есть, иначе первый. */
   const ruleFor = (cid: string, rb: string | null) => {
@@ -104,18 +125,19 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     setFormat(f)
     const r = rulesFor(channelId, rubricId).find((x) => x.format === f)
     if (r) return takeRule(r)
-    const where = (FORMAT_PLATFORMS[f] ?? []).filter((p) => channel?.platforms.includes(p))
-    if (!existing && where.length) setPlatforms(where)
+    setPlatforms(platformsAfter(channelId, f))
   }
+  /** Канал — первым: рубрика остаётся, если она есть в канале, иначе — первая рубрика канала; площадки — как канал помнит. */
   const pickChannel = (cid: string) => {
     setChannelId(cid)
-    const rb = rubricsFor(cid)[0]?.id ?? null
-    setRubricId(rb)
-    const r = ruleFor(cid, rb)
+    const inChannel = rubricsFor(cid)
+    const rb = !newTag && inChannel.some((x) => x.id === rubricId) ? rubricId : newTag ? null : inChannel[0]?.id ?? null
+    if (!newTag) setRubricId(rb)
+    const r = newTag ? undefined : ruleFor(cid, rb)
     setSectionId(r?.sectionId)
-    takeRule(r)
-    const c = channels.get(cid)
-    setPlatforms((r?.platforms ?? c?.platforms ?? []).filter((p) => c?.platforms.includes(p)))
+    if (r) return takeRule(r, cid)
+    setRuleId('')
+    setPlatforms(FORMAT_HOME[format] ? [FORMAT_HOME[format]] : touched ? platforms.filter((p) => platformsFor(format, plan.platforms).includes(p)) : preset(cid, format))
   }
   const pickRubric = (rb: string) => {
     setRubricId(rb)
@@ -129,12 +151,18 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     setRubricId(null)
     setRuleId('')
   }
-  const togglePlatform = (p: string) => setPlatforms((list) => (list.includes(p) ? list.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || list.includes(x))))
+  const togglePlatform = (p: string) => {
+    setTouched(true)
+    setPlatforms((list) => (list.includes(p) ? list.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || list.includes(x))))
+  }
+  // площадки — по формату; у материала остаются и те, что выбраны раньше, даже если формат там обычно не выходит
+  const platformList = FORMAT_HOME[format] ? [] : plan.platforms.filter((p) => platformsFor(format, plan.platforms).includes(p) || (platforms.includes(p) && !isHome(p)))
+  const shownPlatforms = FORMAT_HOME[format] ? [FORMAT_HOME[format]] : platforms.filter((p) => !isHome(p))
 
   const save = (toDrafts = false) => {
     const t = title.trim() || PLACEHOLDER
     const day = toDrafts ? '' : date
-    if (!platforms.length) return setError('Выберите хотя бы одну площадку')
+    if (!shownPlatforms.length) return setError('Выберите хотя бы одну площадку')
     if (toDrafts && t === PLACEHOLDER) return setError('Для черновика нужна тема')
     // новая рубрика или рубрика без формата в канале: заводим их тем же шагом истории
     const setup: Action[] = []
@@ -148,16 +176,25 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       ruleNow = { ...(rule ?? plan.rules[0]), id, rubricId: rb, channelId, sectionId, name, format, full: false, days: [false, false, false, false, false, false, false], time: rule?.time ?? '12:00' }
     }
     if (!ruleNow) return setError('Выберите формат')
-    // список площадок один на всех; выбрали площадку, которой у канала ещё не было, — она появится у канала
-    const added = platforms.filter((p) => channel && !channel.platforms.includes(p))
-    if (channel && added.length) setup.push({ type: 'channel', id: channel.id, patch: { platforms: plan.platforms.filter((p) => channel.platforms.includes(p) || added.includes(p)) } })
+    // площадки, которых у канала ещё не было, появятся у канала; выбранные руками — канал запомнит для формата
+    const added = shownPlatforms.filter((p) => channel && !channel.platforms.includes(p))
+    const remember = touched && !FORMAT_HOME[format] && channel && channel.picks?.[format]?.join() !== shownPlatforms.join()
+    if (channel && (added.length || remember))
+      setup.push({
+        type: 'channel',
+        id: channel.id,
+        patch: {
+          ...(added.length ? { platforms: plan.platforms.filter((p) => channel.platforms.includes(p) || added.includes(p)) } : {}),
+          ...(remember ? { picks: { ...channel.picks, [format]: shownPlatforms } } : {}),
+        },
+      })
     const patch: Partial<Item> = {
       title: t,
       channelId,
       sectionId,
       ruleId: ruleNow.id,
       rubricId: ruleNow.rubricId ?? rubricId,
-      platforms,
+      platforms: shownPlatforms,
       status,
       note: note || undefined,
       format,
@@ -170,7 +207,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: title.trim() || existing.title } }, { type: 'assign', bankId: existing.id, date }])
       toast(`Тема поставлена на ${shortDate(date)}`, true)
     } else if (existing) {
-      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup }])
+      // карточка — одна: группа переносится вместе
+      run([...setup, { type: 'edit', id: existing.id, patch, date: date && date !== existing.date ? date : undefined, withGroup: true }])
       toast('Сохранено', true)
     } else {
       const sample = plan.items.find((x) => x.ruleId === ruleNow!.id && x.date && !x.derive)
@@ -183,7 +221,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         rubricId: patch.rubricId ?? null,
         title: t,
         format,
-        platforms,
+        platforms: shownPlatforms,
         status,
         source: t === PLACEHOLDER ? 'нужна тема' : day ? 'вручную' : 'черновик',
         rank: sample?.rank ?? 50,
@@ -201,8 +239,9 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
 
   const remove = () => {
     if (!existing) return
-    dispatch({ type: 'remove', id: existing.id, withGroup: withGroup && members.length > 0 })
-    toast(withGroup && members.length ? `Удалено вместе с группой (${members.length + 1})` : 'Удалено', true)
+    // карточка удаляется целиком: тизер, анонсы и письма группы — вместе, «Отменить» вернёт
+    dispatch({ type: 'remove', id: existing.id, withGroup: members.length > 0 })
+    toast(members.length ? `Удалено: карточка целиком (${members.length + 1})` : 'Удалено', true)
     onClose()
   }
 
@@ -233,18 +272,6 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       </div>
       <div className="cp-sheet__body nr-scroll">
         {!existing && topic}
-        <div className="cp-field" title={rubric?.what || undefined}>
-          <span className="nr-label">Рубрика</span>
-          <TagInput
-            label="Рубрика"
-            value={newTag ? rubricName(newTag) : rubric ? rubric.name : ''}
-            // рубрики этого канала — первыми, потом остальные
-            options={[...rubricsFor(channelId, rubricId), ...plan.rubrics.filter((r) => !rubricsFor(channelId, rubricId).includes(r))]}
-            onPick={pickTag}
-            disabled={fromFull}
-          />
-        </div>
-
         <div className="cp-form__when">
           <PickText type="date" label="Дата" value={date} text={date ? dayTitle(date) : ''} placeholder="Без даты — в черновики" onChange={setDate} />
           {date && (
@@ -258,29 +285,6 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             </>
           )}
         </div>
-
-        <div className="cp-field" title={needRule ? 'У рубрики в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
-          <span className="nr-label">Формат{needRule && <span className="cp-field__new"> · новый</span>}</span>
-          {/* значками: горизонталь, вертикаль, веб, пост — щёлкнуть один */}
-          <div className="cp-fmt" role="radiogroup" aria-label="Формат">
-            {FORMATS.flatMap((g) => g.items).map((f) => (
-              <button key={f} type="button" role="radio" aria-checked={format === f} aria-label={f} title={f} className="cp-fmt__opt" onClick={() => pickFormat(f)}>
-                <Icon name={FORMAT_ICON[f].icon} size={22} />
-                <span className="cp-fmt__label">{FORMAT_ICON[f].label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        {fits.length > 1 && (
-          <label className="cp-field" title={rule?.what || undefined}>
-            <span className="nr-label">Что именно</span>
-            <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
-              {fits.map((r) => (
-                <option key={r.id} value={r.id}>{r.rubricId ? r.name : `${r.name} (с FULL)`}</option>
-              ))}
-            </select>
-          </label>
-        )}
 
         <label className="cp-field">
           <span className="nr-label">Канал</span>
@@ -302,17 +306,17 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           </label>
         )}
 
-        {/* площадки — тот же список, что в фильтрах, у любого канала: значок и название */}
-        <div className="cp-field">
-          <span className="nr-label">Площадки</span>
-          <div className="cp-pills cp-pills--flush cp-plats" role="group" aria-label="Площадки">
-            {plan.platforms.map((p) => (
-              <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
-                <PlatformIcon platform={p} />
-                {p}
-              </button>
-            ))}
-          </div>
+        <div className="cp-field" title={rubric?.what || undefined}>
+          <span className="nr-label">Рубрика</span>
+          {/* поле со списком: рубрики этого канала — первыми, остальные ниже; набрать — подсказки, новая заведётся */}
+          <TagInput
+            label="Рубрика"
+            value={newTag ? rubricName(newTag) : rubric ? rubric.name : ''}
+            options={[...rubricsFor(channelId), ...plan.rubrics.filter((r) => !rubricsFor(channelId).includes(r))]}
+            primary={new Set(rubricsFor(channelId).map((r) => r.id))}
+            onPick={pickTag}
+            disabled={fromFull}
+          />
         </div>
 
         <label className="cp-field">
@@ -320,18 +324,41 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           <textarea className="nr-field" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Сценарий, ссылки, что учесть" />
         </label>
 
-        {members.length > 0 && (
+        <div className="cp-field" title={needRule ? 'У рубрики в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
+          <span className="nr-label">Формат{needRule && <span className="cp-field__new"> · новый</span>}</span>
+          {/* значками: горизонталь, вертикаль, пост, письмо, веб — щёлкнуть один */}
+          <div className="cp-fmt" role="radiogroup" aria-label="Формат">
+            {FORMATS.flatMap((g) => g.items).map((f) => (
+              <button key={f} type="button" role="radio" aria-checked={format === f} aria-label={f} title={f} className="cp-fmt__opt" onClick={() => pickFormat(f)}>
+                <Icon name={FORMAT_ICON[f].icon} size={22} />
+                <span className="cp-fmt__label">{FORMAT_ICON[f].label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {fits.length > 1 && (
+          <label className="cp-field" title={rule?.what || undefined}>
+            <span className="nr-label">Что именно</span>
+            <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
+              {fits.map((r) => (
+                <option key={r.id} value={r.id}>{r.rubricId ? r.name : `${r.name} (с FULL)`}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {/* площадки — по формату: у сайта и письма их нет; выбранные руками канал запомнит */}
+        {platformList.length > 0 && (
           <div className="cp-field">
-            <span className="nr-label">Группа · {members.length + 1}</span>
-            <div className="cp-members">
-              {members.map((m) => (
-                <button key={m.id} type="button" className="nr-pill" onClick={() => openItem(m.id)} title="Открыть этот материал">
-                  {rules.get(m.ruleId)?.name ?? m.ruleId}
-                  {m.channelId !== existing?.channelId && <span className="cp-muted">· {channels.get(m.channelId)?.name}</span>}
+            <span className="nr-label">Площадки</span>
+            <div className="cp-pills cp-pills--flush cp-plats" role="group" aria-label="Площадки">
+              {platformList.map((p) => (
+                <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
+                  <PlatformIcon platform={p} />
+                  {p}
                 </button>
               ))}
             </div>
-            <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
           </div>
         )}
         {error && <p className="cp-hint" style={{ color: 'var(--nr-danger)' }} role="alert">{error}</p>}

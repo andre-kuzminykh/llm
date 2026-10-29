@@ -2,7 +2,7 @@
 import { useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from 'react'
 import { addDays, daysBetween } from '../model/dates'
 import { whereText } from '../model/hint'
-import { colorOf, FORMAT_ICON, isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
+import { colorOf, FORMAT_ICON, isHome, isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { grabCard } from './drag'
@@ -195,7 +195,9 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const plats = platformTypes(unit, rules, plan.platforms)
   const bad = unit.items.some((it) => badIds.has(it.id))
   const full = !!rule?.full && !head.derive
-  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', picked && 'cp-card--picked', className]
+  // готово и вышло — бледнее сразу; в работе — подсвечена и «дышит»
+  const done = head.status === 'ready' || head.status === 'published'
+  const cls = ['cp-card', `cp-card--${variant}`, narrow && 'cp-card--narrow', slot && 'cp-card--slot', full && 'cp-card--main', picked && 'cp-card--picked', done && 'cp-card--done', head.status === 'progress' && 'cp-card--progress', className]
     .filter(Boolean)
     .join(' ')
   const st = statusOf(head.status)
@@ -205,9 +207,11 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const own = new Set(unit.items.map((it) => it.format))
   const formats = [head.format, ...Object.keys(FORMAT_ICON).filter((f) => f !== head.format && own.has(f))].filter((f) => FORMAT_ICON[f])
   // на шкале ряд не переносится: значок с промежутком — 15 px, черта между форматом и площадками — 6; не влезло — «+N»
-  const fit = iconRoom === undefined ? Infinity : Math.floor((iconRoom + 3 - (formats.length && plats.length ? 6 : 0)) / 15)
-  const shownPlats = formats.length + plats.length > fit ? plats.slice(0, Math.max(0, fit - formats.length - 1)) : plats
-  const restPlats = plats.slice(shownPlats.length)
+  const fit = iconRoom === undefined ? Infinity : Math.floor((iconRoom + 3 - (formats.length && plats.some((p) => !isHome(p.platform)) ? 6 : 0)) / 15)
+  // сайт и письмо — форматы: их значок уже стоит первым
+  const where = plats.filter((p) => !isHome(p.platform))
+  const shownPlats = formats.length + where.length > fit ? where.slice(0, Math.max(0, fit - formats.length - 1)) : where
+  const restPlats = where.slice(shownPlats.length)
   const line = variant === 'line' || variant === 'chip'
   // растянутая на шкале карточка — с концом: «12:00–13:30»
   const time = when ?? (unit.end && !unit.stream && variant === 'compact' ? `${unit.time}–${unit.end}` : timeText(unit))
@@ -270,7 +274,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
             <span className="cp-card__title">{title}</span>
           </>
         )}
-        {icons && (formats.length > 0 || plats.length > 0) && (
+        {icons && (formats.length > 0 || where.length > 0) && (
           <span className="cp-card__icons" aria-hidden="true">
             {formats.map((f) => (
               <span key={f} className="cp-card__f" title={FORMAT_ICON[f].label}>

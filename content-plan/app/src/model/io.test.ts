@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { loadSeed, smallPlan } from '../test/fixtures'
-import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, renameAndFormats, splitDataist, upgradePlan, type PlanV1, type PlanV2 } from './io'
-import { FULL_VIDEO, GRAY, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Plan } from './types'
+import { indexByDate } from './filters'
+import { calendarCSV, cleanTitle, exportJSON, migrateV1, migrateV2, parsePlan, renameAndFormats, splitDataist, upgradePlan, webAndMail, type PlanV1, type PlanV2 } from './io'
+import { checkPlan } from './rules'
+import { FULL_VIDEO, GRAY, MAIL, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Plan } from './types'
+import { unitsOf } from './units'
 
 describe('T-CP-013 FR-CP-013 выгрузка и загрузка', () => {
   it('CSV-календарь совпадает с out/4_calendar.csv генератора', () => {
@@ -152,5 +155,35 @@ describe('T-CP-038 FR-CP-038 Датаист — три отдельных кан
       ['Офис Датаиста', GRAY],
     ])
     expect(seed.channels.some((c) => c.sections.length)).toBe(false)
+  })
+})
+
+describe('T-CP-050 FR-CP-050 сайт и письмо — форматы', () => {
+  it('формат и материал, где сайт или письмо вместе с другими площадками, делятся на части одной карточки', () => {
+    const p = webAndMail(smallPlan())
+    const rule = (id: string) => p.rules.find((r) => r.id === id)!
+    // «Анонс в Офисе»: страница на сайте и пост в Telegram — два формата с тем же названием и днями
+    expect([rule('office').format, rule('office').platforms, rule('office~post').format, rule('office~post').platforms]).toEqual([WEB_PAGE, ['Web'], TEXT_IMAGE, ['Telegram']])
+    expect(rule('office~post').name).toBe('Анонс в Офисе')
+    expect(rule('office~post').types).toEqual({ Telegram: 'Анонс · Office' })
+    // анонс Andre AIT: пост в LinkedIn и строка в письме
+    expect([rule('ait').platforms, rule('ait~mail').format, rule('ait~mail').platforms]).toEqual([['LinkedIn'], MAIL, ['Mail']])
+    const item = (id: string) => p.items.find((x) => x.id === id)!
+    expect(item('office~post')).toMatchObject({ ruleId: 'office~post', format: TEXT_IMAGE, platforms: ['Telegram'], group: 'full-2026-10-26', derive: '{title}', date: '2026-10-26' })
+    expect(item('ait~mail')).toMatchObject({ ruleId: 'ait~mail', format: MAIL, platforms: ['Mail'], group: 'full-2026-10-26' })
+    // видео не трогается; повторно — то же самое
+    expect(item('teaser').platforms).toEqual(['YouTube', 'Instagram'])
+    expect(webAndMail(p)).toBe(p)
+  })
+  it('на исходном плане: нарушений не прибавилось, CSV тот же, карточек в дне столько же', () => {
+    const before = splitDataist(renameAndFormats(loadSeed()))
+    const after = webAndMail(before)
+    expect(after.items.some((it) => it.platforms.includes('Web') && it.platforms.length > 1)).toBe(false)
+    expect(after.items.some((it) => it.platforms.includes('Mail') && it.format !== MAIL)).toBe(false)
+    expect(checkPlan(after, indexByDate(after))).toEqual(checkPlan(before, indexByDate(before)))
+    expect(calendarCSV(after)).toBe(calendarCSV(before))
+    const rules = (p: Plan) => new Map(p.rules.map((r) => [r.id, r]))
+    for (const d of ['2026-10-26', '2026-10-28', '2026-11-01'])
+      expect(unitsOf(indexByDate(after).get(d) ?? [], rules(after)).length).toBe(unitsOf(indexByDate(before).get(d) ?? [], rules(before)).length)
   })
 })
