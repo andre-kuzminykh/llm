@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { shortDate, today } from '../model/dates'
+import { shortDate } from '../model/dates'
 import { visible } from '../model/filters'
-import { planningSlots } from '../model/planning'
 import { shownTitle, timeOf, type ISODate } from '../model/types'
 import { IconButton } from './bits'
+import { LateBar } from './LateBar'
 import { activeFilters, FilterChips } from './Sidebar'
 import { usePlan, type Mode, type Span } from './ctx'
 import { Icon } from './Icon'
@@ -16,17 +16,16 @@ const SAVED: Record<string, string> = {
 }
 
 /** Шапка календаря: слева «Фильтры» (сворачивает и разворачивает панель слева), заголовок с датой и стрелки; посередине —
- *  поиск и вид недели (время, каналы, площадки, темы); справа — значок дашборда (открывается панелью справа), в самом углу —
- *  «Неделя / Месяц».
+ *  поиск и вид недели (время, каналы, площадки, темы); справа в углу — «Неделя / Месяц». Дашборда нет; просроченное —
+ *  плашкой «Не вышло вовремя» под шапкой.
  *  «+» — круглая кнопка справа внизу. Отмена — ⌘Z и кнопкой во всплывашке после правки. */
 export function TopBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
   const ctx = usePlan()
-  const { plan, saved, toggleSide, sideOpen, phone, panel, openDashboard, show, span } = ctx
+  const { saved, toggleSide, sideOpen, phone, span } = ctx
   // фильтры свёрнуты — сколько включено, видно на кнопке и метками в шапке
   const n = sideOpen ? 0 : activeFilters(ctx).length
-  // за неделю календарь просит уточнить темы: точка на значке дашборда
-  const need = useMemo(() => planningSlots(plan, today()).length, [plan])
   return (
+    <>
     <header className="cp-top">
       <div className="cp-top__left">
       <button
@@ -44,7 +43,7 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
       {typeof title === 'string' ? <h1 className="nr-title">{title}</h1> : title}
       {children}
       </div>
-      {/* поиск и вид недели — посередине шапки (если слева тесно — сразу за датой); справа — дашборд, в углу — неделя или месяц */}
+      {/* поиск и вид недели — посередине шапки (если слева тесно — сразу за датой); справа в углу — неделя или месяц */}
       <div className="cp-top__mid">
         <Search />
         {span === 'week' && <ViewSwitch />}
@@ -56,22 +55,11 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
           {SAVED[saved]}
         </span>
       )}
-      {!phone && (
-        <button
-          type="button"
-          className="nr-btn nr-btn--ghost nr-btn--icon cp-top__dash"
-          aria-label="Дашборд"
-          title={need ? `Дашборд · пора уточнить темы на неделю: ${need}` : 'Дашборд'}
-          aria-pressed={panel === 'dashboard'}
-          onClick={() => (panel === 'dashboard' ? show() : openDashboard())}
-        >
-          <Icon name="dashboard" size={20} />
-          {need > 0 && <span className="cp-top__dot" aria-hidden="true" />}
-        </button>
-      )}
       {!phone && <SpanSwitch />}
       </div>
     </header>
+    <LateBar />
+    </>
   )
 }
 

@@ -323,45 +323,6 @@ export function createSlots(plan: Plan, ruleId: string, from: ISODate, to: ISODa
   return next
 }
 
-/** Периодичность рубрики в канале: дни недели и время формата. С from слоты без темы встают на новые дни
- *  (до конца плана), а пустые слоты на днях, которые сняли, уходят; материалы с темой остаются на местах. */
-export function setPeriod(plan: Plan, ruleId: string, days: boolean[], time: string | undefined, from: ISODate): Plan {
-  const rule = ruleOf(plan, ruleId)
-  if (!rule) return plan
-  const next = updateRule(plan, ruleId, { days, ...(time ? { time } : {}) })
-  const gone = next.items.filter(
-    (x) => x.ruleId === ruleId && x.date && x.date >= from && !x.derive && isSlot(x) && x.status === 'planned' && !days[weekday(x.date)],
-  )
-  const cleared = gone.reduce((p, x) => removeItem(p, x.id, true), next)
-  return createSlots(cleared, ruleId, from, next.end)
-}
-
-/** Взять тему из черновиков в слот: слот получает тему (и вся его группа), черновик уходит из банка. */
-export function takeDraft(plan: Plan, slotId: string, draftId: string): Plan {
-  const draft = plan.items.find((x) => x.id === draftId && x.date === null)
-  const slot = plan.items.find((x) => x.id === slotId && x.date)
-  if (!draft || !slot) return plan
-  const next = updateItem(plan, slotId, { title: draft.title, source: 'черновик', ...(draft.note && !slot.note ? { note: draft.note } : {}) })
-  return { ...next, items: next.items.filter((x) => x.id !== draftId) }
-}
-
-/** Ближайшие черновики для слотов — по тегу: сначала того же формата, потом той же рубрики в том же канале.
- *  Каждый черновик предлагается одному слоту; слоты — по порядку дат. */
-export function draftsFor(plan: Plan, slots: Item[]): Map<string, Item> {
-  const used = new Set<string>()
-  const out = new Map<string, Item>()
-  const drafts = plan.items.filter((x) => x.date === null)
-  for (const s of [...slots].sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0))) {
-    const pick =
-      drafts.find((d) => !used.has(d.id) && d.ruleId === s.ruleId) ??
-      drafts.find((d) => !used.has(d.id) && d.rubricId && d.rubricId === s.rubricId && d.channelId === s.channelId)
-    if (!pick) continue
-    used.add(pick.id)
-    out.set(s.id, pick)
-  }
-  return out
-}
-
 // ── рубрики, правила, каналы ─────────────────────────────────────────────────
 
 export const updateRule = (plan: Plan, id: string, patch: Partial<Rule>): Plan => ({
@@ -501,8 +462,6 @@ export type Action =
   | { type: 'catchUp'; moves: CatchUpMove[] }
   | { type: 'moveGroups'; moves: { id: string; date: ISODate; time?: string }[]; remove?: string[] }
   | { type: 'addPlatform'; name: string }
-  | { type: 'setPeriod'; ruleId: string; days: boolean[]; time?: string; from: ISODate }
-  | { type: 'takeDraft'; slotId: string; draftId: string }
   | { type: 'undo' }
   | { type: 'redo' }
 
@@ -544,8 +503,6 @@ function apply(plan: Plan, a: Action): Plan {
     case 'catchUp': return catchUp(plan, a.moves)
     case 'moveGroups': return moveGroups(plan, a.moves, a.remove)
     case 'addPlatform': return addPlatform(plan, a.name)
-    case 'setPeriod': return setPeriod(plan, a.ruleId, a.days, a.time, a.from)
-    case 'takeDraft': return takeDraft(plan, a.slotId, a.draftId)
     default: return plan
   }
 }

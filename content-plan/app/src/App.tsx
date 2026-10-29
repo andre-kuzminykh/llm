@@ -16,30 +16,28 @@ import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
 import { DraftsSheet } from './views/BankView'
-import { DashboardSheet } from './views/DashboardView'
 import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
 import { ItemEditor } from './views/ItemEditor'
-import { PlanningSheet } from './views/PlanningSheet'
 import { PeriodSheet } from './views/ShiftSheets'
 import { TaskSheet } from './views/TaskSheet'
 import { MonthView } from './views/MonthView'
 import { WeekView } from './views/WeekView'
 
-/** Куда вернуться из формы или задачи: к дню, дашборду, черновикам или планированию. */
-type Back = { kind: 'day'; date: ISODate } | { kind: 'dashboard' } | { kind: 'drafts' } | { kind: 'planning' }
+/** Куда вернуться из формы или задачи: к дню или черновикам. */
+type Back = { kind: 'day'; date: ISODate } | { kind: 'drafts' }
 type Sheet =
   | Back
   | { kind: 'item'; id: string; back?: Back }
   | { kind: 'new'; draft: Partial<Item>; back?: Back }
   | { kind: 'task'; id: string; back?: Back }
-  | { kind: 'period'; back?: Back }
+  | { kind: 'period' }
   | { kind: 'help' }
   | null
 
 /** Открыли форму или задачу поверх листа — «назад» ведёт к нему. */
 const backOf = (s: Sheet): Back | undefined =>
-  !s || s.kind === 'help' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' || s.kind === 'period' ? s.back : s
+  !s || s.kind === 'help' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
 
 const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
 const readSpan = (): Span => {
@@ -182,7 +180,7 @@ interface WorkspaceProps {
 }
 
 function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: WorkspaceProps) {
-  // SMM — это календарь: неделя по часам или дорожками, как оставили; дашборд открывается панелью справа
+  // SMM — это календарь: неделя по часам или дорожками или месяц, как оставили; дашборда нет
   const [mode, setModeState] = useState<Mode>(readMode)
   const [span, setSpanState] = useState<Span>(readSpan)
   // календарь бесконечный: открывается на сегодняшней неделе, если не помнит другую дату
@@ -382,10 +380,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     setMode,
     span: phone ? 'week' : span, // на телефоне месяц не помещается — лента и неделя
     setSpan,
-    openDashboard: () => setSheet({ kind: 'dashboard' }),
     openDrafts: () => setSheet({ kind: 'drafts' }),
-    openPlanning: () => setSheet((s) => ({ kind: 'planning', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
-    openPeriod: () => setSheet((s) => ({ kind: 'period', back: s?.kind === 'dashboard' ? { kind: 'dashboard' } : undefined })),
     dropOn,
     setStatus: (unit, status) => {
       dispatch({ type: 'updateMany', ids: unit.items.map((x) => x.id), patch: { status } })
@@ -406,7 +401,6 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     toggleSide: () => setSideOpen((o) => !o),
     sideOpen,
     openHelp: () => setSheet({ kind: 'help' }),
-    panel: sheet?.kind === 'dashboard' || sheet?.kind === 'drafts' || sheet?.kind === 'planning' ? sheet.kind : null,
     saved,
     phone,
     narrow,
@@ -420,11 +414,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}`}>
         {phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
-            <button type="button" className="cp-tab" aria-current={sheet?.kind === 'dashboard' ? 'page' : undefined} onClick={() => setSheet({ kind: 'dashboard' })}>
-              <Icon name="dashboard" size={22} />
-              <span>Дашборд</span>
-            </button>
-            <button type="button" className="cp-tab" aria-current={sheet?.kind !== 'dashboard' ? 'page' : undefined} onClick={() => setSheet(null)}>
+            <button type="button" className="cp-tab" aria-current="page" onClick={() => setSheet(null)}>
               <Icon name="calendar" size={22} />
               <span>Календарь</span>
             </button>
@@ -432,7 +422,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
               <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
               <span>Профиль</span>
             </button>
-            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} />}
+            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} onPeriod={() => { setMenu(false); setSheet({ kind: 'period' }) }} />}
           </nav>
         ) : (
           <nav className="nr-rail" aria-label="Отделы">
@@ -455,7 +445,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
               <span className="cp-avatar" aria-hidden="true"><Icon name="user" size={16} /></span>
               <span className="cp-rail-tip" aria-hidden="true">Профиль</span>
             </button>
-            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} />}
+            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} onPeriod={() => { setMenu(false); setSheet({ kind: 'period' }) }} />}
           </nav>
         )}
         {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
@@ -463,10 +453,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
         <main className="nr-main">
           {ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
-          {sheet?.kind === 'dashboard' && <DashboardSheet onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
-          {sheet?.kind === 'planning' && <PlanningSheet onClose={closeSheet} onBack={back} />}
-          {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} onBack={back} />}
+          {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} />}
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
@@ -513,7 +501,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   )
 }
 
-function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; onHelp: () => void }) {
+function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp, onPeriod }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; onHelp: () => void; onPeriod: () => void }) {
   const { plan, dispatch, toast, saved } = usePlan()
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
@@ -529,6 +517,9 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp }: { onClose: ()
       <p className="cp-menu__note">Скоро: {SOON.join(', ')}</p>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={onHelp}>
         <Icon name="help" size={18} /> Как пользоваться
+      </button>
+      <button type="button" role="menuitem" className="cp-menu__item" onClick={onPeriod}>
+        <Icon name="calendar" size={18} /> Перенести период (отпуск)…
       </button>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { download(`content-plan-${stamp}.json`, exportJSON(plan), 'application/json'); onClose() }}>
         <Icon name="download" size={18} /> Выгрузить JSON

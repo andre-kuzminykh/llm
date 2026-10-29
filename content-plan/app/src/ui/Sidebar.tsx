@@ -339,7 +339,7 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
             onDone={() => setAdding(null)}
             onAdd={(name) => {
               dispatch({ type: 'addRubric', name })
-              toast(`Рубрика «${rubricName(name)}» добавлена — периодичность в канале задаётся в дашборде, в «Темах»`, true)
+              toast(`Рубрика «${rubricName(name)}» добавлена`, true)
             }}
           />
         )}

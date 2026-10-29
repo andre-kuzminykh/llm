@@ -57,15 +57,11 @@ export interface Ctx {
   setMode: (m: Mode) => void
   span: Span
   setSpan: (s: Span) => void
-  /** Дашборд — панелью справа. */
-  openDashboard: () => void
   /** Черновики (банк идей) — во вкладке «+». */
   openDrafts: () => void
   /** Планирование недели: уточнить темы пустых слотов. */
-  openPlanning: () => void
   /** Наверстать просроченное, не двигая остальной план. */
   /** Перенести период (отпуск): на следующие слоты или в свободные места. */
-  openPeriod: () => void
   dropOn: (date: ISODate, drag: Drag, time?: string) => void
   /** Выбранные карточки (их главные материалы): Shift- или ⌘-щелчок, пальцем — подержать и отпустить. */
   selected: Set<string>
@@ -81,8 +77,6 @@ export interface Ctx {
   toggleSide: () => void
   sideOpen: boolean
   openHelp: () => void
-  /** Что открыто справа: дашборд, черновики, планирование — чтобы кнопки знали, нажаты ли они. */
-  panel: 'dashboard' | 'drafts' | 'planning' | null
   saved: 'idle' | 'saving' | 'saved' | 'memory' | 'error'
   phone: boolean
   /** Узкий экран: левая панель — за кнопкой «Фильтры». */

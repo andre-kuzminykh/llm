@@ -1,10 +1,9 @@
 // Перенести период (отпуск) — лист справа. Сначала видно, что куда встанет, потом «Перенести» — одним шагом,
-// ⌘Z возвращает. «Наверстать» листа не открывает: одна кнопка в дашборде.
+// ⌘Z возвращает. «Наверстать» листа не открывает: одна кнопка на плашке «Не вышло вовремя» под шапкой.
 import { useMemo, useState, type CSSProperties } from 'react'
-import { addDays, today } from '../model/dates'
+import { addDays, dateText, today } from '../model/dates'
 import { plural } from '../model/hint'
 import { shiftPeriod, type CatchUpHow, type CatchUpStep, type PeriodMode } from '../model/catchup'
-import { dateText } from '../model/schedule'
 import { colorOf, isSlot, shownTitle, timeOf, type Item } from '../model/types'
 import { IconButton, PickText, Seg } from '../ui/bits'
 import { usePlan } from '../ui/ctx'

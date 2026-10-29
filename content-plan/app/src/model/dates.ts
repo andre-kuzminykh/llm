@@ -42,6 +42,9 @@ export const monthTitle = (month: string) => {
   return `${MONTHS[m - 1]} ${y}`
 }
 
+/** «26 окт», а не в этом году — «26 окт 2027». */
+export const dateText = (d: ISODate, today: ISODate) => (d.slice(0, 4) === today.slice(0, 4) ? shortDate(d) : `${shortDate(d)} ${d.slice(0, 4)}`)
+
 export const dayTitle = (d: ISODate) => {
   const [y, m, day] = d.split('-').map(Number)
   return `${WEEKDAYS[weekday(d)]}, ${day} ${MONTHS_GEN[m - 1]} ${y}`

@@ -47,8 +47,8 @@ describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
   })
 })
 
-describe('T-CP-028 FR-CP-028 оболочка: отделы, панель слева, дашборд справа вверху', () => {
-  it('слева — отделы и фильтры; справа от поиска — вид недели, справа — дашборд, в углу «Неделя / Месяц»; окон дней и «Отменить» в шапке нет', async () => {
+describe('T-CP-028 FR-CP-028 оболочка: отделы, панель слева, без дашборда', () => {
+  it('слева — отделы и фильтры; справа от поиска — вид недели, в углу «Неделя / Месяц»; дашборда, окон дней и «Отменить» в шапке нет', async () => {
     renderApp()
     await ready()
     const nav = screen.getByRole('navigation', { name: 'Отделы' })
@@ -59,9 +59,9 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     const views = within(top).getByRole('radiogroup', { name: 'Вид календаря' })
     expect(within(views).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['Время', 'Каналы', 'Площадки', 'Темы'])
     expect(within(views).getByRole('radio', { name: 'Время' }).querySelector('svg')).not.toBeNull()
-    // справа от поиска, а значок дашборда — в самом углу
+    // справа от поиска — вид недели, в самом углу — «Неделя / Месяц»; дашборда нет
     const order = [...top.querySelectorAll('[role="search"], [aria-label="Неделя или месяц"], [aria-label="Вид календаря"], [aria-label="Дашборд"]')].map((el) => (el.getAttribute('role') === 'search' ? 'search' : el.getAttribute('aria-label')))
-    expect(order).toEqual(['search', 'Вид календаря', 'Дашборд', 'Неделя или месяц'])
+    expect(order).toEqual(['search', 'Вид календаря', 'Неделя или месяц'])
     await userEvent.click(within(views).getByRole('radio', { name: 'Темы' }))
     expect(await screen.findByRole('grid', { name: 'Неделя по темам' })).toBeInTheDocument()
     await userEvent.click(within(views).getByRole('radio', { name: 'Время' }))
@@ -77,12 +77,10 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     expect(screen.queryByRole('group', { name: 'Лента дней' })).toBeNull()
     // в фильтрах — без банка идей
     expect(within(side()).queryByText('Банк идей')).toBeNull()
-    // дашборд — значок справа вверху, открывается панелью справа, календарь остаётся
-    await userEvent.click(within(top).getByRole('button', { name: 'Дашборд' }))
-    expect(screen.getByRole('complementary', { name: 'Дашборд' })).toBeInTheDocument()
-    expect(screen.getByRole('grid', { name: 'Неделя по времени' })).toBeInTheDocument()
-    await userEvent.click(within(top).getByRole('button', { name: 'Дашборд' }))
-    expect(screen.queryByRole('complementary', { name: 'Дашборд' })).toBeNull()
+    // дашборда нет; «Перенести период (отпуск)» — в меню профиля
+    expect(within(top).queryByRole('button', { name: 'Дашборд' })).toBeNull()
+    await userEvent.click(within(nav).getByRole('button', { name: 'Профиль' }))
+    expect(screen.getByRole('menuitem', { name: 'Перенести период (отпуск)…' })).toBeInTheDocument()
   })
   it('фильтры сворачиваются и разворачиваются; свёрнутые — метками в шапке и числом на кнопке; помнится', async () => {
     renderApp()

@@ -47,7 +47,6 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   const [note, setNote] = useState(base.note ?? '')
   const [time, setTime] = useState(base.time ?? '')
   const [withGroup, setWithGroup] = useState(true)
-  const [withFamily, setWithFamily] = useState(true)
   const [error, setError] = useState('')
   const [newTag, setNewTag] = useState('') // рубрика, которой ещё нет: заведётся при сохранении
   const [format, setFormat] = useState(base.format ?? rules.get(firstRule)?.format ?? TEXT_IMAGE)
@@ -193,7 +192,8 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         offGrid: patch.offGrid,
       }
       for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
-      run([...setup, { type: 'create', item, withFamily: withFamily && !!day && !needRule }])
+      // тизер, анонсы и письма — как у ближайшего материала рубрики, без переключателя
+      run([...setup, { type: 'create', item, withFamily: !!day && !needRule }])
       toast(day ? `Создано на ${shortDate(day)}` : 'Сохранено в черновики', true)
     }
     onClose()
@@ -333,9 +333,6 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
             </div>
             <Switch checked={withGroup} onChange={setWithGroup}>Переносить и удалять вместе с группой</Switch>
           </div>
-        )}
-        {!existing && (
-          <Switch checked={withFamily} onChange={setWithFamily}>С сопутствующими публикациями, как у ближайшего материала рубрики</Switch>
         )}
         {error && <p className="cp-hint" style={{ color: 'var(--nr-danger)' }} role="alert">{error}</p>}
       </div>

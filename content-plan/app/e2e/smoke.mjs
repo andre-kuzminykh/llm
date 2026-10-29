@@ -57,15 +57,15 @@ check(
 const placed = () =>
   page.evaluate(() => {
     const x = (sel) => document.querySelector(`.cp-top ${sel}`)?.getBoundingClientRect()
-    const [t, l, m, s, v, d, w] = [x(''), x('.cp-top__left'), x('.cp-top__mid'), x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Дашборд"]'), x('[aria-label="Неделя или месяц"]')]
+    const [t, l, m, s, v, w] = [x(''), x('.cp-top__left'), x('.cp-top__mid'), x('[role="search"]'), x('[aria-label="Вид календаря"]'), x('[aria-label="Неделя или месяц"]')]
     return {
       // посередине шапки — или, если слева тесно, с отступом от даты; между поиском и видом — заметный промежуток;
-      // справа — дашборд, в самом углу — «Неделя / Месяц»
-      ok: m && s && v && d && w && (Math.abs(m.left + m.width / 2 - (t.left + t.width / 2)) < 30 || m.left - l.right >= 24) && v.left - s.right >= 20 && Math.abs(s.top - v.top) < 12 && w.right > window.innerWidth - 40 && d.right <= w.left && w.left - d.right < 24 && Math.abs(d.top + d.height / 2 - (w.top + w.height / 2)) < 6,
+      // в самом углу — «Неделя / Месяц»; дашборда нет
+      ok: m && s && v && w && !x('[aria-label="Дашборд"]') && (Math.abs(m.left + m.width / 2 - (t.left + t.width / 2)) < 30 || m.left - l.right >= 24) && v.left - s.right >= 20 && Math.abs(s.top - v.top) < 12 && w.right > window.innerWidth - 40 && Math.abs(s.top + s.height / 2 - (w.top + w.height / 2)) < 8,
       off: Math.round(m.left + m.width / 2 - (t.left + t.width / 2)),
     }
   })
-check((await placed()).ok, 'поиск и вид — посередине шапки, между ними промежуток; справа — дашборд, в углу — «Неделя / Месяц», в одну строку', 'поиск, вид, дашборд и «Неделя / Месяц» стоят не так')
+check((await placed()).ok, 'поиск и вид — посередине шапки, между ними промежуток; в углу — «Неделя / Месяц», дашборда нет, в одну строку', 'поиск, вид и «Неделя / Месяц» стоят не так')
 const bw = await modes.getByRole('radio', { checked: true }).evaluate((el) => {
   const c = getComputedStyle(el)
   const lum = (rgb) => rgb.match(/\d+/g).slice(0, 3).reduce((a, b) => a + Number(b), 0) / 3
@@ -363,108 +363,45 @@ check(await drafts.getByRole('button', { name: 'ИИ-бухгалтер' }).coun
 await page.screenshot({ path: `${SHOTS}/9-drafts.png` })
 await drafts.getByRole('button', { name: 'Закрыть' }).click()
 
-// дашборд — значок справа вверху, панель справа; периодичность рубрики ставит слоты, за неделю — «уточните темы»
-await top.getByRole('button', { name: 'Дашборд' }).click()
-const dash = page.getByRole('complementary', { name: 'Дашборд' })
-await dash.waitFor()
-check((await dash.getByRole('region', { name: 'Что делать' }).count()) && (await page.getByRole('grid', { name: 'Неделя по времени' }).isVisible()), 'дашборд — панелью справа, календарь под ним', 'дашборд не панелью')
-await page.screenshot({ path: `${SHOTS}/8-dashboard.png` })
-// не вышло вовремя → «Наверстать» одной кнопкой: просроченное — на ближайшие дни, остальное по очереди; «Отменить» возвращает
-const lateAsk = dash.getByRole('region', { name: 'Не вышло вовремя' })
-const lateN = Number(((await lateAsk.textContent()) ?? '').match(/Не вышло вовремя: (\d+)/)?.[1] ?? 0)
-await lateAsk.getByRole('button', { name: 'Наверстать' }).click()
+// дашборда нет: ни значка, ни панели; «Не вышло вовремя» — плашкой под шапкой, «Наверстать» — одной кнопкой
+check(
+  !(await top.getByRole('button', { name: 'Дашборд' }).count()) && !(await page.getByRole('complementary', { name: 'Дашборд' }).count()) && !(await page.getByText(/Что делать|Программа/).count()),
+  'дашборда нет: ни значка, ни панели, ни «Программы»',
+  'дашборд остался',
+)
+const lateBar = page.getByRole('region', { name: 'Не вышло вовремя' })
+const lateN = Number(((await lateBar.textContent()) ?? '').match(/Не вышло вовремя: (\d+)/)?.[1] ?? 0)
+const underTop = await page.evaluate(() => {
+  const h = document.querySelector('.cp-top')?.getBoundingClientRect()
+  const b = document.querySelector('.cp-late')?.getBoundingClientRect()
+  return !!h && !!b && Math.abs(b.top - h.bottom) < 2
+})
+await page.screenshot({ path: `${SHOTS}/8-late.png` })
+await lateBar.getByRole('button', { name: 'Наверстать' }).click()
 const caughtMsg = (await toast().textContent()) ?? ''
-const sheetOpened = await page.getByRole('complementary', { name: 'Наверстать' }).count()
-const lateGone = !(await lateAsk.count())
+const lateGone = !(await lateBar.count())
 await toast().getByRole('button', { name: 'Отменить' }).click()
 check(
-  lateN > 0 && /^Наверстали: \d+ карточ/.test(caughtMsg) && !sheetOpened && lateGone && (await lateAsk.count()),
-  '«Наверстать» — одной кнопкой: просроченное на ближайшие дни, остальное сдвигается по очереди; «Отменить» возвращает',
-  `наверстать: ${lateN} → ${caughtMsg}; лист: ${sheetOpened}, ушло: ${lateGone}`,
+  lateN > 0 && underTop && /^Наверстали: \d+ карточ/.test(caughtMsg) && lateGone && (await lateBar.count()),
+  '«Не вышло вовремя» — плашкой под шапкой; «Наверстать» одной кнопкой, остальное по очереди; «Отменить» возвращает',
+  `наверстать: ${lateN}, под шапкой ${underTop} → ${caughtMsg}; ушла: ${lateGone}`,
 )
-await dash.getByRole('button', { name: 'Перенести период (отпуск)…' }).click()
+// «Перенести период (отпуск)» — в меню профиля
+await page.getByRole('button', { name: 'Профиль' }).click()
+await page.getByRole('menuitem', { name: 'Перенести период (отпуск)…' }).click()
 const periodSheet = page.getByRole('complementary', { name: 'Перенести период' })
 const periodSum = (await periodSheet.getByRole('status').textContent()) ?? ''
 check(
   /^Из периода — \d+ карточ/.test(periodSum) && (await periodSheet.getByRole('radio', { name: 'На следующие слоты' }).getAttribute('aria-checked')) === 'true',
-  '«Перенести период» (отпуск): на следующие слоты или в свободные места, сначала видно, что куда',
+  '«Перенести период» (отпуск) — в меню профиля: на следующие слоты или в свободные места, сначала видно, что куда',
   `перенести период: ${periodSum}`,
 )
-await periodSheet.getByRole('button', { name: 'Назад' }).click()
-const statLabels = await dash.getByLabel('Сводка', { exact: true }).locator('dt').allTextContents()
-check(
-  statLabels.join('|') === 'просрочено|в работе|готово, ждёт выхода',
-  'сводка без «выходит за 7 дней» и «слотов без темы на месяц»',
-  `сводка: ${statLabels.join(', ')}`,
-)
-// «Программа» переворачивает дашборд: каналы → рубрики → тема, справа время, дата и площадки значками
-await dash.getByRole('radio', { name: 'Программа' }).click()
-const schedDataist = dash.getByRole('region', { name: 'Программа: Офис Датаиста' })
-check(
-  (await schedDataist.getByRole('group', { name: 'Офис Датаиста: Тезисы' }).getByRole('button').count()) >= 5 &&
-    (await dash.getByRole('region', { name: 'Программа: Лаборатория Датаиста' }).count()) &&
-    (await schedDataist.locator('.cp-sched__plats svg').count()) > 0 &&
-    (await dash.getByRole('radio').allTextContents()).join('|').endsWith('Неделя|Месяц|Все') &&
-    !(await dash.getByRole('region', { name: 'Что делать' }).count()),
-  'дашборд → «Программа»: каналы, в них рубрики, по каждой — тема, справа дата и время и площадки значками; неделя, месяц или все',
-  'нет расписания в дашборде',
-)
-await page.screenshot({ path: `${SHOTS}/8b-schedule.png` })
+await periodSheet.getByRole('button', { name: 'Закрыть' }).click()
 check(
   !/#[А-Яа-яЁё]/.test(await page.evaluate(() => document.body.innerText)),
-  'рубрики без «#» — просто название: в календаре, фильтрах и программе',
+  'рубрики без «#» — просто название: в календаре и фильтрах',
   `остались решётки: ${(await page.evaluate(() => document.body.innerText.match(/#[А-Яа-яЁё]+/g) ?? [])).slice(0, 3).join(', ')}`,
 )
-// общей темы нет: рубрика и есть тема — строк не отмечают
-check(
-  !(await dash.getByRole('checkbox').count()) && !(await dash.getByText(/Общая тема|Поставить тему/).count()) && !(await dash.getByRole('radio', { name: 'Темы' }).count()),
-  'в программе нет общей темы и галочек: рубрика и есть тема',
-  'в программе осталась общая тема',
-)
-// «Все» — до конца плана, у рубрики сначала 10 строк
-await dash.getByRole('radio', { name: 'Все' }).click()
-const more = dash.getByRole('group', { name: 'Офис Датаиста: Тезисы' }).getByRole('button', { name: /^Показать ещё \d+/ })
-check(
-  (await more.count()) === 1 && (await dash.getByRole('group', { name: 'Офис Датаиста: Тезисы' }).locator('.cp-sched__row').count()) <= 10,
-  'программа «Все» — до конца плана, у рубрики сначала 10 строк и «Показать ещё»',
-  'нет «Все» или «Показать ещё»',
-)
-await dash.getByRole('radio', { name: 'Неделя' }).click()
-await dash.getByRole('radio', { name: 'Сводка' }).click()
-const topics = dash.getByRole('region', { name: 'Темы' })
-check(
-  (await topics.getByRole('group', { name: 'Темы: Лаборатория Датаиста' }).getByRole('button', { name: /^Исследования/ }).count()) &&
-    (await topics.getByRole('group', { name: 'Темы: Академия Датаиста' }).count()),
-  'темы-рубрики по каналам и разделам',
-  'нет рубрик разделов',
-)
-await topics.getByRole('button', { name: 'Править' }).click()
-const period = topics.getByRole('group', { name: 'Периодичность: Технологии · FULL' })
-await period.getByRole('button', { name: 'Чт' }).click()
-check(/слотов без темы \+\d+/.test((await toast().textContent()) ?? ''), 'периодичность: новый день ставит слоты без темы', `периодичность: ${await toast().textContent()}`)
-await page.screenshot({ path: `${SHOTS}/10-topics.png` })
-await topics.getByRole('button', { name: 'Готово' }).click()
-const ask = dash.getByRole('region', { name: 'Планирование недели' })
-check(await ask.count(), 'за неделю дашборд просит уточнить темы', 'нет просьбы уточнить темы')
-await ask.getByRole('button', { name: 'Уточнить' }).click()
-const planning = page.getByRole('complementary', { name: 'Планирование недели' })
-await planning.waitFor()
-await planning.getByRole('button', { name: 'Из черновиков: Агент продаж' }).click()
-check(await planning.getByRole('img', { name: 'Тема есть' }).count(), 'планирование: ближайший черновик той же рубрики — в слот', 'черновик не встал в слот')
-const rest = planning.locator('.cp-planrow:not(.cp-planrow--done) input').first()
-if (await rest.count()) {
-  await rest.fill('Сколько стоит ИИ-сотрудник')
-  await rest.press('Enter')
-}
-await page.screenshot({ path: `${SHOTS}/10b-planning.png` })
-await planning.getByRole('button', { name: 'Назад' }).click()
-await dash.getByRole('region', { name: 'Темы' }).getByRole('group', { name: 'Темы: Офис Датаиста' }).getByRole('button', { name: /^Демо/ }).first().click()
-check(
-  !(await dash.count()) && (await side.getByRole('button', { name: 'Демо', exact: true }).getAttribute('aria-pressed')) === 'true' && (await side.getByRole('button', { name: 'Тезисы', exact: true }).getAttribute('aria-pressed')) === 'false',
-  'рубрика в «Темах» — календарь только по ней (выделена в фильтре)',
-  'фильтр по рубрике не встал',
-)
-await side.getByRole('button', { name: 'Сбросить' }).click()
 // рубрики в фильтре: щелчок выделяет — видны только выделенные; «Выделить все», «Снять выделение»
 const rubPills = side.getByRole('group', { name: 'Рубрики' }).getByRole('button')
 const pressed = async () => (await rubPills.evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-pressed')))).join('')
@@ -615,12 +552,12 @@ await top.waitFor()
 await top.getByRole('searchbox', { name: 'Поиск по плану' }).fill('Агент продаж')
 check(await page.getByRole('region', { name: 'Найдено' }).getByRole('button', { name: /Агент продаж/ }).count(), 'правки пережили перезагрузку', 'правки потерялись')
 
-// телефон: внизу Дашборд, Календарь, Профиль; фильтры — за кнопкой; вид — меню, в нём лента по дням; поиск — значком
+// телефон: внизу Календарь и Профиль; фильтры — за кнопкой; вид — меню, в нём лента по дням; поиск — значком
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 await phone.goto(BASE)
 await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
-check(tabs.join('|') === 'ДашбордКалендарьПрофиль'.replace(/(?<=.)(?=[А-Я])/g, '|'), 'телефон: внизу Дашборд, Календарь, Профиль', `телефон: внизу ${tabs.join(', ')}`)
+check(tabs.join('|') === 'Календарь|Профиль', 'телефон: внизу Календарь и Профиль, без дашборда', `телефон: внизу ${tabs.join(', ')}`)
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка в одну строку', `телефон: шапка ${head?.height}px`)
 check(!(await phone.locator('.cp-side').count()), 'телефон: фильтры свёрнуты', 'телефон: фильтры открыты сами')
@@ -636,9 +573,6 @@ check(head2 && head2.height < 70, 'телефон: шапка ленты — в 
 check(!(await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), 'телефон: лента по дням без горизонтального скролла', 'на телефоне страница шире экрана')
 await phone.waitForTimeout(500)
 await phone.screenshot({ path: `${SHOTS}/13-phone.png` })
-await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Дашборд' }).click()
-check(await phone.getByRole('complementary', { name: 'Дашборд' }).count(), 'телефон: дашборд — вкладкой внизу', 'на телефоне нет дашборда')
-await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Календарь' }).click()
 await phone.getByRole('button', { name: 'Фильтры' }).click()
 await phone.getByRole('button', { name: 'Закрыть фильтры' }).click()
 check(!(await phone.locator('.cp-side').count()), 'фильтры на телефоне закрываются', 'фильтры на телефоне не закрываются')
