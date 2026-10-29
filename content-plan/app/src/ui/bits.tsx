@@ -2,7 +2,7 @@
 import { useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from 'react'
 import { addDays, daysBetween } from '../model/dates'
 import { whereText } from '../model/hint'
-import { colorOf, isSlot, shownTitle, STATUSES, statusOf, tagOf, titleIsFormat, type Plan, type Status } from '../model/types'
+import { colorOf, isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { grabCard } from './drag'
@@ -67,11 +67,11 @@ export function PlatformIcon({ platform, size = 14 }: { platform: string; size?:
   )
 }
 
-/** Тема — хэштегом: «#демо». Формат и время — рядом мелко. */
+/** Рубрика — просто названием: «Демо». Формат и время — рядом мелко. */
 export function RubricChip({ name }: { name: string }) {
   return (
-    <span className="cp-rub" aria-label={`Рубрика: ${tagOf(name)}`}>
-      {tagOf(name)}
+    <span className="cp-rub" aria-label={`Рубрика: ${name}`}>
+      {name}
     </span>
   )
 }
@@ -108,24 +108,50 @@ export function StatusPicker({ value, onChange, label = 'Статус', size = '
   )
 }
 
-/** Кнопка задачи на карточке: показывает статус; ▶ — начать работу и открыть задачу. */
+/** Что делает ▶ / ⏸: в плане — «Начать», в работе — «Пауза», на паузе — «Продолжить»; готово и вышло — открыть задачу. */
+export function playOf(status: Status): { label: string; icon: string; next?: Status } {
+  if (status === 'progress') return { label: 'Пауза', icon: 'pause', next: 'paused' }
+  if (status === 'paused') return { label: 'Продолжить', icon: 'play', next: 'progress' }
+  if (status === 'planned') return { label: 'Начать', icon: 'play', next: 'progress' }
+  return { label: 'Задача', icon: statusOf(status).icon! }
+}
+
+/** ▶ / ⏸ рядом с темой — в форме и в задаче: ▶ — в работу, в работе — ⏸ (на паузу), на паузе — снова ▶. */
+export function PlayPause({ status, onChange }: { status: Status; onChange: (s: Status) => void }) {
+  const p = playOf(status === 'ready' || status === 'published' ? 'planned' : status)
+  const st = statusOf(status)
+  return (
+    <button
+      type="button"
+      className={`cp-play cp-st--${status === 'planned' ? 'progress' : status}${status === 'progress' || status === 'paused' ? ' cp-play--on' : ''}`}
+      aria-label={p.label}
+      title={status === 'progress' ? 'В работе · нажмите — на паузу' : status === 'paused' ? 'На паузе · нажмите — снова в работу' : `${st.label} · нажмите — в работу`}
+      onClick={() => onChange(p.next!)}
+    >
+      <Icon name={p.icon} size={18} />
+    </button>
+  )
+}
+
+/** Кнопка на карточке — ▶ / ⏸ рядом с темой: ▶ — в работу (откроется задача), в работе — ⏸ на паузу; готово и вышло — значок, открыть задачу. */
 export function TaskButton({ unit }: { unit: Unit }) {
-  const { setStatus, openTask } = usePlan()
+  const { setStatus, openTask, toast } = usePlan()
   const st = statusOf(unit.head.status)
-  const start = unit.head.status === 'planned' || unit.head.status === 'paused'
+  const p = playOf(unit.head.status)
   return (
     <button
       type="button"
       className={`cp-task-btn cp-st--${st.icon ? st.id : 'progress'}${st.icon ? ' cp-task-btn--on' : ''}`}
-      aria-label={`${start ? 'Начать' : 'Задача'}: ${shownTitle(unit.head)}${st.icon ? ` (${st.label.toLowerCase()})` : ''}`}
-      title={start ? 'Начать: откроется задача по созданию контента' : `${st.label} · открыть задачу`}
+      aria-label={`${p.label}: ${shownTitle(unit.head)}${st.icon ? ` (${st.label.toLowerCase()})` : ''}`}
+      title={p.next === 'paused' ? 'В работе · нажмите — на паузу' : p.next ? `${p.label}: в работу, откроется задача` : `${st.label} · открыть задачу`}
       onClick={(e) => {
         e.stopPropagation()
-        if (start) setStatus(unit, 'progress')
-        else openTask(unit.head.id)
+        if (!p.next) return openTask(unit.head.id)
+        setStatus(unit, p.next)
+        if (p.next === 'paused') toast(`На паузе: ${shownTitle(unit.head)}`, true)
       }}
     >
-      <Icon name={st.icon && !start ? st.icon : 'play'} size={11} />
+      <Icon name={p.icon} size={11} />
     </button>
   )
 }

@@ -108,6 +108,14 @@ const tip = () => document.querySelector('.cp-drag-hint') as HTMLElement | null
 const open = (id: string) => within(card(id)).getAllByRole('button')[0]
 
 describe('T-CP-033 FR-CP-033 подсказка при переносе — словами', () => {
+  // «сегодня» — понедельник 26 окт: среда ещё впереди, «Дата уже прошла» не вмешивается
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-26T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   it('пока ведут: куда встанет и что отметит проверка; отпустили — подсказки нет', async () => {
     week()
     await screen.findByRole('grid', { name: 'Неделя по времени' })

@@ -4,7 +4,7 @@ import {
 } from '../model/calendar'
 import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
 import { whereText } from '../model/hint'
-import { FORMAT_SHORT, FULL_VIDEO, SHORT_VIDEO, shownTitle, tagOf, type ISODate, type Item, type Plan } from '../model/types'
+import { FORMAT_SHORT, FULL_VIDEO, SHORT_VIDEO, shownTitle, type ISODate, type Item, type Plan } from '../model/types'
 import { platformTypes, type Unit } from '../model/units'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan, type Mode } from '../ui/ctx'
@@ -524,7 +524,7 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
     mode === 'channels'
       ? channelLanes(plan, hidden)
       : mode === 'topics'
-        ? plan.rubrics.filter((r) => !filters.pickedRubrics?.length || filters.pickedRubrics.includes(r.id)).map((r) => ({ id: r.id, label: tagOf(r.name), match: (it: Item) => it.rubricId === r.id }))
+        ? plan.rubrics.filter((r) => !filters.pickedRubrics?.length || filters.pickedRubrics.includes(r.id)).map((r) => ({ id: r.id, label: r.name, match: (it: Item) => it.rubricId === r.id }))
         : plan.platforms.filter((p) => !filters.hiddenPlatforms.includes(p)).map((p) => ({ id: p, label: p, match: (it: Item) => it.platforms.includes(p) }))
   // по каналам карточка стоит в дорожке своего главного материала (FULL — в «FULL», тизер внутри неё);
   // по площадкам — строкой на каждой площадке, где она выходит, с тем, что там выходит

@@ -2,13 +2,13 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { dayTitle, shortDate, today } from '../model/dates'
 import { planningEnd, planningSlots } from '../model/planning'
 import { draftsFor } from '../model/store'
-import { colorOf, isSlot, tagOf, timeOf, type Item } from '../model/types'
+import { colorOf, isSlot, timeOf, type Item } from '../model/types'
 import { IconButton } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
 /** Планирование недели: все слоты без темы до конца следующей недели — вписать тему или взять ближайший черновик
- *  того же хэштега. Список не прыгает: уточнённые остаются с галочкой, пока лист открыт. */
+ *  той же рубрики. Список не прыгает: уточнённые остаются с галочкой, пока лист открыт. */
 export function PlanningSheet({ onClose, onBack }: { onClose: () => void; onBack?: () => void }) {
   const { plan, dispatch, toast } = usePlan()
   const t = today()
@@ -65,7 +65,7 @@ function PlanRow({ item, draft }: { item: Item; draft?: Item }) {
   const rubric = rubrics.get(item.rubricId ?? '')
   const c = channels.get(item.channelId)
   const where = c?.sections.find((s) => s.id === item.sectionId)?.web ?? c?.name
-  const tag = rubric ? tagOf(rubric.name) : ''
+  const tag = rubric ? rubric.name : ''
   const time = timeOf(item, rule)
   const commit = () => {
     const title = v.trim()

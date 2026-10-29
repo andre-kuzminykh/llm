@@ -296,23 +296,45 @@ await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOTS}/4-task.png` })
 check(await task.getByRole('checkbox', { name: /YouTube — FULL/ }).isChecked(), 'галочка части задачи', 'галочка не ставится')
 check((await task.getByRole('textbox', { name: 'Тема' }).inputValue()) === 'Neuronium' && (await task.getByRole('button', { name: 'Пн, 9 ноя' }).count()), 'задача: тема заголовком, дата текстом', 'в задаче нет темы или даты текстом')
-check(await cell('2026-11-09').getByRole('button', { name: 'Задача: Neuronium (в работе)' }).count(), '▶ открыл задачу, статус на карточке', 'нет статуса на карточке')
+check(
+  (await cell('2026-11-09').getByRole('button', { name: 'Пауза: Neuronium (в работе)' }).count()) && (await task.locator('.cp-sheet__head').getByRole('button', { name: 'Пауза' }).count()),
+  '▶ открыл задачу; на карточке и рядом с темой — ⏸',
+  'нет ⏸ на карточке или в задаче',
+)
 await task.getByRole('button', { name: 'Открыть материал' }).click()
 const form = page.getByRole('complementary', { name: 'Материал' })
 await form.waitFor()
 const yOf = async (loc) => (await loc.boundingBox())?.y ?? -1
+const formHead = form.locator('.cp-sheet__head')
 const formY = [
+  await yOf(formHead.getByRole('textbox', { name: 'Тема' })),
   await yOf(form.getByRole('combobox', { name: 'Рубрика' })),
-  await yOf(form.getByRole('textbox', { name: 'Тема' })),
   await yOf(form.getByRole('radiogroup', { name: 'Формат' })),
-  await yOf(form.getByRole('button', { name: 'YouTube' })),
+  await yOf(form.getByRole('group', { name: 'Площадки' })),
+  await yOf(form.getByRole('checkbox', { name: 'Готово' })),
 ]
-const gone = await form.getByText(/Подробнее|Кто делает|Подготовить к|Вне сетки|Копии на другие|Пересоздать|Общая тема|исходной сетке/).count()
+const gone = await form.getByText(/Подробнее|Кто делает|Подготовить к|Вне сетки|Копии на другие|Пересоздать|Общая тема|исходной сетке|^Материал$|^Статус$/).count()
 check(
-  formY.every((y, i) => y > 0 && (i === 0 || y > formY[i - 1])) && !gone,
-  'форма: сверху рубрика, под ней тема, дальше формат и площадки — всё сразу, без «Подробнее», копий, версий и общей темы',
+  formY.every((y, i) => y > 0 && (i === 0 || y > formY[i - 1])) && !gone && (await formHead.getByRole('button', { name: 'Пауза' }).count()),
+  'форма: тема вместо «Материал» (вписывается), рядом ⏸; ниже рубрика, формат, площадки; внизу «Готово» — без ряда статусов и лишнего',
   `форма: ${formY.join(', ')}; лишнего: ${gone}`,
 )
+// площадки — тот же список, что в фильтрах, значками
+const sidePlats = await side.locator('.cp-pills').first().getByRole('button').allTextContents()
+const formPlats = form.getByRole('group', { name: 'Площадки' }).getByRole('button')
+check(
+  (await formPlats.allTextContents()).join('|') === sidePlats.join('|') && (await formPlats.locator('svg').count()) === sidePlats.length,
+  `площадки в форме — тот же список, что в фильтрах, значками (${sidePlats.length})`,
+  `площадки в форме: ${(await formPlats.allTextContents()).join(', ')}`,
+)
+// ⏸ рядом с темой — на паузу сразу, ▶ — снова в работу; «Готово» — галочкой внизу (здесь сразу отменяем)
+await formHead.getByRole('button', { name: 'Пауза' }).click()
+const paused = await cell('2026-11-09').getByRole('button', { name: 'Продолжить: Neuronium (на паузе)' }).count()
+await formHead.getByRole('button', { name: 'Продолжить' }).click()
+await form.getByRole('checkbox', { name: 'Готово' }).check()
+const doneCard = await cell('2026-11-09').getByRole('button', { name: 'Задача: Neuronium (готово)' }).count()
+await toast().getByRole('button', { name: 'Отменить' }).click()
+check(paused && doneCard && (await cell('2026-11-09').getByRole('button', { name: 'Пауза: Neuronium (в работе)' }).count()), '⏸ / ▶ рядом с темой и «Готово» внизу — сразу на карточке; «Отменить» возвращает', `статус: пауза ${paused}, готово ${doneCard}`)
 const fmtGroup = form.getByRole('radiogroup', { name: 'Формат' })
 const fmtLabels = (await fmtGroup.getByRole('radio').allTextContents()).join('|')
 const fmtOn = await fmtGroup.getByRole('radio', { checked: true }).getAttribute('aria-label')
@@ -333,9 +355,9 @@ await page.getByRole('button', { name: 'Новый контент' }).click()
 await page.getByRole('tab', { name: /^Черновики/ }).click()
 const drafts = page.getByRole('complementary', { name: 'Черновики' })
 const tags = drafts.getByRole('group', { name: 'Рубрики черновиков' })
-await tags.getByRole('button', { name: /^#технологии/ }).click()
-check(await drafts.getByRole('region', { name: 'Черновики: #технологии', exact: true }).count(), 'черновики во вкладке «+»: рубрика — кнопкой', 'рубрики черновиков не работают')
-await drafts.getByLabel('Новые черновики: #технологии', { exact: true }).fill('Агент продаж\nИИ-бухгалтер')
+await tags.getByRole('button', { name: /^Технологии/ }).click()
+check(await drafts.getByRole('region', { name: 'Черновики: Технологии', exact: true }).count(), 'черновики во вкладке «+»: рубрика — кнопкой', 'рубрики черновиков не работают')
+await drafts.getByLabel('Новые черновики: Технологии', { exact: true }).fill('Агент продаж\nИИ-бухгалтер')
 await drafts.getByRole('button', { name: 'Добавить' }).click()
 check(await drafts.getByRole('button', { name: 'ИИ-бухгалтер' }).count(), 'черновики добавлены', 'черновики не добавились')
 await page.screenshot({ path: `${SHOTS}/9-drafts.png` })
@@ -379,7 +401,7 @@ check(
 await dash.getByRole('radio', { name: 'Программа' }).click()
 const schedDataist = dash.getByRole('region', { name: 'Программа: Офис Датаиста' })
 check(
-  (await schedDataist.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('button').count()) >= 5 &&
+  (await schedDataist.getByRole('group', { name: 'Офис Датаиста: Тезисы' }).getByRole('button').count()) >= 5 &&
     (await dash.getByRole('region', { name: 'Программа: Лаборатория Датаиста' }).count()) &&
     (await schedDataist.locator('.cp-sched__plats svg').count()) > 0 &&
     (await dash.getByRole('radio').allTextContents()).join('|').endsWith('Неделя|Месяц|Все') &&
@@ -388,6 +410,11 @@ check(
   'нет расписания в дашборде',
 )
 await page.screenshot({ path: `${SHOTS}/8b-schedule.png` })
+check(
+  !/#[А-Яа-яЁё]/.test(await page.evaluate(() => document.body.innerText)),
+  'рубрики без «#» — просто название: в календаре, фильтрах и программе',
+  `остались решётки: ${(await page.evaluate(() => document.body.innerText.match(/#[А-Яа-яЁё]+/g) ?? [])).slice(0, 3).join(', ')}`,
+)
 // общей темы нет: рубрика и есть тема — строк не отмечают
 check(
   !(await dash.getByRole('checkbox').count()) && !(await dash.getByText(/Общая тема|Поставить тему/).count()) && !(await dash.getByRole('radio', { name: 'Темы' }).count()),
@@ -396,9 +423,9 @@ check(
 )
 // «Все» — до конца плана, у рубрики сначала 10 строк
 await dash.getByRole('radio', { name: 'Все' }).click()
-const more = dash.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).getByRole('button', { name: /^Показать ещё \d+/ })
+const more = dash.getByRole('group', { name: 'Офис Датаиста: Тезисы' }).getByRole('button', { name: /^Показать ещё \d+/ })
 check(
-  (await more.count()) === 1 && (await dash.getByRole('group', { name: 'Офис Датаиста: #тезисы' }).locator('.cp-sched__row').count()) <= 10,
+  (await more.count()) === 1 && (await dash.getByRole('group', { name: 'Офис Датаиста: Тезисы' }).locator('.cp-sched__row').count()) <= 10,
   'программа «Все» — до конца плана, у рубрики сначала 10 строк и «Показать ещё»',
   'нет «Все» или «Показать ещё»',
 )
@@ -406,13 +433,13 @@ await dash.getByRole('radio', { name: 'Неделя' }).click()
 await dash.getByRole('radio', { name: 'Сводка' }).click()
 const topics = dash.getByRole('region', { name: 'Темы' })
 check(
-  (await topics.getByRole('group', { name: 'Темы: Лаборатория Датаиста' }).getByRole('button', { name: /^#исследования/ }).count()) &&
+  (await topics.getByRole('group', { name: 'Темы: Лаборатория Датаиста' }).getByRole('button', { name: /^Исследования/ }).count()) &&
     (await topics.getByRole('group', { name: 'Темы: Академия Датаиста' }).count()),
   'темы-рубрики по каналам и разделам',
   'нет рубрик разделов',
 )
 await topics.getByRole('button', { name: 'Править' }).click()
-const period = topics.getByRole('group', { name: 'Периодичность: #технологии · FULL' })
+const period = topics.getByRole('group', { name: 'Периодичность: Технологии · FULL' })
 await period.getByRole('button', { name: 'Чт' }).click()
 check(/слотов без темы \+\d+/.test((await toast().textContent()) ?? ''), 'периодичность: новый день ставит слоты без темы', `периодичность: ${await toast().textContent()}`)
 await page.screenshot({ path: `${SHOTS}/10-topics.png` })
@@ -431,9 +458,9 @@ if (await rest.count()) {
 }
 await page.screenshot({ path: `${SHOTS}/10b-planning.png` })
 await planning.getByRole('button', { name: 'Назад' }).click()
-await dash.getByRole('region', { name: 'Темы' }).getByRole('group', { name: 'Темы: Офис Датаиста' }).getByRole('button', { name: /^#демо/ }).first().click()
+await dash.getByRole('region', { name: 'Темы' }).getByRole('group', { name: 'Темы: Офис Датаиста' }).getByRole('button', { name: /^Демо/ }).first().click()
 check(
-  !(await dash.count()) && (await side.getByRole('button', { name: '#демо', exact: true }).getAttribute('aria-pressed')) === 'true' && (await side.getByRole('button', { name: '#тезисы', exact: true }).getAttribute('aria-pressed')) === 'false',
+  !(await dash.count()) && (await side.getByRole('button', { name: 'Демо', exact: true }).getAttribute('aria-pressed')) === 'true' && (await side.getByRole('button', { name: 'Тезисы', exact: true }).getAttribute('aria-pressed')) === 'false',
   'рубрика в «Темах» — календарь только по ней (выделена в фильтре)',
   'фильтр по рубрике не встал',
 )
@@ -442,8 +469,8 @@ await side.getByRole('button', { name: 'Сбросить' }).click()
 const rubPills = side.getByRole('group', { name: 'Рубрики' }).getByRole('button')
 const pressed = async () => (await rubPills.evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-pressed')))).join('')
 const noneAtFirst = !(await pressed()).includes('true')
-await side.getByRole('group', { name: 'Рубрики' }).getByRole('button', { name: '#тезисы', exact: true }).click()
-const onlyThesis = (await page.locator('.cp-tg__col .cp-card').filter({ hasText: '#демо' }).count()) === 0 && (await page.locator('.cp-tg__col .cp-card').filter({ hasText: '#тезисы' }).count()) > 0
+await side.getByRole('group', { name: 'Рубрики' }).getByRole('button', { name: 'Тезисы', exact: true }).click()
+const onlyThesis = (await page.locator('.cp-tg__col .cp-card').filter({ hasText: 'Демо' }).count()) === 0 && (await page.locator('.cp-tg__col .cp-card').filter({ hasText: 'Тезисы' }).count()) > 0
 await side.getByRole('button', { name: 'Выделить все' }).click()
 const allPicked = !(await pressed()).includes('false')
 await side.getByRole('button', { name: 'Снять выделение' }).click()
@@ -458,15 +485,15 @@ await page.getByRole('button', { name: 'Новый контент' }).click()
 const newForm = page.getByRole('complementary', { name: 'Новый контент' })
 const tagIn = newForm.getByRole('combobox', { name: 'Рубрика' })
 await tagIn.fill('тех')
-check(await newForm.getByRole('option', { name: '#технологии' }).count(), 'рубрика подсказывается при вводе', 'нет подсказки рубрики')
+check(await newForm.getByRole('option', { name: 'Технологии' }).count(), 'рубрика подсказывается при вводе', 'нет подсказки рубрики')
 await tagIn.fill('агенты')
-check(await newForm.getByRole('option', { name: 'Новая рубрика #агенты' }).count(), 'новой рубрики нет — предлагается завести', 'нет «Новая рубрика»')
-await newForm.getByRole('option', { name: 'Новая рубрика #агенты' }).click()
+check(await newForm.getByRole('option', { name: 'Новая рубрика «Агенты»' }).count(), 'новой рубрики нет — предлагается завести', 'нет «Новая рубрика»')
+await newForm.getByRole('option', { name: 'Новая рубрика «Агенты»' }).click()
 await page.screenshot({ path: `${SHOTS}/5b-new.png` })
 await newForm.getByRole('textbox', { name: 'Тема' }).fill('Агенты в продажах')
 await newForm.getByRole('button', { name: 'Создать' }).click()
 check(await toast().filter({ hasText: /^Создано на/ }).count(), '«+»: новый контент с новой рубрикой', 'контент не создался')
-check(await side.getByRole('button', { name: '#агенты', exact: true }).count(), 'новая рубрика — в фильтрах', 'новой рубрики нет в фильтрах')
+check(await side.getByRole('button', { name: 'Агенты', exact: true }).count(), 'новая рубрика — в фильтрах', 'новой рубрики нет в фильтрах')
 await page.keyboard.press('Control+z')
 
 // «Время»: щелчок по пустому месту шкалы — новый контент на этот день и получас

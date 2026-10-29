@@ -106,8 +106,13 @@ export const SPREAD = 'С каждым FULL'
 export const isSlot = (it: Pick<Item, 'title'>) => it.title.trim() === PLACEHOLDER
 export const shownTitle = (it: Pick<Item, 'title'>) => (isSlot(it) ? SLOT_TEXT : it.title)
 
-/** Тема-хэштег: «Демо» → «#демо». */
-export const tagOf = (name: string) => `#${name.toLowerCase().replace(/\s+/g, '_')}`
+/** Рубрика — просто название, без решётки: «#кейсы_клиентов» → «Кейсы клиентов»; первая буква — заглавная. */
+export const rubricName = (s: string) => {
+  const n = s.trim().replace(/^#+/, '').replace(/[_\s]+/g, ' ').trim()
+  return n && n[0].toUpperCase() + n.slice(1)
+}
+/** Для сравнения рубрик: регистр, пробелы и решётка не важны. */
+export const rubricKey = (s: string) => rubricName(s).toLowerCase()
 
 /** Подпись материала: «Демо · FULL», «Демо · Тизер FULL»; формат, совпадающий с рубрикой, не повторяется. */
 export function labelOf(rubric: Rubric | undefined, rule: Rule | undefined) {
@@ -136,7 +141,7 @@ export const FORMATS: { group: string; items: string[] }[] = [
   { group: 'Видео', items: [FULL_VIDEO, SHORT_VIDEO] },
   { group: 'Текст', items: [WEB_PAGE, TEXT_IMAGE] },
 ]
-/** Коротко — в подписях дорожек и расписания и как название нового формата хэштега: «#кейсы · Текст с картинкой». */
+/** Коротко — в подписях дорожек и расписания и как название нового формата рубрики: «#кейсы · Текст с картинкой». */
 export const FORMAT_SHORT: Record<string, string> = { [FULL_VIDEO]: 'Полное видео', [SHORT_VIDEO]: 'Короткое видео', [WEB_PAGE]: 'Страница на сайте', [TEXT_IMAGE]: 'Текст с картинкой' }
 /** Значок и короткая подпись формата: горизонталь, вертикаль, веб, пост — в форме формат выбирают ими. */
 export const FORMAT_ICON: Record<string, { icon: string; label: string }> = {

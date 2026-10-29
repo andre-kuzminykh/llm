@@ -1,13 +1,13 @@
-// Хэштег с подсказками при вводе — как Т9: набираете «тез», под полем «#тезисы»; стрелки и Enter — выбрать.
-// Такого хэштега нет — последней строкой «Новый хэштег #…»: он появится в списке и в фильтрах.
+// Рубрика с подсказками при вводе — как Т9: набираете «тез», под полем «Тезисы»; стрелки и Enter — выбрать.
+// Такой рубрики нет — последней строкой «Новая рубрика «…»»: она появится в списке и в фильтрах. Решётки нет нигде.
 import { useId, useState } from 'react'
-import { tagOf, type Rubric } from '../model/types'
+import { rubricKey, rubricName, type Rubric } from '../model/types'
 
 export type TagPick = { rubric: Rubric } | { name: string }
 
-// сравниваем в виде хэштега: «Кейсы клиентов» — это «кейсы_клиентов»
-const clean = (s: string) => tagOf(s.trim().replace(/^#/, '')).slice(1)
-const tagName = (r: Rubric) => tagOf(r.name).slice(1)
+// сравниваем без регистра и решётки: «#кейсы_клиентов» — это «Кейсы клиентов»
+const clean = (s: string) => rubricKey(s)
+const tagName = (r: Rubric) => rubricKey(r.name)
 
 /** Подсказки: сначала те, что начинаются с набранного, потом те, где оно внутри; порядок options — приоритет. */
 export function suggestTags(options: Rubric[], text: string, max = 6): Rubric[] {
@@ -18,9 +18,9 @@ export function suggestTags(options: Rubric[], text: string, max = 6): Rubric[] 
   return [...starts, ...inside].slice(0, max)
 }
 
-export function TagInput({ label, value, options, onPick, disabled, placeholder = '#рубрика', allowNew = true }: {
+export function TagInput({ label, value, options, onPick, disabled, placeholder = 'Рубрика', allowNew = true }: {
   label: string
-  value: string // что показано, пока не начали печатать: «#тезисы»
+  value: string // что показано, пока не начали печатать: «Тезисы»
   options: Rubric[]
   onPick: (p: TagPick) => void
   disabled?: boolean
@@ -34,7 +34,7 @@ export function TagInput({ label, value, options, onPick, disabled, placeholder 
   const list = open ? suggestTags(options, text) : []
   const q = text ? clean(text) : ''
   const exact = options.some((r) => tagName(r) === q)
-  const rows: TagPick[] = [...list.map((rubric) => ({ rubric })), ...(allowNew && q && !exact ? [{ name: text!.trim().replace(/^#/, '') }] : [])]
+  const rows: TagPick[] = [...list.map((rubric) => ({ rubric })), ...(allowNew && q && !exact ? [{ name: rubricName(text!) }] : [])]
   const pick = (p: TagPick) => {
     onPick(p)
     setText(null)
@@ -91,7 +91,7 @@ export function TagInput({ label, value, options, onPick, disabled, placeholder 
               }}
               onMouseEnter={() => setActive(i)}
             >
-              {'rubric' in p ? tagOf(p.rubric.name) : `Новая рубрика ${tagOf(p.name)}`}
+              {'rubric' in p ? p.rubric.name : `Новая рубрика «${p.name}»`}
             </span>
           ))}
         </span>

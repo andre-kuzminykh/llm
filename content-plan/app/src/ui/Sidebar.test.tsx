@@ -134,13 +134,13 @@ describe('T-CP-044 FR-CP-044 рубрики в фильтре — выделит
     expect(thesis()).not.toBeNull()
     expect(demo()).not.toBeNull()
 
-    await userEvent.click(pill('#тезисы'))
-    expect(pill('#тезисы')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(pill('Тезисы'))
+    expect(pill('Тезисы')).toHaveAttribute('aria-pressed', 'true')
     expect(thesis()).not.toBeNull()
     expect(demo()).toBeNull()
     expect(within(side()).getByRole('button', { name: 'Сбросить' })).toBeInTheDocument() // фильтр включён
 
-    await userEvent.click(pill('#демо'))
+    await userEvent.click(pill('Демо'))
     expect(demo()).not.toBeNull()
 
     await userEvent.click(within(side()).getByRole('button', { name: 'Выделить все' }))

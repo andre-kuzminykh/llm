@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { shortDate, WEEKDAYS, weekday } from '../model/dates'
 import { colorOf, isSlot, timeOf, titleIsFormat, type Item } from '../model/types'
 import { taskParts, unitsOf, type Unit } from '../model/units'
-import { IconButton, mainChannelId, PickText, PlatformIcon, RubricChip, StatusPicker } from '../ui/bits'
+import { IconButton, mainChannelId, PickText, PlatformIcon, PlayPause, RubricChip, StatusPicker } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
@@ -65,6 +65,7 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
           onBlur={commitTitle}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         />
+        <PlayPause status={head.status} onChange={(s) => setStatus(unit, s)} />
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
       <div className="cp-sheet__body nr-scroll">

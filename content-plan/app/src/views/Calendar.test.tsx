@@ -15,7 +15,7 @@ describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
     const cards = [...day('2026-10-26').querySelectorAll('.cp-card__open')].map((b) => b.getAttribute('aria-label'))
     expect(cards).toEqual(['Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ, 11:00', 'Демо · FULL: Стратегия, 12:00', 'Демо · Анонс от Andre AIT: Стратегия, 13:00'])
     const card = within(day('2026-10-26')).getByRole('button', { name: /^Демо · FULL: Стратегия/ })
-    expect(within(card).getByLabelText('Рубрика: #демо')).toBeInTheDocument()
+    expect(within(card).getByLabelText('Рубрика: Демо')).toBeInTheDocument()
     expect(card.closest('.cp-card')).toHaveClass('cp-card--main')
     // слот без темы — пунктиром «Нужна тема»
     expect(within(day('2026-10-27')).getByRole('button', { name: /^Тезисы · Тезис дня: Нужна тема/ }).closest('.cp-card')).toHaveClass('cp-card--slot')
@@ -114,8 +114,8 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     await userEvent.click(within(side()).getByRole('button', { name: /^Антрополис/ }))
     expect(within(side()).getByRole('button', { name: /^Антрополис/ })).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(within(side()).getByRole('button', { name: 'Добавить рубрику' }))
-    await userEvent.type(within(side()).getByRole('textbox', { name: 'Новая рубрика' }), '#исследования{Enter}')
-    expect(within(side()).getByRole('button', { name: '#исследования' })).toBeInTheDocument()
+    await userEvent.type(within(side()).getByRole('textbox', { name: 'Новая рубрика' }), 'Исследования{Enter}')
+    expect(within(side()).getByRole('button', { name: 'Исследования' })).toBeInTheDocument()
   })
 })
 
@@ -126,7 +126,7 @@ describe('T-CP-030 FR-CP-030 поиск вверху', () => {
     await userEvent.type(within(screen.getByRole('banner')).getByRole('searchbox', { name: 'Поиск по плану' }), 'хайп')
     const found = screen.getByRole('region', { name: 'Найдено' })
     expect(within(found).getByText('Найдено: 1')).toBeInTheDocument()
-    await userEvent.click(within(found).getByRole('button', { name: /26 окт, 11:00 · #тезисы: Я устал от хайпа вокруг ИИ/ }))
+    await userEvent.click(within(found).getByRole('button', { name: /26 окт, 11:00 · Тезисы: Я устал от хайпа вокруг ИИ/ }))
     expect(screen.getByRole('complementary', { name: 'Материал' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Найдено' })).toBeNull()
   })

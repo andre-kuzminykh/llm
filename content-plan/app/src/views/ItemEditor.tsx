@@ -1,8 +1,9 @@
-import { useId, useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { dayTitle, shortDate, weekday } from '../model/dates'
 import { newId, type Action } from '../model/store'
-import { FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type Item, type Rule, type Status } from '../model/types'
-import { IconButton, PickText, StatusPicker, Switch } from '../ui/bits'
+import { FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isSlot, PLACEHOLDER, rubricName, shownTitle, statusOf, TEXT_IMAGE, timeOf, type Item, type Rule, type Status } from '../model/types'
+import { unitsOf } from '../model/units'
+import { IconButton, PickText, PlatformIcon, PlayPause, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 import { TagInput, type TagPick } from '../ui/TagInput'
@@ -15,12 +16,12 @@ interface Props {
   onBack?: () => void
 }
 
-/** Форма материала: новый или существующий. Сохранение — один шаг истории. */
+/** Форма материала: новый или существующий. Вверху — тема (вписывается прямо в заголовке) и ▶ / ⏸ рядом; внизу — «Готово».
+ *  Сохранение — один шаг истории; ▶ / ⏸ и «Готово» у материала — сразу, всей карточке. */
 export function ItemEditor({ id, draft, onClose, onBack }: Props) {
-  const { plan, dispatch, rubrics, rules, channels, toast, openItem } = usePlan()
+  const { plan, byDate, dispatch, rubrics, rules, channels, toast, openItem } = usePlan()
   const existing = id ? plan.items.find((x) => x.id === id) : undefined
   const base: Partial<Item> = existing ?? draft ?? {}
-  const titleId = useId()
 
   // форматы канала для рубрики: свои форматы рубрики и общие, которые выходят с FULL, — если у рубрики есть FULL
   const hasFull = (rb: string | null) => plan.rules.some((r) => r.rubricId === rb && r.full)
@@ -63,6 +64,27 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     [plan.items, existing],
   )
   const isBank = !!existing && existing.date === null
+  // вся карточка материала: статус ставится и тизеру, и анонсам — как кнопкой на карточке
+  const cardIds = useMemo(() => {
+    if (!existing?.date) return existing ? [existing.id] : []
+    const unit = unitsOf(byDate.get(existing.date) ?? [], rules, plan.channels.map((c) => c.id)).find((u) => u.items.some((it) => it.id === existing.id))
+    return unit ? unit.items.map((x) => x.id) : [existing.id]
+  }, [existing, byDate, rules, plan.channels])
+  /** ▶ / ⏸ и «Готово»: у материала — сразу, всей карточке, с отменой; у нового — при создании. */
+  const changeStatus = (s: Status) => {
+    setStatus(s)
+    if (!existing) return
+    dispatch({ type: 'updateMany', ids: cardIds, patch: { status: s } })
+    toast(`${statusOf(s).label}: ${shownTitle(existing)}`, true)
+  }
+  // тема в заголовке растёт по тексту
+  const topicRef = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = topicRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    if (el.scrollHeight) el.style.height = `${el.scrollHeight}px`
+  }, [title])
   const fromFull = !!existing?.derive // рубрика берётся у FULL группы
   // новый материал на «чужой» день — разовый: проверка сетки его не трогает
   const offDay = !!date && !!rule && !rule.days[weekday(date)]
@@ -127,6 +149,9 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
       ruleNow = { ...(rule ?? plan.rules[0]), id, rubricId: rb, channelId, sectionId, name, format, full: false, days: [false, false, false, false, false, false, false], time: rule?.time ?? '12:00' }
     }
     if (!ruleNow) return setError('Выберите формат')
+    // список площадок один на всех; выбрали площадку, которой у канала ещё не было, — она появится у канала
+    const added = platforms.filter((p) => channel && !channel.platforms.includes(p))
+    if (channel && added.length) setup.push({ type: 'channel', id: channel.id, patch: { platforms: plan.platforms.filter((p) => channel.platforms.includes(p) || added.includes(p)) } })
     const patch: Partial<Item> = {
       title: t,
       channelId,
@@ -182,36 +207,41 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   }
 
   const heading = existing ? (isBank ? 'Черновик' : 'Материал') : 'Новый контент'
+  // тема — вместо заголовка «Материал»: вписывается прямо здесь; рядом ▶ / ⏸
+  const topic = (
+    <div className="cp-headline">
+      <textarea
+        ref={topicRef}
+        className="cp-task__title cp-headline__in"
+        aria-label="Тема"
+        rows={1}
+        value={title}
+        autoFocus={!existing || isSlot(existing)}
+        placeholder={existing && isSlot(existing) ? 'Нужна тема' : 'Тема: «Агент продаж»'}
+        onChange={(e) => setTitle(e.target.value.replace(/\n/g, ' '))}
+        onKeyDown={(e) => e.key === 'Enter' && !(e.metaKey || e.ctrlKey) && e.preventDefault()}
+      />
+      <PlayPause status={status} onChange={changeStatus} />
+    </div>
+  )
   return (
     <aside className="cp-sheet" aria-label={heading} onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && save()}>
       <div className="cp-sheet__head">
         {onBack && <IconButton icon="chev-left" label="Назад" onClick={onBack} size="sm" />}
-        {existing ? <h2 className="cp-sheet__title">{heading}</h2> : <CreateTabs current="new" />}
+        {existing ? topic : <CreateTabs current="new" />}
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
       <div className="cp-sheet__body nr-scroll">
+        {!existing && topic}
         <div className="cp-field" title={rubric?.what || undefined}>
           <span className="nr-label">Рубрика</span>
           <TagInput
             label="Рубрика"
-            value={newTag ? tagOf(newTag) : rubric ? tagOf(rubric.name) : ''}
+            value={newTag ? rubricName(newTag) : rubric ? rubric.name : ''}
             // рубрики этого канала — первыми, потом остальные
             options={[...rubricsFor(channelId, rubricId), ...plan.rubrics.filter((r) => !rubricsFor(channelId, rubricId).includes(r))]}
             onPick={pickTag}
             disabled={fromFull}
-          />
-        </div>
-
-        <div className="cp-field">
-          <label className="nr-label" htmlFor={titleId}>Тема</label>
-          <textarea
-            id={titleId}
-            className="nr-field"
-            rows={2}
-            value={title}
-            autoFocus={!existing}
-            placeholder={existing && isSlot(existing) ? 'Нужна тема' : 'Только тема, без рубрики: «Агент продаж»'}
-            onChange={(e) => setTitle(e.target.value)}
           />
         </div>
 
@@ -272,24 +302,17 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
           </label>
         )}
 
+        {/* площадки — тот же список, что в фильтрах, у любого канала: значок и название */}
         <div className="cp-field">
           <span className="nr-label">Площадки</span>
-          <div className="cp-pills" style={{ padding: 0 }}>
-            {plan.platforms.map((p) => {
-              const allowed = channel?.platforms.includes(p)
-              if (!allowed && !platforms.includes(p)) return null
-              return (
-                <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
-                  {p}
-                </button>
-              )
-            })}
+          <div className="cp-pills cp-pills--flush cp-plats" role="group" aria-label="Площадки">
+            {plan.platforms.map((p) => (
+              <button key={p} type="button" className="nr-pill" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)}>
+                <PlatformIcon platform={p} />
+                {p}
+              </button>
+            ))}
           </div>
-        </div>
-
-        <div className="cp-task__status">
-          <span className="nr-label">Статус</span>
-          <StatusPicker size="sm" value={status} onChange={setStatus} />
         </div>
 
         <label className="cp-field">
@@ -317,6 +340,14 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
         {error && <p className="cp-hint" style={{ color: 'var(--nr-danger)' }} role="alert">{error}</p>}
       </div>
       <div className="cp-sheet__foot">
+        {/* галочка «сделал» — статус «Готово»; снять — снова в плане */}
+        <label className="cp-done" title="Сделано — статус «Готово»; снять галочку — снова в плане">
+          <input type="checkbox" checked={status === 'ready' || status === 'published'} onChange={(e) => changeStatus(e.target.checked ? 'ready' : 'planned')} />
+          <span className="cp-check-row__box" aria-hidden="true">
+            <Icon name="check" size={12} />
+          </span>
+          {status === 'published' ? 'Вышло' : 'Готово'}
+        </label>
         {existing && (
           <>
             <button type="button" className="nr-btn nr-btn--danger nr-btn--icon" onClick={remove} aria-label="Удалить" title="Удалить">

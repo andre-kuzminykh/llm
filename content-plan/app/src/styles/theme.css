@@ -1122,3 +1122,20 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-month__n { margin-left: auto; font-size: var(--nr-fs-xs); color: var(--nr-text-3); font-variant-numeric: tabular-nums; }
 /* «Неделя / Месяц» — значками, рядом с видом недели */
 .cp-span .cp-views__item { padding: 0 8px; }
+
+/* ── тема вместо заголовка «Материал»: вписывается прямо в шапке, рядом ▶ / ⏸; внизу — «Готово» ── */
+.cp-headline { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 6px; }
+.cp-headline__in { display: block; resize: none; overflow: hidden; font-family: inherit; line-height: 1.3; }
+.cp-sheet__body > .cp-headline { flex: none; margin: -4px 0 2px; }
+.cp-play {
+  flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--nr-fill-2); color: var(--cp-st, var(--nr-text-2)); cursor: pointer; transition: background var(--nr-dur-1) var(--nr-ease);
+}
+@media (hover: hover) { .cp-play:hover { box-shadow: inset 0 0 0 1px var(--nr-sep-strong); } }
+.cp-play--on.cp-st--progress { background: var(--nr-accent); color: #fff; }
+.cp-play--on.cp-st--paused { background: var(--nr-fill-2); color: var(--nr-text); }
+.cp-play:focus-visible { outline: 2px solid var(--nr-focus); outline-offset: 2px; }
+.cp-done { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; border-radius: 8px; cursor: pointer; font-size: var(--nr-fs-md); font-weight: var(--nr-fw-medium); color: var(--nr-text); }
+@media (hover: hover) { .cp-done:hover { background: var(--nr-fill-3); } }
+.cp-done input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cp-plats .nr-pill { gap: 6px; }

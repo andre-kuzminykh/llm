@@ -20,10 +20,10 @@ describe('T-CP-037 FR-CP-037 расписание — план повество�
     const groups = build()
     expect(groups.map((g) => g.name)).toEqual(['Dataist', 'Andre AIT'])
     const dataist = groups[0]
-    expect(dataist.tags.map((t) => t.tag)).toEqual(['#тезисы', '#демо'])
+    expect(dataist.tags.map((t) => t.tag)).toEqual(['Тезисы', 'Демо'])
     const rows = (tag: string) => dataist.tags.find((t) => t.tag === tag)!.rows.map((r) => `${r.date} ${r.time} ${r.title}`)
-    expect(rows('#демо')).toEqual(['2026-10-26 12:00 Стратегия', '2026-11-02 12:00 Нужна тема'])
-    expect(rows('#тезисы')).toEqual(['2026-10-26 11:00 Я устал от хайпа вокруг ИИ', '2026-10-27 11:00 Нужна тема'])
+    expect(rows('Демо')).toEqual(['2026-10-26 12:00 Стратегия', '2026-11-02 12:00 Нужна тема'])
+    expect(rows('Тезисы')).toEqual(['2026-10-26 11:00 Я устал от хайпа вокруг ИИ', '2026-10-27 11:00 Нужна тема'])
     expect(dataist.tags[1].rows[1].slot).toBe(true)
   })
   it('раздел — своей группой со своим цветом; одно и то же каждый день — одной строкой', () => {
@@ -40,7 +40,7 @@ describe('T-CP-037 FR-CP-037 расписание — план повество�
   it('потоки 24/7 в расписание не идут', () => {
     const p = smallPlan()
     p.rules = p.rules.map((r) => (r.id === 'sh_thesis' ? { ...r, stream: true } : r))
-    expect(build(p)[0].tags.map((t) => t.tag)).toEqual(['#демо'])
+    expect(build(p)[0].tags.map((t) => t.tag)).toEqual(['Демо'])
   })
   it('дни слитой строки словами', () => {
     expect(daysText(['2026-10-26', '2026-10-28', '2026-10-30'], 7)).toBe('Пн, Ср, Пт')
@@ -52,7 +52,7 @@ describe('T-CP-037 FR-CP-037 расписание — план повество�
 
 describe('T-CP-039 строка программы', () => {
   it('строка знает все материалы карточки и площадки всех — с тизером и анонсами', () => {
-    const row = build()[0].tags.find((t) => t.tag === '#демо')!.rows[0]
+    const row = build()[0].tags.find((t) => t.tag === 'Демо')!.rows[0]
     expect(row.ids.sort()).toEqual(['demo', 'office', 'teaser'])
     expect(row.platforms).toEqual(['Web', 'YouTube', 'Instagram', 'Telegram'])
   })

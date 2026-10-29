@@ -3,7 +3,7 @@
 // одной строкой с днями.
 import { shortDate, WEEKDAYS, weekday } from './dates'
 import { plural } from './hint'
-import { colorOf, isSlot, shownTitle, tagOf, type Channel, type ISODate, type Rubric, type Rule, type Status } from './types'
+import { colorOf, isSlot, shownTitle, type Channel, type ISODate, type Rubric, type Rule, type Status } from './types'
 import type { Unit } from './units'
 
 export interface SchedRow {
@@ -26,7 +26,7 @@ export interface SchedRow {
 
 export interface SchedTag {
   id: string
-  tag: string // рубрика «#тезисы»; без рубрики — название формата
+  tag: string // рубрика «Тезисы»; без рубрики — название формата
   rows: SchedRow[]
 }
 
@@ -65,7 +65,7 @@ function rowsOf(channels: Channel[], units: Unit[], rules: Map<string, Rule>, ru
         group: sec ? `${c.id}:${sec.id}` : c.id,
         channel: sec?.web ?? c.name,
         color: colorOf(c, sec?.id),
-        tag: rubric ? tagOf(rubric.name) : rule?.name ?? it.format,
+        tag: rubric ? rubric.name : rule?.name ?? it.format,
         days: [u.date!],
       }
       return [row]

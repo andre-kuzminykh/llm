@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { shortDate, today } from '../model/dates'
 import { visible } from '../model/filters'
 import { planningSlots } from '../model/planning'
-import { shownTitle, tagOf, timeOf, type ISODate } from '../model/types'
+import { shownTitle, timeOf, type ISODate } from '../model/types'
 import { IconButton } from './bits'
 import { activeFilters, FilterChips } from './Sidebar'
 import { usePlan, type Mode, type Span } from './ctx'
@@ -219,9 +219,9 @@ function Search() {
             const r = rubrics.get(it.rubricId ?? '')
             const when = it.date ? `${shortDate(it.date)}, ${timeOf(it, rules.get(it.ruleId))}` : 'черновик'
             return (
-              <button key={it.id} type="button" className="cp-search__row" onClick={() => pick(it.id, it.date)} aria-label={`${when} · ${r ? tagOf(r.name) : ''}: ${shownTitle(it)}`}>
+              <button key={it.id} type="button" className="cp-search__row" onClick={() => pick(it.id, it.date)} aria-label={`${when} · ${r ? r.name : ''}: ${shownTitle(it)}`}>
                 <span className="cp-search__when">{when}</span>
-                {r && <span className="cp-rub">{tagOf(r.name)}</span>}
+                {r && <span className="cp-rub">{r.name}</span>}
                 <span className="cp-search__title">{shownTitle(it)}</span>
               </button>
             )

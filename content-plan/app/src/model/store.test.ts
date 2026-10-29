@@ -279,7 +279,7 @@ describe('T-CP-031 FR-CP-031 периодичность рубрики, план
     const withDrafts = bankAdd(p, 'sh_thesis', ['Первая', 'Вторая'])
     const sug = draftsFor(withDrafts, planningSlots(withDrafts, '2026-10-27'))
     expect(sug.get('th-slot')!.title).toBe('Первая')
-    expect(sug.has('slot')).toBe(false) // черновиков #демо нет
+    expect(sug.has('slot')).toBe(false) // черновиков Демо нет
     const taken = takeDraft(withDrafts, 'th-slot', sug.get('th-slot')!.id)
     expect(byId(taken, 'th-slot').title).toBe('Первая')
     expect(bankOf(taken, 'sh_thesis').map((x) => x.title)).toEqual(['Вторая'])

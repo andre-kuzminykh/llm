@@ -5,9 +5,9 @@ import { AUTO_RULES } from '../model/filters'
 import { plural } from '../model/hint'
 import { planningEnd, planningSlots } from '../model/planning'
 import { newId, setPeriod } from '../model/store'
-import { colorOf, FORMAT_SHORT, isSlot, shownTitle, tagOf, TEXT_IMAGE, titleIsFormat, type ISODate, type Rubric, type Rule, type Status } from '../model/types'
+import { colorOf, FORMAT_SHORT, isSlot, shownTitle, TEXT_IMAGE, titleIsFormat, type ISODate, type Rubric, type Rule, type Status } from '../model/types'
 import { daysLeft, dueOf, timeText, type Unit } from '../model/units'
-import { IconButton, mainChannelId, PickText, RubricChip, Seg, StatusFilter } from '../ui/bits'
+import { IconButton, mainChannelId, PickText, playOf, RubricChip, Seg, StatusFilter } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 import { TagInput } from '../ui/TagInput'
@@ -44,8 +44,8 @@ function readView(): DashView {
 }
 
 /** Дашборд SMM — панелью справа, календарь остаётся под ним. «Сводка»: за неделю — просьба уточнить темы, цифры,
- *  что делать сейчас и темы-хэштеги по каналам с периодичностью. «Программа»: то же, перевёрнутое в план повествования —
- *  каналы, в них хэштеги, что и когда выходит. */
+ *  что делать сейчас и рубрики по каналам с периодичностью. «Программа»: то же, перевёрнутое в план повествования —
+ *  каналы, в них рубрики, что и когда выходит. */
 export function DashboardSheet({ onClose }: { onClose: () => void }) {
   const { filters, setFilters } = usePlan()
   const [view, setView] = useState<DashView>(readView)
@@ -129,7 +129,7 @@ function ShiftAsk() {
   )
 }
 
-/** За неделю до неё — просьба уточнить темы пустых слотов (их ставит периодичность хэштегов). */
+/** За неделю до неё — просьба уточнить темы пустых слотов (их ставит периодичность рубрик). */
 function PlanningAsk() {
   const { plan, openPlanning } = usePlan()
   const t = today()
@@ -237,9 +237,8 @@ function TodoRow({ row, late }: { row: Row; late: boolean }) {
   const rule = rules.get(head.ruleId)
   const rubric = rubrics.get(head.rubricId ?? '')
   const format = rule && rule.name !== rubric?.name && !titleIsFormat(head.title, rule) ? rule.name : ''
-  const start = head.status === 'planned' || head.status === 'paused'
   const urgent = left <= 0 && head.status !== 'ready'
-  const icon = head.status === 'paused' ? 'pause' : head.status === 'ready' ? 'check' : 'play'
+  const p = playOf(head.status) // ▶ — в работу, в работе — ⏸ на паузу, готово — открыть задачу
   return (
     <div className={`cp-now__row${urgent ? ' cp-now__row--urgent' : ''}`} style={{ '--cp-c': colorOf(c, head.sectionId) } as CSSProperties}>
       <span className="cp-now__time">{late ? shortDate(unit.date!) : timeText(unit)}</span>
@@ -262,12 +261,12 @@ function TodoRow({ row, late }: { row: Row; late: boolean }) {
       </span>
       <button
         type="button"
-        className={`cp-now__play cp-st--${head.status}${head.status === 'progress' || (urgent && start) ? ' cp-now__play--on' : ''}`}
-        aria-label={`${start ? 'Начать' : 'Задача'}: ${shownTitle(head)}`}
-        title={start ? 'Начать: откроется задача' : 'Открыть задачу'}
-        onClick={() => (start ? setStatus(unit, 'progress') : openTask(head.id))}
+        className={`cp-now__play cp-st--${head.status}${head.status === 'progress' || (urgent && p.next === 'progress') ? ' cp-now__play--on' : ''}`}
+        aria-label={`${p.label}: ${shownTitle(head)}`}
+        title={p.next === 'paused' ? 'В работе · нажмите — на паузу' : p.next ? `${p.label}: откроется задача` : 'Открыть задачу'}
+        onClick={() => (p.next ? setStatus(unit, p.next) : openTask(head.id))}
       >
-        <Icon name={icon} size={14} />
+        <Icon name={p.icon} size={14} />
       </button>
     </div>
   )
@@ -284,7 +283,7 @@ export function periodText(rule: Rule) {
 const slotsOf = (items: { ruleId: string; date: ISODate | null; derive?: string; title: string }[], ruleId: string, from: ISODate) =>
   items.filter((x) => x.ruleId === ruleId && x.date && x.date >= from && !x.derive && isSlot(x)).length
 
-/** Периодичность формата хэштега в канале: дни недели кнопками и время. Новые дни ставят в расписание слоты без темы
+/** Периодичность формата рубрики в канале: дни недели кнопками и время. Новые дни ставят в расписание слоты без темы
  *  (до конца плана), снятые — убирают пустые слоты; материалы с темой остаются. */
 function PeriodRow({ rule, tag }: { rule: Rule; tag: string }) {
   const { plan, dispatch, toast } = usePlan()
@@ -321,7 +320,7 @@ function PeriodRow({ rule, tag }: { rule: Rule; tag: string }) {
   )
 }
 
-/** Хэштег в канал или раздел — с подсказками по уже заведённым; новый появится и в фильтрах. Периодичность — потом, днями. */
+/** Рубрика в канал или раздел — с подсказками по уже заведённым; новая появится и в фильтрах. Периодичность — потом, днями. */
 function AddTag({ channelId, sectionId, where, have }: { channelId: string; sectionId?: string; where: string; have: string[] }) {
   const { plan, dispatch, toast } = usePlan()
   return (
@@ -340,7 +339,7 @@ function AddTag({ channelId, sectionId, where, have }: { channelId: string; sect
             { type: 'addRule', rubricId, channelId, sectionId, name: FORMAT_SHORT[TEXT_IMAGE], id: newId('r'), days: [false, false, false, false, false, false, false] },
           ],
         })
-        toast(`${tagOf(name)} — в ${where}. Задайте дни: слоты встанут в расписание`, true)
+        toast(`«${name}» — в ${where}. Задайте дни: слоты встанут в расписание`, true)
       }}
     />
   )
@@ -368,7 +367,7 @@ function TopicTags({ channelId, sectionId, where, edit, soon }: { channelId: str
           const period = rulesOf(plan.rules, channelId, sectionId, r.id).map((x) => `${x.name}: ${periodText(x)}`).join('\n')
           return (
             <button key={r.id} type="button" className="cp-tag" onClick={() => only(r)} title={`${r.what ? `${r.what}\n` : ''}${period}\nВ ближайший месяц: ${soon.get(r.id) ?? 0}. Нажмите — календарь только по этой теме`}>
-              {tagOf(r.name)}
+              {r.name}
               {soon.get(r.id) ? <span className="cp-muted">{soon.get(r.id)}</span> : null}
             </button>
           )
@@ -381,7 +380,7 @@ function TopicTags({ channelId, sectionId, where, edit, soon }: { channelId: str
         <div key={r.id} className="cp-tagedit">
           <input
             className="cp-tag-in"
-            aria-label={`Рубрика ${tagOf(r.name)}`}
+            aria-label={`Рубрика ${r.name}`}
             defaultValue={r.name}
             size={Math.max(6, r.name.length + 1)}
             onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== r.name && dispatch({ type: 'rubric', id: r.id, patch: { name: e.target.value.trim().replace(/^#/, '') } })}
@@ -389,7 +388,7 @@ function TopicTags({ channelId, sectionId, where, edit, soon }: { channelId: str
           />
           <div className="cp-tagedit__rules">
             {rulesOf(plan.rules, channelId, sectionId, r.id).map((rule) => (
-              <PeriodRow key={rule.id} rule={rule} tag={tagOf(r.name)} />
+              <PeriodRow key={rule.id} rule={rule} tag={r.name} />
             ))}
           </div>
         </div>
@@ -399,8 +398,8 @@ function TopicTags({ channelId, sectionId, where, edit, soon }: { channelId: str
   )
 }
 
-/** Темы-хэштеги по каналам и их разделам (Лаборатория, Академия, Офис Датаиста); нажали — календарь только по этой теме.
- *  «Править»: переименовать, задать периодичность (дни и время), добавить хэштег в канал. */
+/** Рубрики по каналам и их разделам (Лаборатория, Академия, Офис Датаиста); нажали — календарь только по этой теме.
+ *  «Править»: переименовать, задать периодичность (дни и время), добавить рубрика в канал. */
 function TopicsPanel() {
   const { plan } = usePlan()
   const [edit, setEdit] = useState(false)

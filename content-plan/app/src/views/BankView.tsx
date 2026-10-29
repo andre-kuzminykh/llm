@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { shortDate, today } from '../model/dates'
 import { bankOf, planFill } from '../model/store'
-import { isSlot, tagOf, type ISODate, type Item, type Plan, type Rule } from '../model/types'
+import { isSlot, type ISODate, type Item, type Plan, type Rule } from '../model/types'
 import { IconButton, startDrag, useDrop } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
@@ -10,10 +10,10 @@ import { Icon } from '../ui/Icon'
 export const bankRules = (plan: Plan) =>
   plan.rules.filter((r) => r.bank || plan.items.some((x: Item) => x.date === null && x.ruleId === r.id))
 
-/** Подпись банка — хэштег рубрики («#демо»); формат — мелко, если у рубрики их несколько. */
+/** Подпись банка — название рубрики («Демо»); формат — мелко, если у рубрики их несколько. */
 export const bankTitle = (plan: Plan, rule: Rule) => {
   const r = plan.rubrics.find((x) => x.id === rule.rubricId)
-  return r ? tagOf(r.name) : rule.name
+  return r ? r.name : rule.name
 }
 export const bankLabel = (plan: Plan, rule: Rule) => `${bankTitle(plan, rule)}${rule.name !== 'FULL' && rule.name !== bankTitle(plan, rule) ? ` · ${rule.name}` : ''}`
 
@@ -45,8 +45,8 @@ export function CreateTabs({ current }: { current: 'new' | 'drafts' }) {
   )
 }
 
-/** Черновики — банк идей во вкладке «+»: темы без даты по хэштегам. Добавить списком, «Разложить по слотам»,
- *  поставить в ближайший слот, вернуть; при планировании недели они подставляются сами — ближайшие по хэштегу. */
+/** Черновики — банк идей во вкладке «+»: темы без даты по рубрикам. Добавить списком, «Разложить по слотам»,
+ *  поставить в ближайший слот, вернуть; при планировании недели они подставляются сами — ближайшие по рубрике. */
 export function DraftsSheet({ onClose }: { onClose: () => void }) {
   const { plan } = usePlan()
   const from = today() < plan.start ? plan.start : today()

@@ -1,7 +1,7 @@
 // Все изменения плана — чистые функции Plan → Plan; reducer добавляет к ним историю
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
 import { addDays, daysBetween, fromMin, toMin, weekday } from './dates'
-import { FORMAT_PLATFORMS, isSlot, PLACEHOLDER, tagOf, TEXT_IMAGE, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
+import { FORMAT_PLATFORMS, isSlot, PLACEHOLDER, rubricKey, rubricName, TEXT_IMAGE, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
 export const newId = (prefix = 'n') => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`
@@ -323,7 +323,7 @@ export function createSlots(plan: Plan, ruleId: string, from: ISODate, to: ISODa
   return next
 }
 
-/** Периодичность хэштега в канале: дни недели и время формата. С from слоты без темы встают на новые дни
+/** Периодичность рубрики в канале: дни недели и время формата. С from слоты без темы встают на новые дни
  *  (до конца плана), а пустые слоты на днях, которые сняли, уходят; материалы с темой остаются на местах. */
 export function setPeriod(plan: Plan, ruleId: string, days: boolean[], time: string | undefined, from: ISODate): Plan {
   const rule = ruleOf(plan, ruleId)
@@ -345,7 +345,7 @@ export function takeDraft(plan: Plan, slotId: string, draftId: string): Plan {
   return { ...next, items: next.items.filter((x) => x.id !== draftId) }
 }
 
-/** Ближайшие черновики для слотов — по тегу: сначала того же формата, потом того же хэштега в том же канале.
+/** Ближайшие черновики для слотов — по тегу: сначала того же формата, потом той же рубрики в том же канале.
  *  Каждый черновик предлагается одному слоту; слоты — по порядку дат. */
 export function draftsFor(plan: Plan, slots: Item[]): Map<string, Item> {
   const used = new Set<string>()
@@ -369,7 +369,7 @@ export const updateRule = (plan: Plan, id: string, patch: Partial<Rule>): Plan =
   rules: plan.rules.map((r) => (r.id === id ? { ...r, ...patch } : r)),
 })
 
-/** Новый формат хэштега в канале; без дней — разовый: периодичность задаётся потом. */
+/** Новый формат рубрики в канале; без дней — разовый: периодичность задаётся потом. */
 export const addRule = (
   plan: Plan,
   rubricId: string | null,
@@ -410,10 +410,10 @@ export const updateRubric = (plan: Plan, id: string, patch: Partial<Rubric>): Pl
   rubrics: plan.rubrics.map((r) => (r.id === id ? { ...r, ...patch } : r)),
 })
 
-/** Новый хэштег; такой уже есть (без «#», без учёта регистра) — план не меняется. */
+/** Новая рубрика; такой уже есть (без «#», без учёта регистра) — план не меняется. */
 export const addRubric = (plan: Plan, name: string, what = '', id = newId('k')): Plan => {
-  const n = name.trim().replace(/^#/, '')
-  if (!n || plan.rubrics.some((r) => r.id === id || tagOf(r.name) === tagOf(n))) return plan
+  const n = rubricName(name)
+  if (!n || plan.rubrics.some((r) => r.id === id || rubricKey(r.name) === rubricKey(n))) return plan
   return { ...plan, rubrics: [...plan.rubrics, { id, name: n, what }] }
 }
 

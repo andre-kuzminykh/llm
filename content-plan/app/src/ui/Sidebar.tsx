@@ -1,7 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { today } from '../model/dates'
 import { NO_FILTERS, type Filters } from '../model/filters'
-import { FORMAT_ICON, FORMATS, GRAY, statusOf, tagOf, type Channel } from '../model/types'
+import { FORMAT_ICON, FORMATS, GRAY, rubricName, statusOf, type Channel } from '../model/types'
 import { IconButton, PlatformIcon, StatusFilter, Switch } from './bits'
 import { AddInline, ChannelMenu, ChannelRename, useDismiss } from './ChannelEdit'
 import { usePlan, type Ctx } from './ctx'
@@ -34,7 +34,7 @@ export function activeFilters({ plan, filters: f, setFilters }: Pick<Ctx, 'plan'
   if (picked.length && picked.length < plan.rubrics.length)
     out.push({
       id: 'rb',
-      label: picked.length > 2 ? `Рубрик: ${picked.length}` : `Только ${names(picked.map((r) => tagOf(r.name)))}`,
+      label: picked.length > 2 ? `Рубрик: ${picked.length}` : `Только ${names(picked.map((r) => r.name))}`,
       clear: () => set({ pickedRubrics: [] }),
     })
   if (f.statuses.length) out.push({ id: 'st', label: `Только «${f.statuses.map((s) => statusOf(s).label).join('», «')}»`, clear: () => set({ statuses: [] }) })
@@ -183,7 +183,7 @@ function useReorder(onMove: (id: string, to: number) => void) {
   return { list, drag, start }
 }
 
-/** Заголовок блока фильтров с «+»: каналы, площадки и хэштеги можно добавлять прямо здесь. */
+/** Заголовок блока фильтров с «+»: каналы, площадки и рубрики можно добавлять прямо здесь. */
 function BlockHead({ label, add, adding, onAdd }: { label: string; add: string; adding: boolean; onAdd: () => void }) {
   return (
     <div className="cp-side__label">
@@ -193,8 +193,8 @@ function BlockHead({ label, add, adding, onAdd }: { label: string; add: string; 
   )
 }
 
-/** Фильтры — панелью слева, рядом с отделами: каналы с разделами, площадки, хэштеги, статус. Сворачивается и разворачивается
- *  кнопкой «Фильтры» в шапке; на узком экране — поверх календаря. «+» у каналов, площадок и хэштегов — добавить новый. */
+/** Фильтры — панелью слева, рядом с отделами: каналы с разделами, площадки, рубрики, статус. Сворачивается и разворачивается
+ *  кнопкой «Фильтры» в шапке; на узком экране — поверх календаря. «+» у каналов, площадок и рубрик — добавить новый. */
 export function Sidebar({ onClose }: { onClose: () => void }) {
   const { plan, filters, setFilters, narrow, dispatch, toast } = usePlan()
   const reorder = useReorder((id, to) => {
@@ -335,11 +335,11 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
         {adding === 'tag' && (
           <AddInline
             label="Новая рубрика"
-            placeholder="#рубрика"
+            placeholder="Название рубрики"
             onDone={() => setAdding(null)}
             onAdd={(name) => {
               dispatch({ type: 'addRubric', name })
-              toast(`Рубрика ${tagOf(name.replace(/^#/, ''))} добавлена — периодичность в канале задаётся в дашборде, в «Темах»`, true)
+              toast(`Рубрика «${rubricName(name)}» добавлена — периодичность в канале задаётся в дашборде, в «Темах»`, true)
             }}
           />
         )}
@@ -353,7 +353,7 @@ export function Sidebar({ onClose }: { onClose: () => void }) {
               aria-pressed={!!filters.pickedRubrics?.includes(r.id)}
               onClick={() => setFilters({ ...filters, pickedRubrics: toggle(filters.pickedRubrics ?? [], r.id) })}
             >
-              {tagOf(r.name)}
+              {r.name}
             </button>
           ))}
         </div>
