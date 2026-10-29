@@ -122,17 +122,23 @@ await jump('2026-11-09')
 await page.screenshot({ path: `${SHOTS}/6-week.png` })
 const sheet = page.locator('.cp-body')
 const scrolled = await sheet.evaluate((el) => el.scrollTop)
-check(scrolled > 0 && Math.round(scrolled) % 80 === 40, 'шкала открыта за полчаса до часа первого материала недели', `шкала прокручена на ${scrolled}px`)
+const HOUR = Number(await page.locator('.cp-tg__col').first().getAttribute('data-hour'))
+check(scrolled > 0 && Math.round(scrolled) % HOUR === HOUR / 2, 'шкала открыта за полчаса до часа первого материала недели', `шкала прокручена на ${scrolled}px`)
 const col = page.locator('.cp-tg__col[data-date="2026-11-10"]')
 const thesis = col.locator('.cp-card', { hasText: 'Тезисы' }).first()
 const box = await col.boundingBox()
 const clock = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 const [h0, m0] = (await thesis.locator('.cp-card__time').textContent()).split(':').map(Number)
 const later = clock(h0 * 60 + m0 + 120)
+// карточку — повыше, чтобы на два часа ниже было ещё видно
+await thesis.evaluate((el) => {
+  const body = el.closest('.cp-body')
+  body.scrollTop += el.getBoundingClientRect().top - body.getBoundingClientRect().top - 260
+})
 const tb = await thesis.boundingBox()
 await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2)
 await page.mouse.down()
-await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2 + 2 * 80, { steps: 10 })
+await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2 + 2 * HOUR, { steps: 10 })
 check(
   await col.locator('.cp-card--lifted .cp-card__time', { hasText: later }).count(),
   'карточка едет за указателем по 15 минутам, на ней — время, куда встанет',
@@ -161,7 +167,7 @@ const grip = col.locator('.cp-card', { hasText: 'Тезисы' }).first().locato
 const gb = await grip.boundingBox()
 await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2)
 await page.mouse.down()
-await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2 + 80, { steps: 8 })
+await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2 + HOUR, { steps: 8 })
 await page.mouse.up()
 const range = await col.locator('.cp-card', { hasText: 'Тезисы' }).first().locator('.cp-card__time').textContent()
 check(range === `${clock(h0 * 60 + m0)}–${clock(h0 * 60 + m0 + 90)}`, 'нижний край тянут — карточка длиннее (полчаса + час), «начало–конец»', `после растягивания: ${range}`)
@@ -441,7 +447,7 @@ await page.keyboard.press('Control+z')
     const body = document.querySelector('.cp-body').getBoundingClientRect()
     const r = col.getBoundingClientRect()
     const x = r.left + r.width / 2
-    for (let y = body.top + 120; y < body.bottom - 40; y += 20) if (document.elementFromPoint(x, y) === col) return { x, y, min: Math.floor(((y - r.top) / 80) * 2) * 30 }
+    for (let y = body.top + 120; y < body.bottom - 40; y += 20) if (document.elementFromPoint(x, y) === col) return { x, y, min: Math.floor(((y - r.top) / Number(col.dataset.hour)) * 2) * 30 }
     return null
   })
   await page.mouse.click(spot.x, spot.y)
@@ -451,7 +457,14 @@ await page.keyboard.press('Control+z')
   check(when[0] === '2026-11-12' && when[1] === slotWant, `«Время»: щелчок по пустому месту — новый контент на этот день и получас (${slotWant})`, `щелчок по шкале: ${when.join(' ')}, ждали ${slotWant}`)
   await slotForm.getByRole('button', { name: 'Закрыть' }).click()
   const h = await page.locator('.cp-tg__col .cp-card').first().evaluate((el) => el.getBoundingClientRect().height)
-  check(h <= 42, 'карточка без конца на шкале — полчаса', `карточка высотой ${h}px`)
+  check(h <= HOUR / 2, 'карточка без конца на шкале — полчаса', `карточка высотой ${h}px`)
+  // в получасовой карточке три строки: рубрика со временем, тема, значки — формат первым, за ним площадки
+  const rows = await page.locator('.cp-tg__col .cp-card').first().evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const ic = el.querySelector('.cp-card__icons')
+    return { fits: !!ic && ic.getBoundingClientRect().bottom <= r.bottom, first: ic?.firstElementChild?.className ?? '' }
+  })
+  check(rows.fits && rows.first.includes('cp-card__f'), 'получасовая карточка: рубрика со временем, тема и ряд значков (формат первым) — всё видно', `значки не влезли или не тот порядок: ${JSON.stringify(rows)}`)
 }
 
 // «Месяц»: в каждом дне видно всё; перенос на другой день; щелчок по пустому месту — новый контент

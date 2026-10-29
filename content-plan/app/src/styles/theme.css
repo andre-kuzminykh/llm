@@ -356,10 +356,16 @@ body.cp-grabbing, body.cp-grabbing * { cursor: grabbing !important; }
 .cp-card--chip .cp-card__title { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-card--chip .cp-card__bad { order: 1; }
 .cp-card--chip .cp-task-btn { top: 1px; right: 1px; width: 18px; height: 18px; }
-/* строка дорожки: время и рубрика (или что выходит на площадке) — мелко, под ними тема */
+/* строка дорожки: время и рубрика — мелко, под ними тема, внизу значки */
 .cp-card--line .cp-card__time { order: -1; margin: 0; color: var(--nr-text-3); }
 .cp-card--line .cp-rub { font-weight: var(--nr-fw-medium); color: var(--nr-text-3); }
-.cp-card__kind { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--nr-text-3); }
+/* снизу в ряд: формат (первым, чуть темнее), черта, площадки — куда выходит */
+.cp-card__icons { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 3px; margin-top: 1px; color: var(--nr-text-3); line-height: 12px; }
+.cp-card__f { display: inline-grid; place-items: center; flex: none; color: var(--nr-text-2); }
+.cp-card__f + .cp-pi, .cp-card__f + .cp-card__more { margin-left: 1px; padding-left: 5px; border-left: 1px solid var(--nr-sep); }
+.cp-card__more { flex: none; font-size: 10.5px; font-weight: var(--nr-fw-medium); font-variant-numeric: tabular-nums; }
+/* на шкале — одной строкой во всю ширину карточки (кнопка ▶ — вверху справа, ряду не мешает); что не влезло — «+N» */
+.cp-tg__col .cp-card__icons { flex-wrap: nowrap; height: 12px; margin-right: -16px; overflow: hidden; }
 .cp-card--full .cp-card__open { padding: 6px 30px 7px 10px; font-size: var(--nr-fs-md); gap: 2px; }
 .cp-card--full .cp-card__rub { font-size: var(--nr-fs-sm); }
 .cp-card--mini .cp-card__open { padding-top: 2px; padding-bottom: 3px; }
@@ -473,10 +479,10 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-tg__grip::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 18px; height: 3px; margin-left: -9px; border-radius: 2px; background: var(--nr-text-3); opacity: 0; transition: opacity var(--nr-dur-1) var(--nr-ease); }
 @media (hover: hover) { .cp-card:hover .cp-tg__grip::after { opacity: 0.5; } }
 .cp-card--lifted .cp-tg__grip::after { opacity: 0.5; }
-.cp-tg__col .cp-card__open { gap: 1px; padding-top: 3px; padding-bottom: 3px; }
+.cp-tg__col .cp-card__open { gap: 1px; padding-top: 2px; padding-bottom: 2px; }
 .cp-tg__col .cp-card__title { -webkit-line-clamp: 1; }
 .cp-tg__col .cp-card__open { padding-right: 20px; }
-.cp-tg__col .cp-card__fmt { display: none; } /* на шкале места мало: рубрика, время и тема; формат — в подсказке */
+.cp-tg__col .cp-card__fmt { display: none; } /* на шкале места мало: рубрика, время, тема и значки; формат словом — в подсказке */
 .cp-week__daybtn { gap: 6px; padding: 0 6px; }
 .cp-week__wd { color: var(--nr-text-3); font-weight: var(--nr-fw-medium); }
 .cp-week__date { font-weight: var(--nr-fw-semibold); font-size: var(--nr-fs-md); }

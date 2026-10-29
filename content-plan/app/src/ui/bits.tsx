@@ -2,7 +2,7 @@
 import { useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from 'react'
 import { addDays, daysBetween } from '../model/dates'
 import { whereText } from '../model/hint'
-import { colorOf, isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
+import { colorOf, FORMAT_ICON, isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { grabCard } from './drag'
@@ -165,13 +165,16 @@ export const mainChannelId = (plan: Plan) =>
 /** Карточка материала — тихая строка: полоска слева — цвет канала, рубрика словом, тема.
  *  chip — строка «24/7» над шкалой (время, рубрика, тема одной строкой), compact — шкала времени и лента, line — дорожки недели (время и тема),
  *  full — панель дня: под темой площадки и что на каждой выходит. ▶ в углу — задача. */
-export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, kind, when, onGrab, className, children }: {
+export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, icons = variant === 'compact' || variant === 'line', iconRoom, when, onGrab, className, children }: {
   unit: Unit
   variant?: CardVariant
   style?: CSSProperties
   showTime?: boolean
   narrow?: boolean
-  kind?: string
+  /** Снизу в ряд: значок формата, за ним значки площадок, куда выходит. В месяце — без него: там тесно. */
+  icons?: boolean
+  /** Ширина ряда значков, px (шкала времени): что не влезло — «+N». Без неё ряд переносится. */
+  iconRoom?: number
   /** Время на карточке вместо своего — пока её ведут по шкале, там время, куда она встанет. */
   when?: string
   /** Свои жесты (шкала времени); без них карточку переносят на другой день — drag.ts. */
@@ -198,6 +201,13 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const st = statusOf(head.status)
   const label = `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
   const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
+  // форматы карточки: главного материала первым, остальные — по порядку (горизонталь, вертикаль, веб, пост)
+  const own = new Set(unit.items.map((it) => it.format))
+  const formats = [head.format, ...Object.keys(FORMAT_ICON).filter((f) => f !== head.format && own.has(f))].filter((f) => FORMAT_ICON[f])
+  // на шкале ряд не переносится: значок с промежутком — 15 px, черта между форматом и площадками — 6; не влезло — «+N»
+  const fit = iconRoom === undefined ? Infinity : Math.floor((iconRoom + 3 - (formats.length && plats.length ? 6 : 0)) / 15)
+  const shownPlats = formats.length + plats.length > fit ? plats.slice(0, Math.max(0, fit - formats.length - 1)) : plats
+  const restPlats = plats.slice(shownPlats.length)
   const line = variant === 'line' || variant === 'chip'
   // растянутая на шкале карточка — с концом: «12:00–13:30»
   const time = when ?? (unit.end && !unit.stream && variant === 'compact' ? `${unit.time}–${unit.end}` : timeText(unit))
@@ -242,7 +252,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
           <>
             <span className="cp-card__rub">
               {showTime && <span className="cp-card__time">{time}</span>}
-              {kind ? <span className="cp-card__kind">{kind}</span> : rubric && <RubricChip name={rubric.name} />}
+              {rubric && <RubricChip name={rubric.name} />}
               {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
             </span>
@@ -259,6 +269,23 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
             </span>
             <span className="cp-card__title">{title}</span>
           </>
+        )}
+        {icons && (formats.length > 0 || plats.length > 0) && (
+          <span className="cp-card__icons" aria-hidden="true">
+            {formats.map((f) => (
+              <span key={f} className="cp-card__f" title={FORMAT_ICON[f].label}>
+                <Icon name={FORMAT_ICON[f].icon} size={12} />
+              </span>
+            ))}
+            {shownPlats.map(({ platform }) => (
+              <PlatformIcon key={platform} platform={platform} size={12} />
+            ))}
+            {restPlats.length > 0 && (
+              <span className="cp-card__more" title={restPlats.map((p) => p.platform).join(', ')}>
+                +{restPlats.length}
+              </span>
+            )}
+          </span>
         )}
         {variant === 'full' && (
           <span className="cp-types" aria-label={`Площадки: ${platLabel}`}>

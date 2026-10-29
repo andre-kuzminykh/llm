@@ -89,7 +89,7 @@ function MonthDay({ date, out }: { date: ISODate; out: boolean }) {
         {units.length > 0 && <span className="cp-month__n" aria-hidden="true">{units.length}</span>}
       </span>
       {units.map((u) => (
-        <UnitCard key={u.key} unit={u} variant="line" />
+        <UnitCard key={u.key} unit={u} variant="line" icons={false} />
       ))}
     </div>
   )

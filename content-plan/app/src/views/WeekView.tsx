@@ -5,7 +5,7 @@ import {
 import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
 import { whereText } from '../model/hint'
 import { FORMAT_SHORT, FULL_VIDEO, SHORT_VIDEO, shownTitle, type ISODate, type Item, type Plan } from '../model/types'
-import { platformTypes, type Unit } from '../model/units'
+import { type Unit } from '../model/units'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan, type Mode } from '../ui/ctx'
 import { autoScroll, hintBox, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
@@ -51,7 +51,7 @@ export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
   return out
 }
 
-const HOUR = 80 // px на час: в получасовую карточку помещаются две строки — рубрика со временем и тема
+const HOUR = 104 // px на час: в получасовую карточку помещаются три строки — рубрика со временем, тема, значки формата и площадок
 const PPM = HOUR / 60 // px на минуту
 const HEAD = 52 // высота шапки дней
 const GUT = 56 // колонка часов
@@ -482,6 +482,8 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
               unit={u}
               variant="compact"
               narrow={w < 110}
+              // ряд значков — во всю ширину карточки, под кнопкой ▶ тоже: полоска 3 px и отступ 8 px слева, 4 px справа
+              iconRoom={w - 2 - 3 - 8 - 4}
               className={lifted ? 'cp-card--lifted' : undefined}
               when={lifted ? (moving ? minutesToClock(Math.max(0, Math.min(topMin + moving.dMin, 1425))) : `${u.time}–${minutesToClock(end)}`) : undefined}
               style={{ position: 'absolute', ...box, height: Math.max(18, (end - topMin) * PPM - 2), ...ghost }}
@@ -499,7 +501,7 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
 // ── дорожками ────────────────────────────────────────────────────────────────
 
 function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }: { days: { date: ISODate; i: number }[]; count: number; col: number; gutter: number; mode: Mode; hidden: string[]; shown: [ISODate, ISODate] }) {
-  const { plan, filters, unitsOn, rules, channels, dispatch, toast } = usePlan()
+  const { plan, filters, unitsOn, channels, dispatch, toast } = usePlan()
   // в «Каналах» канал правят прямо в дорожке: «⋯» — переименовать, выше, ниже, удалить; внизу — «Добавить канал»
   const [renaming, setRenaming] = useState<string | null>(null)
   const [menu, setMenu] = useState<string | null>(null)
@@ -527,17 +529,12 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
         ? plan.rubrics.filter((r) => !filters.pickedRubrics?.length || filters.pickedRubrics.includes(r.id)).map((r) => ({ id: r.id, label: r.name, match: (it: Item) => it.rubricId === r.id }))
         : plan.platforms.filter((p) => !filters.hiddenPlatforms.includes(p)).map((p) => ({ id: p, label: p, match: (it: Item) => it.platforms.includes(p) }))
   // по каналам карточка стоит в дорожке своего главного материала (FULL — в «FULL», тизер внутри неё);
-  // по площадкам — строкой на каждой площадке, где она выходит, с тем, что там выходит
+  // по площадкам — на каждой площадке, где она выходит: с рубрикой, как везде, а формат и площадки — значками внизу
   const cells = lanes.map((lane) => ({
     lane,
     days: days.map(({ date }) => ({
       date,
-      rows: unitsOn(date).flatMap((u) => {
-        if (mode !== 'platforms') return lane.match(u.head) ? [{ u }] : []
-        if (!u.items.some(lane.match)) return []
-        const p = platformTypes(u, rules, plan.platforms).find((x) => x.platform === lane.id)
-        return [{ u, kind: p?.parts.map((x) => x.type).join(', ') }]
-      }),
+      rows: unitsOn(date).filter((u) => (mode === 'platforms' ? u.items.some(lane.match) : lane.match(u.head))),
     })),
   }))
   // дорожки и числа — по дням на экране: пустые дорожки не показываются; каналы — все, даже пустой новый
@@ -612,13 +609,13 @@ function LaneGrid({ days, count, col, gutter, mode, hidden, shown: [from, to] }:
   )
 }
 
-function LaneCell({ lane, date, rows, open }: { lane: Lane; date: ISODate; rows: { u: Unit; kind?: string }[]; open: boolean }) {
+function LaneCell({ lane, date, rows, open }: { lane: Lane; date: ISODate; rows: Unit[]; open: boolean }) {
   const { dropOn, openNew } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
   const cls = ['cp-cell', !open && 'cp-cell--closed', weekday(date) === SAT && 'cp-cell--rest', drop.over && 'cp-cell--drop'].filter(Boolean).join(' ')
   return (
     <div className={cls} role="gridcell" {...drop.props} data-date={date} data-drop={date} data-lane={lane.id}>
-      {open ? rows.map(({ u, kind }) => <UnitCard key={u.key} unit={u} variant="line" kind={kind} />) : rows.length > 0 && <span className="cp-cell__n">{rows.length}</span>}
+      {open ? rows.map((u) => <UnitCard key={u.key} unit={u} variant="line" />) : rows.length > 0 && <span className="cp-cell__n">{rows.length}</span>}
       {open && lane.channelId && (
         <button
           type="button"

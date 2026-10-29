@@ -4,7 +4,7 @@ import { renderApp } from '../test/renderApp'
 
 // календарь неделей по времени, неделя на экран: колонка — (1200 − 56) / 7 px (в jsdom ширины нет — берётся 1200)
 const COL = Math.floor((1200 - 56) / 7)
-const HOUR = 80
+const HOUR = 104 // как в WeekView
 const week = () => renderApp(undefined, { 'cp:week-mode': 'time' })
 const sheet = () => document.querySelector('.cp-body') as HTMLElement
 const column = (date: string) => document.querySelector(`.cp-tg__col[data-date="${date}"]`) as HTMLElement
@@ -245,7 +245,7 @@ describe('T-CP-045 FR-CP-045 карточка на полчаса; щелчок 
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     const col = document.querySelector('.cp-tg__col[data-date="2026-10-29"]') as HTMLElement
-    fireEvent.click(col, { clientY: 80 * 10 + 53 }) // 80 px на час: 10:40
+    fireEvent.click(col, { clientY: HOUR * 10 + (HOUR * 40) / 60 }) // 10:40
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
     expect(within(form).getByLabelText('Дата')).toHaveValue('2026-10-29')
     expect(within(form).getByLabelText('Время выхода')).toHaveValue('10:30')
@@ -304,5 +304,42 @@ describe('T-CP-046 FR-CP-046 «Неделя / Месяц»: в месяце в �
       document.elementFromPoint = at
     }
     expect(within(month.querySelector('[data-date="2026-10-29"]') as HTMLElement).getByRole('button', { name: /^Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ/ })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-048 FR-CP-048 внизу карточки — значок формата, за ним значки площадок', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const icons = (el: Element) => [...el.querySelectorAll('.cp-card__icons > [title]')].map((x) => x.getAttribute('title'))
+  // FULL с тизером и анонсом — одна карточка: три формата, площадки — в порядке плана
+  const demo = ['Горизонталь', 'Вертикаль', 'Веб', 'Web', 'YouTube', 'Instagram', 'Telegram']
+
+  it('«Время», «Каналы», «Площадки», «Темы» — значки в ряд; в «Площадках» рубрика, а не «Видео / Shorts / Reels»; в месяце значков нет', async () => {
+    week()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    expect(icons(card('demo'))).toEqual(demo)
+    expect(icons(card('thesis'))).toEqual(['Вертикаль', 'YouTube'])
+    const views = () => screen.getByRole('radiogroup', { name: 'Вид календаря' })
+    await userEvent.click(within(views()).getByRole('radio', { name: 'Площадки' }))
+    const lanes = await screen.findByRole('grid', { name: 'Неделя по площадкам' })
+    const ig = lanes.querySelector('[data-lane="Instagram"][data-date="2026-10-26"] [data-unit="demo"]') as HTMLElement
+    expect(within(ig).getByLabelText('Рубрика: Демо')).toBeInTheDocument()
+    expect(ig.querySelector('.cp-card__rub')?.textContent).not.toMatch(/Видео|Shorts|Reels|Статья|Пост/)
+    expect(icons(ig)).toEqual(demo)
+    await userEvent.click(within(views()).getByRole('radio', { name: 'Каналы' }))
+    const byChannel = await screen.findByRole('grid', { name: 'Неделя по каналам' })
+    expect(icons(byChannel.querySelector('[data-unit="thesis"]') as HTMLElement)).toEqual(['Вертикаль', 'YouTube'])
+    await userEvent.click(within(views()).getByRole('radio', { name: 'Темы' }))
+    const byRubric = await screen.findByRole('grid', { name: 'Неделя по темам' })
+    expect(icons(byRubric.querySelector('[data-unit="demo"]') as HTMLElement)).toEqual(demo)
+    await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Неделя или месяц' })).getByRole('radio', { name: 'Месяц' }))
+    const month = screen.getByRole('grid', { name: 'Месяц: Октябрь 2026' })
+    expect(month.querySelector('.cp-card__icons')).toBeNull()
   })
 })
