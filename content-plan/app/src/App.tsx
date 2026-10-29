@@ -15,6 +15,7 @@ import { SelectionBar } from './ui/SelectionBar'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
+import { AnalyticsView } from './views/AnalyticsView'
 import { DraftsSheet } from './views/BankView'
 import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
@@ -70,6 +71,14 @@ const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
   { id: 'engineering', label: 'Инжиниринг', icon: 'wrench' },
 ]
 const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
+
+/** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): календарь контента первым, аналитика второй;
+ *  остальные появятся позже. */
+type Section = 'calendar' | 'analytics'
+const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
+  { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
+  { id: 'analytics', label: 'Аналитика', full: 'Аналитика каналов и конкурентов', icon: 'chart' },
+]
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -193,6 +202,12 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     return { ...f, hiddenPlatforms: f.hiddenPlatforms.filter((p) => !isHome(p)), hiddenFormats: f.hiddenFormats?.map((x) => (x === OLD_MAIL ? MAIL : x)) }
   })
   const [sheet, setSheet] = useState<Sheet>(null)
+  const [section, setSectionState] = useState<Section>(() => (readLS<string>('cp:section', 'calendar') === 'analytics' ? 'analytics' : 'calendar'))
+  const setSection = (s: Section) => {
+    setSectionState(s)
+    writeLS('cp:section', s)
+    setSheet(null)
+  }
   const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)
   const narrow = useMedia('(max-width: 900px)')
   const phone = useMedia('(max-width: 600px)')
@@ -419,10 +434,12 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}`}>
         {phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
-            <button type="button" className="cp-tab" aria-current="page" onClick={() => setSheet(null)}>
-              <Icon name="calendar" size={22} />
-              <span>Календарь</span>
-            </button>
+            {SECTIONS.map((s) => (
+              <button key={s.id} type="button" className="cp-tab" aria-current={section === s.id ? 'page' : undefined} onClick={() => setSection(s.id)}>
+                <Icon name={s.icon} size={22} />
+                <span>{s.label}</span>
+              </button>
+            ))}
             <button type="button" className="cp-tab" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
               <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
               <span>Профиль</span>
@@ -453,10 +470,20 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
             {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} onPeriod={() => { setMenu(false); setSheet({ kind: 'period' }) }} />}
           </nav>
         )}
-        {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {sideOpen && <Sidebar onClose={() => setSideOpen(false)} />}
+        {!phone && (
+          <nav className="cp-sub" aria-label="SMM">
+            {SECTIONS.map((s) => (
+              <button key={s.id} type="button" className="cp-sub__item" aria-current={section === s.id ? 'page' : undefined} aria-label={s.full} title={s.full} onClick={() => setSection(s.id)}>
+                <Icon name={s.icon} size={20} />
+                <span aria-hidden="true">{s.label}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+        {section === 'calendar' && narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
+        {section === 'calendar' && sideOpen && <Sidebar onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
-          {ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
+          {section === 'analytics' ? <AnalyticsView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} />}
@@ -464,7 +491,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'help' && <HelpSheet onClose={closeSheet} />}
-          {!sheet && !selected.size && (
+          {section === 'calendar' && !sheet && !selected.size && (
             <button type="button" className="cp-fab" aria-label="Новый контент" title="Запланировать контент" onClick={() => ctx.openNew({ date: anchor < today() ? today() : anchor })}>
               <Icon name="plus" size={26} />
             </button>

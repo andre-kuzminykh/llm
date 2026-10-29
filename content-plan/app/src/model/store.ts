@@ -1,7 +1,7 @@
 // Все изменения плана — чистые функции Plan → Plan; reducer добавляет к ним историю
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
 import { addDays, daysBetween, fromMin, toMin, weekday } from './dates'
-import { FORMAT_HOME, FORMAT_PLATFORMS, isSlot, PLACEHOLDER, rubricKey, rubricName, TEXT_IMAGE, timeOf, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
+import { FORMAT_HOME, FORMAT_PLATFORMS, isSlot, PLACEHOLDER, rubricKey, rubricName, TEXT_IMAGE, timeOf, type Analytics, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
 export const newId = (prefix = 'n') => `${prefix}${Date.now().toString(36)}${(seq++).toString(36)}`
@@ -483,6 +483,7 @@ export type Action =
   | { type: 'removeChannel'; id: string }
   | { type: 'moveChannel'; id: string; to: number }
   | { type: 'reorder'; what: Order; id: string; target: string; after: boolean }
+  | { type: 'analytics'; patch: Partial<Analytics> }
   | { type: 'catchUp'; moves: CatchUpMove[] }
   | { type: 'moveGroups'; moves: { id: string; date: ISODate; time?: string }[]; remove?: string[] }
   | { type: 'addPlatform'; name: string }
@@ -525,6 +526,7 @@ function apply(plan: Plan, a: Action): Plan {
     case 'removeChannel': return removeChannel(plan, a.id)
     case 'moveChannel': return moveChannel(plan, a.id, a.to)
     case 'reorder': return reorder(plan, a.what, a.id, a.target, a.after)
+    case 'analytics': return { ...plan, analytics: { competitors: [], ...plan.analytics, ...a.patch } }
     case 'catchUp': return catchUp(plan, a.moves)
     case 'moveGroups': return moveGroups(plan, a.moves, a.remove)
     case 'addPlatform': return addPlatform(plan, a.name)

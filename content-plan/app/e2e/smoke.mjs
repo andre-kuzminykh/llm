@@ -280,6 +280,33 @@ check(((await page.locator('.cp-drag-hint').textContent()) ?? '').startsWith('Ч
 await page.mouse.up()
 check(await target.locator('.cp-card__title', { hasText: laneTitle }).count(), 'перенос в дорожках указателем', 'в дорожках карточка не переехала')
 await page.keyboard.press('Control+z')
+// СММ: справа от отделов — «Календарь» и «Аналитика»; в аналитике — свои каналы, конкуренты (из маркет-анализа — пунктиром)
+{
+  const smm = page.getByRole('navigation', { name: 'SMM' })
+  const items = await smm.getByRole('button').allTextContents()
+  const rail = await page.getByRole('navigation', { name: 'Отделы' }).boundingBox()
+  const sub = await smm.boundingBox()
+  await smm.getByRole('button', { name: /^Аналитика/ }).click()
+  await page.getByRole('heading', { name: 'Аналитика' }).waitFor()
+  const cards = await page.locator('.cp-an__card').count()
+  const channelsN = await page.getByRole('group', { name: 'Каналы для анализа' }).getByRole('button').count()
+  const bars = await page.locator('.cp-an__bar').count()
+  const soon = await page.locator('.cp-an__soon[aria-disabled="true"]', { hasText: 'Из маркетингового анализа' }).evaluate((el) => getComputedStyle(el).borderStyle)
+  const rivals = page.getByRole('form', { name: 'Новый конкурент' })
+  await rivals.getByLabel('Название').fill('AI Daily')
+  await rivals.getByLabel('Ссылка или @аккаунт').fill('@aidaily')
+  await rivals.getByRole('button', { name: 'Следить' }).click()
+  const watched = await page.getByRole('list', { name: 'Конкуренты' }).getByText('AI Daily').count()
+  await page.screenshot({ path: `${SHOTS}/8-analytics.png` })
+  await toast().getByRole('button', { name: 'Отменить' }).click()
+  check(
+    items.join('|') === 'Календарь|Аналитика' && sub.x >= rail.x + rail.width - 1 && cards === channelsN && bars > 0 && soon === 'dashed' && watched,
+    `СММ: «Календарь» и «Аналитика» справа от отделов; ${cards} карточек каналов с ритмом, конкуренты, маркет-анализ — пунктиром`,
+    `аналитика: ${items.join(', ')}, карточек ${cards}/${channelsN}, столбиков ${bars}, рамка «${soon}», конкурент ${watched}`,
+  )
+  await smm.getByRole('button', { name: 'Календарь контента' }).click()
+  await page.getByRole('grid', { name: /Неделя по каналам/ }).waitFor()
+}
 // «Темы»: дорожку тянут мышью за название — встаёт выше; «Отменить» возвращает
 await modes.getByRole('radio', { name: 'Темы' }).click()
 await page.getByRole('grid', { name: 'Неделя по темам' }).waitFor()
@@ -637,7 +664,7 @@ const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isM
 await phone.goto(BASE)
 await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
-check(tabs.join('|') === 'Календарь|Профиль', 'телефон: внизу Календарь и Профиль, без дашборда', `телефон: внизу ${tabs.join(', ')}`)
+check(tabs.join('|') === 'Календарь|Аналитика|Профиль', 'телефон: внизу Календарь, Аналитика и Профиль, без дашборда', `телефон: внизу ${tabs.join(', ')}`)
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка в одну строку', `телефон: шапка ${head?.height}px`)
 check(!(await phone.locator('.cp-side').count()), 'телефон: фильтры свёрнуты', 'телефон: фильтры открыты сами')

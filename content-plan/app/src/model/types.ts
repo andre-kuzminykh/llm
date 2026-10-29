@@ -82,6 +82,21 @@ export interface Item {
   series?: string // повтор: у всех материалов одного повтора — один id
 }
 
+/** Канал конкурента: его заводит человек (позже подтянутся из маркетингового анализа); мониторим каждый час. */
+export interface Competitor {
+  id: string
+  name: string
+  platform: string // где канал: YouTube, Telegram… или Web
+  handle: string // ссылка или @аккаунт
+  added: ISODate
+}
+
+/** Аналитика СММ: какие свои каналы смотрим и за какими конкурентами следим. */
+export interface Analytics {
+  skip?: string[] // свои каналы, которые не анализируем; без поля — все
+  competitors: Competitor[]
+}
+
 export interface Plan {
   version: 3
   start: ISODate
@@ -91,6 +106,7 @@ export interface Plan {
   rubrics: Rubric[]
   rules: Rule[]
   items: Item[]
+  analytics?: Analytics
 }
 
 /** Статус показывается значком; «в плане» — без значка. Подпись — для подсказки и экранного диктора. */
