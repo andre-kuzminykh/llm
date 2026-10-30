@@ -1,34 +1,44 @@
-// Аналитика СММ — второй пункт меню СММ после календаря. Свои каналы: какие смотреть (все, что есть в плане) и по каждому —
-// сколько вышло, что не вышло вовремя, что впереди, ритм по неделям, форматы, площадки, рубрики. Конкуренты: человек
-// заводит их сам (из маркетингового анализа подтянутся позже — пунктиром), мы проверяем их каналы каждый час и кладём
-// их контент с саммери ниже, чтобы переиспользовать. Охваты и сбор контента заработают, когда подключим площадки и сервер.
-import { useMemo, useState } from 'react'
-import { channelStats, type ChannelStats, type Week } from '../model/analytics'
-import { shortDate, today } from '../model/dates'
-import { plural } from '../model/hint'
+// Аналитика СММ — второй пункт меню СММ после календаря. Всё — по данным самих соцсетей: подписчики, просмотры,
+// вовлечённость за сутки (по часам), 7, 30 или 90 дней — у своих каналов и у конкурентов. Конкурентов человек заводит
+// сам (из маркетингового анализа подтянутся позже — пунктиром), мы проверяем их каналы каждый час; их посты с саммери —
+// лентой для вдохновения: «Переиспользовать» открывает новый контент с их темой, дальше её видоизменяют.
+// Данные придут с сервера, когда подключим площадки; пока их нет — пусто, а на примере видно, как это будет выглядеть.
+import { useMemo, useState, type ReactNode } from 'react'
+import { today } from '../model/dates'
+import { bucketsOf, EMPTY_FEED, hasData, hourOf, METRICS, PERIODS, sampleFeed, valuesOf, type Bucket, type Feed, type Metric, type Post } from '../model/metrics'
 import { newId } from '../model/store'
-import { FORMAT_ICON, realPlatforms, type Channel, type Competitor } from '../model/types'
-import { PlatformIcon } from '../ui/bits'
+import { realPlatforms, type Channel, type Competitor } from '../model/types'
+import { PlatformIcon, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
-const PERIODS = [
-  { days: 7, label: '7 дней' },
-  { days: 30, label: '30 дней' },
-  { days: 90, label: '90 дней' },
-]
+const compact = new Intl.NumberFormat('ru-RU', { notation: 'compact', maximumFractionDigits: 1 })
+const fmt = (n: number, unit?: string) => (unit === '%' ? `${n.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %` : compact.format(n))
 
 export function AnalyticsView() {
   const { plan, dispatch, toast } = usePlan()
-  const [days, setDays] = useState(30)
-  const now = today()
-  const stats = useMemo(() => channelStats(plan, now, days), [plan, now, days])
+  const [days, setDays] = useState(7)
+  const [sample, setSample] = useState(false)
   const skip = plan.analytics?.skip ?? []
   const competitors = plan.analytics?.competitors ?? []
-  const toggle = (c: Channel) => {
-    const next = skip.includes(c.id) ? skip.filter((x) => x !== c.id) : [...skip, c.id]
-    dispatch({ type: 'analytics', patch: { skip: next } })
-  }
+  const mine = plan.channels.filter((c) => !skip.includes(c.id))
+  const now = hourOf(Date.now())
+  const buckets = useMemo(() => bucketsOf(now, days), [now, days])
+  // пример — по своим каналам на их площадках (без сайта и рассылки) и по конкурентам
+  const ownersKey = [...plan.channels.map((c) => `${c.id}:${c.platforms.join()}`), ...competitors.map((c) => `${c.id}:${c.platform}`)].join('|')
+  const feed = useMemo<Feed>(
+    () =>
+      sample
+        ? sampleFeed(now, [
+            ...plan.channels.map((c) => ({ id: c.id, platforms: realPlatforms(c.platforms) })),
+            ...competitors.map((c) => ({ id: c.id, platforms: [c.platform], rival: true })),
+          ])
+        : EMPTY_FEED,
+    // площадки и конкуренты — через ownersKey: пример пересобирается, только когда они поменялись
+    [sample, now, ownersKey],
+  )
+  const toggle = (c: Channel) => dispatch({ type: 'analytics', patch: { skip: skip.includes(c.id) ? skip.filter((x) => x !== c.id) : [...skip, c.id] } })
+  const posts = feed.posts.filter((p) => competitors.some((c) => c.id === p.owner))
   return (
     <>
       <header className="cp-top cp-an__top">
@@ -36,6 +46,7 @@ export function AnalyticsView() {
           <h1 className="nr-title">Аналитика</h1>
         </div>
         <div className="cp-top__right">
+          <Switch checked={sample} onChange={setSample}>Пример</Switch>
           <div className="nr-seg" role="radiogroup" aria-label="Период">
             {PERIODS.map((p) => (
               <button key={p.days} type="button" role="radio" aria-checked={days === p.days} className="nr-seg__item" onClick={() => setDays(p.days)}>
@@ -47,10 +58,25 @@ export function AnalyticsView() {
       </header>
       <div className="cp-body nr-scroll">
         <div className="cp-an">
+          {sample ? (
+            <p className="cp-an__sample" role="note">
+              Это пример, не ваши данные: так будут выглядеть графики и лента, когда подключим площадки.
+            </p>
+          ) : (
+            <div className="cp-an__soon" role="note">
+              <Icon name="chart" size={18} />
+              <div>
+                <b>Данные придут из соцсетей</b>
+                <p>Подписчики, просмотры и вовлечённость — своих каналов и конкурентов, по часам. Для этого подключим площадки (нужен сервер и доступы к аккаунтам). Посмотреть, как это будет, — «Пример» вверху.</p>
+              </div>
+              <span className="cp-an__badge">скоро</span>
+            </div>
+          )}
+
           <section className="cp-an__sec" aria-labelledby="an-own">
             <div className="cp-an__head">
               <h2 id="an-own">Мои каналы</h2>
-              <p className="cp-hint">По карточкам плана за {PERIODS.find((p) => p.days === days)?.label}. Охваты и вовлечённость появятся, когда подключим площадки.</p>
+              <p className="cp-hint">Все каналы плана; щелчок — убрать из аналитики или вернуть.</p>
             </div>
             <div className="cp-pills cp-pills--flush" role="group" aria-label="Каналы для анализа">
               {plan.channels.map((c) => (
@@ -61,18 +87,16 @@ export function AnalyticsView() {
               ))}
             </div>
             <div className="cp-an__grid">
-              {plan.channels
-                .filter((c) => !skip.includes(c.id))
-                .map((c) => (
-                  <ChannelCard key={c.id} c={c} s={stats.find((x) => x.channelId === c.id)!} />
-                ))}
+              {mine.map((c) => (
+                <MetricsCard key={c.id} owner={c.id} name={c.name} color={c.color} platforms={realPlatforms(c.platforms)} feed={feed} buckets={buckets} />
+              ))}
             </div>
           </section>
 
           <section className="cp-an__sec" aria-labelledby="an-rivals">
             <div className="cp-an__head">
               <h2 id="an-rivals">Конкуренты</h2>
-              <p className="cp-hint">Проверяем их каналы каждый час: новые посты и короткое саммери — ниже, понравившееся можно взять в черновики.</p>
+              <p className="cp-hint">Проверяем их каналы каждый час: цифры — здесь, их посты с саммери — в ленте ниже.</p>
             </div>
             <div className="cp-an__soon" aria-disabled="true">
               <Icon name="megaphone" size={18} />
@@ -89,33 +113,42 @@ export function AnalyticsView() {
               }}
             />
             {competitors.length > 0 && (
-              <ul className="cp-an__rivals" aria-label="Конкуренты">
+              <ul className="cp-an__grid cp-an__rivals" aria-label="Конкуренты">
                 {competitors.map((c) => (
-                  <li key={c.id} className="cp-an__rival">
-                    <PlatformIcon platform={c.platform} size={18} />
-                    <div className="cp-an__rival-main">
-                      <b>{c.name}</b>
-                      <span className="cp-muted">
-                        {c.platform}
-                        {c.handle && ` · ${c.handle}`}
-                      </span>
-                    </div>
-                    <span className="cp-an__watch" title="Новые посты и саммери появятся после первой проверки">
-                      <span className="cp-an__pulse" aria-hidden="true" />
-                      каждый час
-                    </span>
-                    <button
-                      type="button"
-                      className="nr-btn nr-btn--ghost nr-btn--icon nr-btn--sm"
-                      aria-label={`Не следить: ${c.name}`}
-                      title="Не следить"
-                      onClick={() => {
-                        dispatch({ type: 'analytics', patch: { competitors: competitors.filter((x) => x.id !== c.id) } })
-                        toast(`«${c.name}» больше не отслеживаем`, true)
-                      }}
-                    >
-                      <Icon name="close" size={16} />
-                    </button>
+                  <li key={c.id}>
+                    <MetricsCard
+                      owner={c.id}
+                      name={c.name}
+                      platforms={[c.platform]}
+                      feed={feed}
+                      buckets={buckets}
+                      sub={
+                        <span className="cp-muted">
+                          {c.platform === 'Web' ? 'Сайт' : c.platform}
+                          {c.handle && ` · ${c.handle}`}
+                        </span>
+                      }
+                      extra={
+                        <>
+                          <span className="cp-an__watch" title="Проверяем канал каждый час">
+                            <span className="cp-an__pulse" aria-hidden="true" />
+                            каждый час
+                          </span>
+                          <button
+                            type="button"
+                            className="nr-btn nr-btn--ghost nr-btn--icon nr-btn--sm"
+                            aria-label={`Не следить: ${c.name}`}
+                            title="Не следить"
+                            onClick={() => {
+                              dispatch({ type: 'analytics', patch: { competitors: competitors.filter((x) => x.id !== c.id) } })
+                              toast(`«${c.name}» больше не отслеживаем`, true)
+                            }}
+                          >
+                            <Icon name="close" size={16} />
+                          </button>
+                        </>
+                      }
+                    />
                   </li>
                 ))}
               </ul>
@@ -124,16 +157,25 @@ export function AnalyticsView() {
 
           <section className="cp-an__sec" aria-labelledby="an-feed">
             <div className="cp-an__head">
-              <h2 id="an-feed">Контент конкурентов и саммери</h2>
+              <h2 id="an-feed">Лента для вдохновения</h2>
+              <p className="cp-hint">Посты конкурентов с коротким саммери. «Переиспользовать» — новый контент с их темой и саммери в заметке: дальше видоизмените по-своему.</p>
             </div>
-            <div className="cp-an__empty">
-              <Icon name="list" size={22} />
-              <p>
-                {competitors.length
-                  ? 'Пока пусто: посты и саммери появятся после первой проверки — её запустит сервер мониторинга, его ещё подключаем.'
-                  : 'Добавьте конкурентов выше — их посты и короткое саммери будут появляться здесь каждый час.'}
-              </p>
-            </div>
+            {posts.length ? (
+              <ul className="cp-feed" aria-label="Посты конкурентов">
+                {posts.map((p) => (
+                  <PostItem key={p.id} post={p} owner={competitors.find((c) => c.id === p.owner)!} />
+                ))}
+              </ul>
+            ) : (
+              <div className="cp-an__empty">
+                <Icon name="list" size={22} />
+                <p>
+                  {competitors.length
+                    ? 'Пока пусто: посты и саммери появятся после первой проверки — её запустит сервер мониторинга, его ещё подключаем.'
+                    : 'Добавьте конкурентов выше — их посты с коротким саммери будут появляться здесь каждый час.'}
+                </p>
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -141,122 +183,169 @@ export function AnalyticsView() {
   )
 }
 
-/** Карточка своего канала: цифры периода, ритм по неделям, форматы, площадки, рубрики. */
-function ChannelCard({ c, s }: { c: Channel; s: ChannelStats }) {
-  const { rubrics } = usePlan()
+/** Карточка канала (своего или конкурента): площадки — фильтром, три графика: подписчики, просмотры, вовлечённость. */
+function MetricsCard({ owner, name, color, platforms, feed, buckets, sub, extra }: {
+  owner: string
+  name: string
+  color?: string
+  platforms: string[]
+  feed: Feed
+  buckets: Bucket[]
+  sub?: ReactNode
+  extra?: ReactNode
+}) {
+  const [only, setOnly] = useState<string | null>(null)
+  const data = hasData(feed, owner)
   return (
-    <article className="cp-an__card" aria-label={c.name}>
+    <article className="cp-an__card" aria-label={name}>
       <header className="cp-an__card-head">
-        <span className="nr-dot" style={{ background: c.color }} aria-hidden="true" />
-        <h3>{c.name}</h3>
-        <span className="cp-an__plats" aria-label={`Площадки: ${realPlatforms(c.platforms).join(', ')}`}>
-          {realPlatforms(c.platforms).map((p) => (
-            <PlatformIcon key={p} platform={p} size={13} />
-          ))}
-        </span>
+        {color ? <span className="nr-dot" style={{ background: color }} aria-hidden="true" /> : <PlatformIcon platform={platforms[0]} size={16} />}
+        <div className="cp-an__card-name">
+          <h3>{name}</h3>
+          {sub}
+        </div>
+        {extra}
       </header>
-      <dl className="cp-an__stats">
-        <Stat label="Карточек" value={s.total} note={`${s.perWeek.toLocaleString('ru-RU')} в неделю`} />
-        <Stat label="Вышло" value={s.published} />
-        <Stat label="Не вышло вовремя" value={s.late} warn={s.late > 0} />
-        <Stat label="Впереди 7 дней" value={s.ahead} />
-      </dl>
-      <Rhythm weeks={s.weeks} name={c.name} />
-      <div className="cp-an__mix">
-        {s.formats.length > 0 && (
-          <div>
-            <span className="nr-label">Форматы</span>
-            <ul aria-label="Форматы">
-              {s.formats.map(([f, n]) => (
-                <li key={f} title={f}>
-                  <Icon name={FORMAT_ICON[f].icon} size={14} />
-                  {FORMAT_ICON[f].label} <b>{n}</b>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {s.platforms.length > 0 && (
-          <div>
-            <span className="nr-label">Площадки</span>
-            <ul aria-label="Площадки">
-              {s.platforms.map(([p, n]) => (
-                <li key={p}>
-                  <PlatformIcon platform={p} size={14} />
-                  {p} <b>{n}</b>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {s.rubrics.length > 0 && (
-          <div>
-            <span className="nr-label">Чаще всего</span>
-            <ul aria-label="Рубрики">
-              {s.rubrics.map(([id, n]) => (
-                <li key={id}>
-                  {rubrics.get(id)?.name ?? id} <b>{n}</b>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-      {s.total === 0 && s.ahead === 0 && <p className="cp-hint">За период карточек нет.</p>}
-      <div className="cp-an__soon cp-an__soon--sm" aria-disabled="true">
-        <span>Охваты, просмотры, вовлечённость — после подключения площадок</span>
-      </div>
+      {platforms.length > 1 && (
+        <div className="cp-an__plats" role="radiogroup" aria-label={`Площадки: ${name}`}>
+          <button type="button" role="radio" aria-checked={only === null} className="cp-an__plat" onClick={() => setOnly(null)}>
+            Все
+          </button>
+          {platforms.map((p) => (
+            <button key={p} type="button" role="radio" aria-checked={only === p} aria-label={p} title={p} className="cp-an__plat" onClick={() => setOnly(p)}>
+              <PlatformIcon platform={p} size={14} />
+            </button>
+          ))}
+        </div>
+      )}
+      {data ? (
+        METRICS.map((m) => <MetricChart key={m.id} metric={m.id} values={valuesOf(feed, owner, m.id, only ? [only] : null, buckets)} buckets={buckets} name={name} />)
+      ) : (
+        <div className="cp-an__soon cp-an__soon--sm">
+          <span>
+            Нет данных: {platforms.length ? platforms.join(', ') : 'площадки'} — не подключены. Графики появятся, когда подключим.
+          </span>
+        </div>
+      )}
     </article>
   )
 }
 
-function Stat({ label, value, note, warn }: { label: string; value: number; note?: string; warn?: boolean }) {
+/** График метрики: подписчики и вовлечённость — линией, просмотры — столбиками. Наведите — значение и время. */
+function MetricChart({ metric, values, buckets, name }: { metric: Metric; values: (number | null)[]; buckets: Bucket[]; name: string }) {
+  const m = METRICS.find((x) => x.id === metric)!
+  const [hover, setHover] = useState<number | null>(null)
+  const known = values.filter((v): v is number => v !== null)
+  const W = 300
+  const H = 64
+  const n = values.length
+  const slot = W / n
+  // столбики — от нуля; линия подписчиков — от своего минимума, иначе рост не видно
+  const lo = m.kind === 'columns' || metric === 'er' ? 0 : Math.min(...known)
+  const hi = Math.max(...known, lo + 1)
+  const y = (v: number) => H - 2 - ((v - lo) / (hi - lo)) * (H - 8)
+  const headline =
+    metric === 'followers' ? known[known.length - 1] : metric === 'views' ? known.reduce((a, b) => a + b, 0) : known.reduce((a, b) => a + b, 0) / Math.max(1, known.length)
+  const delta = metric === 'followers' && known.length > 1 ? known[known.length - 1] - known[0] : null
+  const line = values
+    .map((v, i) => (v === null ? null : `${(i + 0.5) * slot},${y(v)}`))
+    .filter(Boolean)
+    .join(' ')
+  const hv = hover !== null ? values[hover] : null
   return (
-    <div className={`cp-an__stat${warn ? ' cp-an__stat--warn' : ''}`}>
-      <dt>{label}</dt>
-      <dd>
-        {value.toLocaleString('ru-RU')}
-        {note && <span>{note}</span>}
-      </dd>
-    </div>
+    <figure className="cp-mc">
+      <figcaption>
+        <span className="cp-mc__label">{m.label}</span>
+        <b className="cp-mc__value">{known.length ? fmt(headline, m.unit) : '—'}</b>
+        {delta !== null && <span className={`cp-mc__delta${delta < 0 ? ' cp-mc__delta--down' : ''}`}>{delta >= 0 ? '+' : '−'}{fmt(Math.abs(delta))}</span>}
+        <span className="cp-mc__tip" aria-live="polite">
+          {hover !== null ? `${buckets[hover].label}: ${hv === null ? 'нет данных' : fmt(hv, m.unit)}` : m.note}
+        </span>
+      </figcaption>
+      <svg viewBox={`0 0 ${W} ${H + 12}`} role="img" aria-label={`${name}, ${m.label.toLowerCase()}: ${buckets.map((b, i) => `${b.label} — ${values[i] === null ? 'нет' : fmt(values[i]!, m.unit)}`).join(', ')}`} onMouseLeave={() => setHover(null)}>
+        <line x1="0" x2={W} y1={H + 0.5} y2={H + 0.5} className="cp-mc__axis" />
+        {m.kind === 'columns'
+          ? values.map((v, i) => {
+              if (v === null || v <= 0) return null
+              const w = Math.min(24, slot - 2)
+              const x = i * slot + (slot - w) / 2
+              const top = y(v)
+              const r = Math.min(4, w / 2, H - top)
+              return <path key={i} className={`cp-mc__bar${hover === i ? ' cp-mc__bar--on' : ''}`} d={`M${x} ${H} V${top + r} Q${x} ${top} ${x + r} ${top} H${x + w - r} Q${x + w} ${top} ${x + w} ${top + r} V${H} Z`} />
+            })
+          : line && <polyline className="cp-mc__line" points={line} />}
+        {hover !== null && hv !== null && (
+          <>
+            <line className="cp-mc__cross" x1={(hover + 0.5) * slot} x2={(hover + 0.5) * slot} y1="0" y2={H} />
+            {m.kind === 'line' && <circle className="cp-mc__dot" cx={(hover + 0.5) * slot} cy={y(hv)} r="4" />}
+          </>
+        )}
+        <text x="0" y={H + 11} className="cp-mc__x">{buckets[0]?.label}</text>
+        <text x={W} y={H + 11} textAnchor="end" className="cp-mc__x">{buckets[n - 1]?.label}</text>
+        {/* зоны наведения — во всю высоту, шире самих отметок */}
+        {values.map((_, i) => (
+          <rect key={i} x={i * slot} y="0" width={slot} height={H + 12} fill="transparent" onMouseEnter={() => setHover(i)} />
+        ))}
+      </svg>
+      <table className="nr-visually-hidden">
+        <caption>{m.label}</caption>
+        <tbody>
+          {buckets.map((b, i) => (
+            <tr key={b.from}>
+              <th scope="row">{b.label}</th>
+              <td>{values[i] === null ? 'нет данных' : fmt(values[i]!, m.unit)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
   )
 }
 
-/** Ритм — карточек в неделю: 4 недели назад, текущая и 7 вперёд (по плану — бледнее). Наведите — число и неделя. */
-function Rhythm({ weeks, name }: { weeks: Week[]; name: string }) {
-  const [hover, setHover] = useState<number | null>(null)
-  const max = Math.max(1, ...weeks.map((w) => w.n))
-  const W = 12 * 22
-  const H = 56
-  const label = (w: Week) => `неделя с ${shortDate(w.from)}: ${w.n} ${plural(w.n, 'карточка', 'карточки', 'карточек')}${w.future ? ' по плану' : `, вышло ${w.published}`}`
-  const cur = weeks.find((w) => w.current)
+const when = (ms: number) => {
+  const h = Math.round((Date.now() - ms) / 3600_000)
+  if (h < 1) return 'только что'
+  if (h < 24) return `${h} ч назад`
+  const d = new Date(ms)
+  return `${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}, ${String(d.getHours()).padStart(2, '0')}:00`
+}
+
+/** Пост конкурента: тема, саммери, цифры; «Переиспользовать» — новый контент с этой темой, его видоизменяют. */
+function PostItem({ post, owner }: { post: Post; owner: Competitor }) {
+  const { openNew } = usePlan()
+  const topic = post.title.replace(/^Пример: /, '')
+  const reuse = () =>
+    openNew({
+      date: today(),
+      title: topic.charAt(0).toUpperCase() + topic.slice(1),
+      format: post.format,
+      note: `По мотивам: ${owner.name}, ${post.platform}${post.url ? ` — ${post.url}` : ''}\nСаммери: ${post.summary}\nЧто поменять у нас: `,
+    })
   return (
-    <figure className="cp-an__rhythm">
-      <figcaption>
-        <span className="nr-label">Карточек в неделю</span>
-        <span className="cp-an__tip" aria-live="polite">{hover !== null ? label(weeks[hover]) : cur ? `эта неделя: ${cur.n}` : ''}</span>
-      </figcaption>
-      <svg viewBox={`0 0 ${W} ${H + 14}`} role="img" aria-label={`${name}, карточек в неделю: ${weeks.map((w) => `${shortDate(w.from)} — ${w.n}`).join(', ')}`} onMouseLeave={() => setHover(null)}>
-        <line x1="0" x2={W} y1={H + 0.5} y2={H + 0.5} className="cp-an__axis" />
-        {weeks.map((w, i) => {
-          const h = w.n ? Math.max(3, (w.n / max) * (H - 4)) : 0
-          const x = i * 22 + 3
-          return (
-            <g key={w.from} onMouseEnter={() => setHover(i)}>
-              {/* зона наведения — во всю высоту колонки */}
-              <rect x={i * 22} y="0" width="22" height={H + 14} fill="transparent" />
-              {h > 0 && (
-                <path
-                  className={`cp-an__bar${w.future ? ' cp-an__bar--plan' : ''}${hover === i ? ' cp-an__bar--hover' : ''}`}
-                  d={`M${x} ${H} V${H - h + 4} q0 -4 4 -4 h8 q4 0 4 4 V${H} Z`}
-                />
-              )}
-              {w.current && <text x={x + 8} y={H + 12} textAnchor="middle" className="cp-an__now">сейчас</text>}
-            </g>
-          )
-        })}
-      </svg>
-    </figure>
+    <li className="cp-feed__item">
+      <div className="cp-feed__head">
+        <PlatformIcon platform={post.platform} size={15} />
+        <b>{owner.name}</b>
+        <span className="cp-muted">{when(post.at)}</span>
+        {post.sample && <span className="cp-an__badge">пример</span>}
+      </div>
+      <h3 className="cp-feed__title">{post.title}</h3>
+      <p className="cp-feed__sum">{post.summary}</p>
+      <div className="cp-feed__foot">
+        <span className="cp-muted">
+          {fmt(post.views)} просмотров · {fmt(post.likes)} реакций
+        </span>
+        {post.url && (
+          <a className="nr-btn nr-btn--ghost nr-btn--sm" href={post.url} target="_blank" rel="noopener noreferrer">
+            Открыть
+          </a>
+        )}
+        <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={reuse}>
+          <Icon name="copy" size={15} />
+          Переиспользовать
+        </button>
+      </div>
+    </li>
   )
 }
 

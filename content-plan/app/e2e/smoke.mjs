@@ -290,20 +290,32 @@ await page.keyboard.press('Control+z')
   await page.getByRole('heading', { name: 'Аналитика' }).waitFor()
   const cards = await page.locator('.cp-an__card').count()
   const channelsN = await page.getByRole('group', { name: 'Каналы для анализа' }).getByRole('button').count()
-  const bars = await page.locator('.cp-an__bar').count()
+  const planStats = await page.getByText(/Карточек в неделю|Впереди 7 дней/).count()
   const soon = await page.locator('.cp-an__soon[aria-disabled="true"]', { hasText: 'Из маркетингового анализа' }).evaluate((el) => getComputedStyle(el).borderStyle)
   const rivals = page.getByRole('form', { name: 'Новый конкурент' })
   await rivals.getByLabel('Название').fill('AI Daily')
   await rivals.getByLabel('Ссылка или @аккаунт').fill('@aidaily')
   await rivals.getByRole('button', { name: 'Следить' }).click()
   const watched = await page.getByRole('list', { name: 'Конкуренты' }).getByText('AI Daily').count()
+  // на примере: графики соцсетей, сутки — по часам, лента конкурента и «Переиспользовать»
+  await page.getByRole('switch', { name: 'Пример' }).click()
+  await page.getByRole('radiogroup', { name: 'Период' }).getByRole('radio', { name: 'Сутки' }).click()
+  const bars = await page.locator('.cp-mc__bar').count()
+  const lines = await page.locator('.cp-mc__line').count()
+  const hours = ((await page.locator('.cp-an__card').first().getByRole('img', { name: /просмотры/ }).getAttribute('aria-label')) ?? '').match(/\d\d:00 — /g)?.length ?? 0
+  const posts = await page.getByRole('list', { name: 'Посты конкурентов' }).getByRole('listitem').count()
   await page.screenshot({ path: `${SHOTS}/8-analytics.png` })
-  await toast().getByRole('button', { name: 'Отменить' }).click()
+  await page.getByRole('list', { name: 'Посты конкурентов' }).getByRole('button', { name: 'Переиспользовать' }).first().click()
+  const reused = await page.getByRole('complementary', { name: 'Новый контент' }).getByRole('textbox', { name: 'Заметка' }).inputValue()
+  await page.getByRole('complementary', { name: 'Новый контент' }).getByRole('button', { name: 'Закрыть' }).click()
+  await page.getByRole('switch', { name: 'Пример' }).click()
+  await page.getByRole('list', { name: 'Конкуренты' }).getByRole('button', { name: 'Не следить: AI Daily' }).click()
   check(
-    items.join('|') === 'Календарь|Аналитика' && sub.x >= rail.x + rail.width - 1 && cards === channelsN && bars > 0 && soon === 'dashed' && watched,
-    `СММ: «Календарь» и «Аналитика» справа от отделов; ${cards} карточек каналов с ритмом, конкуренты, маркет-анализ — пунктиром`,
-    `аналитика: ${items.join(', ')}, карточек ${cards}/${channelsN}, столбиков ${bars}, рамка «${soon}», конкурент ${watched}`,
+    items.join('|') === 'Календарь|Аналитика' && sub.x >= rail.x + rail.width - 1 && cards === channelsN && !planStats && soon === 'dashed' && watched,
+    `СММ: «Календарь» и «Аналитика» справа от отделов; ${cards} каналов, без «карточек плана»; конкуренты; маркет-анализ — пунктиром`,
+    `аналитика: ${items.join(', ')}, карточек ${cards}/${channelsN}, карточки плана ${planStats}, рамка «${soon}», конкурент ${watched}`,
   )
+  check(bars > 0 && lines > 0 && hours === 24 && posts > 0 && reused.startsWith('По мотивам: AI Daily'), `аналитика на примере: графики (столбики ${bars}, линии ${lines}), сутки — 24 часа, лента ${posts} постов, «Переиспользовать» — новый контент`, `пример: столбики ${bars}, линии ${lines}, часов ${hours}, постов ${posts}, заметка «${reused.slice(0, 30)}»`)
   await smm.getByRole('button', { name: 'Календарь контента' }).click()
   await page.getByRole('grid', { name: /Неделя по каналам/ }).waitFor()
 }
