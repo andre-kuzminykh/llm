@@ -37,6 +37,7 @@ export interface Post {
   views: number
   likes: number
   comments: number
+  shares: number // репосты: сколько раз переслали или поделились
   kind: PostKind
   duration?: number // видео, секунд
   format: string // как наш формат: вертикаль, горизонталь, пост
@@ -210,6 +211,7 @@ export function sampleFeed(now: number, owners: { id: string; platforms: string[
           views,
           likes: Math.round(views * (0.02 + r() * 0.08)),
           comments: Math.round(views * (0.002 + r() * 0.01)),
+          shares: Math.round(views * (0.001 + r() * 0.012)),
           kind,
           duration: kind === 'video' ? Math.round(420 + r() * 1400) : kind === 'short' ? Math.round(20 + r() * 40) : undefined,
           format: KIND_FORMAT[kind],

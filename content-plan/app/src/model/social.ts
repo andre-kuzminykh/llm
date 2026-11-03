@@ -19,12 +19,13 @@ export const DEMO_RIVALS: Competitor[] = [
   { id: 'demo-rv-4', name: 'Growth Lab', platform: 'Instagram', handle: '@growthlab', added: '2026-10-01' },
 ]
 
-export type Sort = 'new' | 'views' | 'likes' | 'comments'
+export type Sort = 'new' | 'views' | 'likes' | 'comments' | 'shares'
 export const SORTS: { id: Sort; label: string }[] = [
   { id: 'new', label: 'Свежие' },
   { id: 'views', label: 'Просмотры' },
   { id: 'likes', label: 'Лайки' },
   { id: 'comments', label: 'Комменты' },
+  { id: 'shares', label: 'Репосты' },
 ]
 export const sortPosts = (posts: Post[], by: Sort) => [...posts].sort((a, b) => (by === 'new' ? b.at - a.at : b[by] - a[by]))
 
@@ -34,22 +35,24 @@ export interface Leader {
   views: number // в среднем на пост
   likes: number
   comments: number
+  shares: number
 }
 
 /** Кто впереди: средние просмотры, лайки и комментарии на пост у каждого аккаунта — по убыванию выбранного. */
 export function leaders(posts: Post[], by: Sort): Leader[] {
   const m = new Map<string, Leader>()
   for (const p of posts) {
-    const l = m.get(p.owner) ?? { owner: p.owner, posts: 0, views: 0, likes: 0, comments: 0 }
+    const l = m.get(p.owner) ?? { owner: p.owner, posts: 0, views: 0, likes: 0, comments: 0, shares: 0 }
     l.posts++
     l.views += p.views
     l.likes += p.likes
     l.comments += p.comments
+    l.shares += p.shares
     m.set(p.owner, l)
   }
   const key = by === 'new' ? 'views' : by
   return [...m.values()]
-    .map((l) => ({ ...l, views: Math.round(l.views / l.posts), likes: Math.round(l.likes / l.posts), comments: Math.round(l.comments / l.posts) }))
+    .map((l) => ({ ...l, views: Math.round(l.views / l.posts), likes: Math.round(l.likes / l.posts), comments: Math.round(l.comments / l.posts), shares: Math.round(l.shares / l.posts) }))
     .sort((a, b) => b[key] - a[key])
 }
 

@@ -74,7 +74,7 @@
   --cp-k-views: #4f6ef7;
   --cp-k-likes: #8854f3;
   --cp-k-comments: #0b8a7a;
-  --cp-k-er: #d9480f;
+  --cp-k-shares: #d9480f;
   --cp-k-followers: #b8326b;
 }
 
@@ -83,7 +83,7 @@ html.dark {
   --cp-k-views: #7b93ff;
   --cp-k-likes: #a985ff;
   --cp-k-comments: #2fc2ad;
-  --cp-k-er: #ff8a4c;
+  --cp-k-shares: #ff8a4c;
   --cp-k-followers: #f06b9f;
   --nr-bg: #000000;
   --nr-surface: #15151b;
@@ -1306,7 +1306,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-kpi--views { --k: var(--cp-k-views); }
 .cp-kpi--likes { --k: var(--cp-k-likes); }
 .cp-kpi--comments { --k: var(--cp-k-comments); }
-.cp-kpi--er { --k: var(--cp-k-er); }
+.cp-kpi--shares { --k: var(--cp-k-shares); }
 .cp-kpi--followers { --k: var(--cp-k-followers); }
 .cp-ov { display: grid; gap: 14px; padding: 16px; border-radius: var(--nr-r-lg); background: var(--nr-surface); border: 1px solid var(--nr-sep-soft); box-shadow: var(--nr-shadow-1); min-width: 0; }
 .cp-ov__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }

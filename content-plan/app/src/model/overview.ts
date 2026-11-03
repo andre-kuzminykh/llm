@@ -4,12 +4,12 @@
 // Считается по постам (их просмотры, лайки, комментарии набираются со временем — shareIn) и рядам подписчиков.
 import { shareIn, tagsOf, type Bucket, type Post, type Series } from './metrics'
 
-export type Kpi = 'views' | 'likes' | 'comments' | 'er' | 'followers'
+export type Kpi = 'views' | 'likes' | 'comments' | 'shares' | 'followers'
 export const KPIS: { id: Kpi; label: string; unit?: '%'; hint: string }[] = [
   { id: 'views', label: 'Просмотры', hint: 'за период' },
   { id: 'likes', label: 'Лайки', hint: 'за период' },
   { id: 'comments', label: 'Комментарии', hint: 'за период' },
-  { id: 'er', label: 'Вовлечённость', unit: '%', hint: 'лайки и комменты к просмотрам' },
+  { id: 'shares', label: 'Репосты', hint: 'сколько раз переслали или поделились — за период' },
   { id: 'followers', label: 'Подписчики', hint: 'на конец периода' },
 ]
 
@@ -39,16 +39,17 @@ interface Sums {
   views: number
   likes: number
   comments: number
+  shares: number
 }
-const erOf = (s: Sums) => (s.views ? Math.round(((s.likes + s.comments) / s.views) * 1000) / 10 : 0)
 function sumIn(posts: Post[], from: number, to: number, now: number): Sums {
-  const s = { views: 0, likes: 0, comments: 0 }
+  const s = { views: 0, likes: 0, comments: 0, shares: 0 }
   for (const p of posts) {
     const k = shareIn(p.at, from, to, now)
     if (!k) continue
     s.views += p.views * k
     s.likes += p.likes * k
     s.comments += p.comments * k
+    s.shares += p.shares * k
   }
   return s
 }
@@ -74,7 +75,7 @@ export function kpiValues(posts: Post[], series: Series[], buckets: Bucket[], no
     views: sums.map((s) => Math.round(s.views)),
     likes: sums.map((s) => Math.round(s.likes)),
     comments: sums.map((s) => Math.round(s.comments)),
-    er: sums.map((s) => (s.views >= 1 ? erOf(s) : null)),
+    shares: sums.map((s) => Math.round(s.shares)),
     followers: buckets.map((b) => followersAt(series, Math.min(b.to, now + 1))),
   }
 }
@@ -83,10 +84,10 @@ export interface Totals {
   views: number
   likes: number
   comments: number
-  er: number
+  shares: number
   followers: number | null
   posts: number // сколько вышло за период
-  prev: { views: number; likes: number; comments: number; er: number; followers: number | null } // прошлый такой же период
+  prev: { views: number; likes: number; comments: number; shares: number; followers: number | null } // прошлый такой же период
 }
 
 /** Итоги за [from, now] и за такой же период до него — для плиток и «+12 %». */
@@ -98,10 +99,10 @@ export function totals(posts: Post[], series: Series[], from: number, now: numbe
     views: Math.round(cur.views),
     likes: Math.round(cur.likes),
     comments: Math.round(cur.comments),
-    er: erOf(cur),
+    shares: Math.round(cur.shares),
     followers: followersAt(series, now + 1),
     posts: posts.filter((p) => p.at >= from && p.at <= now).length,
-    prev: { views: Math.round(prev.views), likes: Math.round(prev.likes), comments: Math.round(prev.comments), er: erOf(prev), followers: followersAt(series, from) },
+    prev: { views: Math.round(prev.views), likes: Math.round(prev.likes), comments: Math.round(prev.comments), shares: Math.round(prev.shares), followers: followersAt(series, from) },
   }
 }
 
@@ -119,10 +120,10 @@ export interface Row {
   views: number
   likes: number
   comments: number
-  er: number
+  shares: number
   posts: number // постов за период
 }
-export type Col = 'views' | 'likes' | 'comments' | 'er' | 'posts'
+export type Col = 'views' | 'likes' | 'comments' | 'shares' | 'posts'
 
 const keysOf = (dim: Dim, p: Post): string[] =>
   dim === 'posts' ? [p.id] : dim === 'topics' ? tagsOf(p.text) : dim === 'accounts' ? [p.owner] : dim === 'platforms' ? [p.platform] : [p.format]
@@ -134,16 +135,17 @@ export function rowsBy(dim: Dim, posts: Post[], from: number, now: number, sort:
     const k = shareIn(p.at, from, now + 1, now)
     if (!k) continue
     for (const key of keysOf(dim, p)) {
-      const r = m.get(key) ?? { views: 0, likes: 0, comments: 0, posts: 0 }
+      const r = m.get(key) ?? { views: 0, likes: 0, comments: 0, shares: 0, posts: 0 }
       r.views += p.views * k
       r.likes += p.likes * k
       r.comments += p.comments * k
+      r.shares += p.shares * k
       if (p.at >= from) r.posts++
       m.set(key, r)
     }
   }
   return [...m.entries()]
-    .map(([key, s]) => ({ key, views: Math.round(s.views), likes: Math.round(s.likes), comments: Math.round(s.comments), er: erOf(s), posts: s.posts }))
+    .map(([key, s]) => ({ key, views: Math.round(s.views), likes: Math.round(s.likes), comments: Math.round(s.comments), shares: Math.round(s.shares), posts: s.posts }))
     .filter((r) => r.views > 0)
     .sort((a, b) => b[sort] - a[sort] || b.views - a.views)
 }

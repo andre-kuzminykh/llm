@@ -78,7 +78,7 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
     expect(screen.getByRole('note')).toHaveTextContent('Демо: посты, графики и цифры выдуманы')
     const ov = screen.getByRole('region', { name: 'Аналитика' })
     const kpis = within(ov).getByRole('group', { name: 'Метрики' })
-    expect(within(kpis).getAllByRole('button').map((b) => b.querySelector('.cp-kpi__label')!.textContent)).toEqual(['Просмотры', 'Лайки', 'Комментарии', 'Вовлечённость', 'Подписчики'])
+    expect(within(kpis).getAllByRole('button').map((b) => b.querySelector('.cp-kpi__label')!.textContent)).toEqual(['Просмотры', 'Лайки', 'Комментарии', 'Репосты', 'Подписчики'])
     const pressed = () => within(kpis).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.querySelector('.cp-kpi__label')!.textContent)
     expect(pressed()).toEqual(['Просмотры', 'Лайки'])
     // сверху минимально: период и метрики строкой; графика и таблицы нет, пока не раскрыли
@@ -96,6 +96,7 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
     // таблица: сортировка по столбцу
     await userEvent.click(within(ov).getByRole('tab', { name: 'Топики' }))
     const table = () => within(ov).getByRole('table', { name: 'Разрез: Топики' })
+    expect(within(table()).getAllByRole('columnheader').map((h) => h.textContent?.replace('↓ ', ''))).toEqual(['Топик', 'Просмотры', 'Лайки', 'Комменты', 'Репосты', 'Постов'])
     await userEvent.click(within(table()).getByRole('button', { name: 'Лайки' }))
     const likes = within(table()).getAllByRole('row').slice(1).map((r) => r.querySelectorAll('td')[1].textContent!)
     expect(likes.length).toBeGreaterThan(1)
@@ -148,6 +149,15 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
       return Number(t.replace(/[^\d,]/g, '').replace(',', '.')) * (/тыс/.test(t) ? 1000 : 1)
     })
     expect(comments).toEqual([...comments].sort((a, b) => b - a))
+    // репосты — у каждого поста и в сортировке
+    await userEvent.click(screen.getByRole('radio', { name: 'Репосты' }))
+    const shares = within(screen.getByRole('list', { name: 'Посты конкурентов' }))
+      .getAllByRole('article')
+      .map((a) => {
+        const t = a.querySelector('[title="Репосты"]')!.textContent ?? ''
+        return Number(t.replace(/[^\d,]/g, '').replace(',', '.')) * (/тыс/.test(t) ? 1000 : 1)
+      })
+    expect(shares).toEqual([...shares].sort((a, b) => b - a))
     await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по конкурентам' }), 'Tech Shorts')
     for (const a of within(screen.getByRole('list', { name: 'Посты конкурентов' })).getAllByRole('article')) expect(a).toHaveTextContent('Tech Shorts')
     // + следить — в настройках (из панели слева «+»)

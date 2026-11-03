@@ -393,6 +393,10 @@ function PostCard({ post, who, onTag }: { post: Post; who?: Who; onTag?: (t: str
           <Icon name="comment" size={15} />
           {fmtNum(post.comments)}
         </span>
+        <span className="cp-post__num" title="Репосты">
+          <Icon name="share" size={15} />
+          {fmtNum(post.shares)}
+        </span>
         <span className="cp-post__spacer" />
         {post.url && (
           <a className="nr-btn nr-btn--ghost nr-btn--sm" href={post.url} target="_blank" rel="noopener noreferrer">

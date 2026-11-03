@@ -12,7 +12,7 @@ import { Icon } from '../ui/Icon'
 
 const compact = new Intl.NumberFormat('ru-RU', { notation: 'compact', maximumFractionDigits: 1 })
 export const fmtNum = (n: number) => compact.format(n)
-export const fmtKpi = (k: Kpi, v: number | null) => (v === null ? '—' : k === 'er' ? `${v.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %` : compact.format(v))
+export const fmtKpi = (_k: Kpi, v: number | null) => (v === null ? '—' : compact.format(v))
 
 export function kpiTotal(t: Totals, k: Kpi): number | null {
   return k === 'followers' ? t.followers : t[k]
@@ -78,7 +78,7 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
     { id: 'views', label: 'Просмотры' },
     { id: 'likes', label: 'Лайки' },
     { id: 'comments', label: 'Комменты' },
-    { id: 'er', label: 'ER' },
+    { id: 'shares', label: 'Репосты' },
     ...(dim === 'posts' ? [] : [{ id: 'posts' as Col, label: 'Постов' }]),
   ]
   const head = DIMS.find((d) => d.id === dim)!
@@ -171,7 +171,7 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
                   <td>{fmtNum(r.views)}</td>
                   <td>{fmtNum(r.likes)}</td>
                   <td>{fmtNum(r.comments)}</td>
-                  <td>{r.er.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %</td>
+                  <td>{fmtNum(r.shares)}</td>
                   {dim !== 'posts' && <td>{r.posts}</td>}
                 </tr>
               ))}
