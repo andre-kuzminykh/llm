@@ -1,7 +1,7 @@
 // Данные соцсетей для аналитики: подписчики, просмотры, вовлечённость — по часам, у своих каналов и у конкурентов, и посты
 // конкурентов с саммери для ленты вдохновения. Придут с сервера, когда подключим площадки (нужны доступы к аккаунтам);
 // пока источника нет — пусто, а посмотреть, как это выглядит, можно на явно помеченном примере (sampleFeed).
-import { FULL_VIDEO, SHORT_VIDEO, TEXT_IMAGE } from './types'
+import { FULL_VIDEO, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE } from './types'
 
 export type Metric = 'followers' | 'views' | 'er'
 
@@ -23,20 +23,29 @@ export interface Series {
   points: Point[] // по возрастанию t
 }
 
-/** Пост конкурента: тема, короткое саммери и цифры — его можно переиспользовать, видоизменив. */
+/** Пост из соцсети — мой или конкурента: тема, текст с тегами, короткое саммери и цифры; его можно пересоздать. */
+export type PostKind = 'video' | 'short' | 'post' | 'article'
 export interface Post {
   id: string
-  owner: string // id конкурента
+  owner: string // id моего аккаунта или конкурента
   platform: string
   at: number // когда вышел, мс
   title: string
+  text: string // текст поста или описание видео — из него берутся теги (#ии, #кейсы)
   summary: string
   url?: string
   views: number
   likes: number
+  comments: number
+  kind: PostKind
+  duration?: number // видео, секунд
   format: string // как наш формат: вертикаль, горизонталь, пост
+  mine?: boolean // мой пост, а не конкурента
   sample?: boolean // из примера, не настоящий
 }
+
+/** Теги из текста: «#ИИ #кейсы_клиентов» → «ии», «кейсы_клиентов» — по ним собираются топики ленты. */
+export const tagsOf = (text: string) => [...new Set([...text.matchAll(/#([\p{L}\p{N}_]+)/gu)].map((m) => m[1].toLowerCase()))]
 
 export interface Feed {
   series: Series[]
@@ -129,17 +138,21 @@ function rng(seed: string) {
   }
 }
 
-const SAMPLE_TOPICS: [string, string, string][] = [
-  ['Пример: 5 ИИ-агентов, которые экономят день', 'Пример саммери: короткий обзор пяти агентов с ценами и сценариями — в конце сравнение по времени.', SHORT_VIDEO],
-  ['Пример: как мы автоматизировали отдел продаж', 'Пример саммери: кейс с цифрами до и после, три шага внедрения и ошибки, которых стоит избежать.', FULL_VIDEO],
-  ['Пример: новая модель — что изменилось', 'Пример саммери: что умеет новая версия, где она лучше прошлой и кому стоит переходить.', TEXT_IMAGE],
-  ['Пример: промпт, который пишет план недели', 'Пример саммери: готовый промпт и разбор, почему он работает; в комментариях — варианты.', SHORT_VIDEO],
-  ['Пример: тренды недели в ИИ', 'Пример саммери: пять новостей недели одной каруселью, по слайду на новость.', TEXT_IMAGE],
-  ['Пример: ошибки при внедрении ИИ в компании', 'Пример саммери: список типичных ошибок и чек-лист, как их обойти.', FULL_VIDEO],
+// темы примера: тема, саммери, вид поста, теги в тексте
+const SAMPLE_TOPICS: [string, string, PostKind, string][] = [
+  ['5 ИИ-агентов, которые экономят день', 'Короткий обзор пяти агентов с ценами и сценариями — в конце сравнение по сэкономленному времени.', 'short', '#ии #агенты #продуктивность'],
+  ['Как мы автоматизировали отдел продаж', 'Кейс с цифрами до и после, три шага внедрения и ошибки, которых стоит избежать.', 'video', '#кейсы #продажи #автоматизация'],
+  ['Новая модель — что изменилось', 'Что умеет новая версия, где она лучше прошлой и кому стоит переходить.', 'post', '#ии #новости'],
+  ['Промпт, который пишет план недели', 'Готовый промпт и разбор, почему он работает; в комментариях — варианты под разные задачи.', 'short', '#промпты #продуктивность'],
+  ['Тренды недели в ИИ', 'Пять новостей недели одной каруселью, по слайду на новость.', 'post', '#ии #тренды #новости'],
+  ['Ошибки при внедрении ИИ в компании', 'Список типичных ошибок и чек-лист, как их обойти: от пилота до масштаба.', 'video', '#кейсы #внедрение'],
+  ['Как выбрать нейросеть для текстов', 'Сравнение четырёх моделей на одних и тех же задачах: скорость, качество, цена.', 'article', '#ии #сравнение #тексты'],
+  ['Один день из жизни ИИ-продюсера', 'Влог: как устроен день, какие инструменты в работе, где ИИ помогает, а где мешает.', 'video', '#влог #продуктивность'],
 ]
+const KIND_FORMAT: Record<PostKind, string> = { video: FULL_VIDEO, short: SHORT_VIDEO, post: TEXT_IMAGE, article: WEB_PAGE }
 
-/** Пример данных за 90 дней по часам для своих каналов и конкурентов; у конкурентов — ещё и посты за две недели. */
-export function sampleFeed(now: number, owners: { id: string; platforms: string[]; rival?: boolean }[]): Feed {
+/** Пример данных за 90 дней по часам для своих каналов и конкурентов; посты — за две недели (мои — с mine). */
+export function sampleFeed(now: number, owners: { id: string; platforms: string[]; rival?: boolean; posts?: boolean }[]): Feed {
   const end = hourOf(now)
   const start = end - 90 * DAY
   const series: Series[] = []
@@ -165,12 +178,31 @@ export function sampleFeed(now: number, owners: { id: string; platforms: string[
         e.push({ t, v: Math.round(erBase * (0.7 + r() * 0.6) * 100) / 100 })
       }
       series.push({ owner: o.id, platform, metric: 'followers', points: f }, { owner: o.id, platform, metric: 'views', points: v }, { owner: o.id, platform, metric: 'er', points: e })
-      if (!o.rival) continue
+      if (o.posts === false) continue
       for (let d = 0; d < 14; d++) {
         if (r() < 0.35) continue
-        const [title, summary, format] = SAMPLE_TOPICS[Math.floor(r() * SAMPLE_TOPICS.length)]
+        const [title, summary, kind0, tags] = SAMPLE_TOPICS[Math.floor(r() * SAMPLE_TOPICS.length)]
+        // у видеоплощадок — видео, у текстовых — посты
+        const kind: PostKind = platform === 'YouTube' ? (kind0 === 'short' ? 'short' : 'video') : platform === 'TikTok' || platform === 'Instagram' ? 'short' : kind0 === 'article' ? 'article' : 'post'
         const at = end - d * DAY - Math.floor(r() * 12) * HOUR
-        posts.push({ id: `${o.id}|${platform}|${d}`, owner: o.id, platform, at, title, summary, views: Math.round(viewsBase * (8 + r() * 40)), likes: Math.round(viewsBase * (0.2 + r() * 2)), format, sample: true })
+        const views = Math.round(viewsBase * (8 + r() * 40))
+        posts.push({
+          id: `${o.id}|${platform}|${d}`,
+          owner: o.id,
+          platform,
+          at,
+          title,
+          text: `${summary} ${tags}`,
+          summary,
+          views,
+          likes: Math.round(views * (0.02 + r() * 0.08)),
+          comments: Math.round(views * (0.002 + r() * 0.01)),
+          kind,
+          duration: kind === 'video' ? Math.round(420 + r() * 1400) : kind === 'short' ? Math.round(20 + r() * 40) : undefined,
+          format: KIND_FORMAT[kind],
+          mine: !o.rival,
+          sample: true,
+        })
       }
     }
   }

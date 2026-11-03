@@ -1,23 +1,15 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { dateText, dayTitle, shortDate, today, weekday, WEEKDAYS } from '../model/dates'
 import { REPEATS, repeatDates, repeatText, type Repeat } from '../model/repeat'
+import { sourceOfItem } from '../model/social'
 import { newId, type Action } from '../model/store'
-import { FORMAT_HOME, FORMAT_ICON, FORMAT_PLATFORMS, FORMAT_SHORT, FORMATS, isHome, isSlot, PLACEHOLDER, platformsFor, rubricName, shownTitle, statusOf, TEXT_IMAGE, timeOf, DEFAULT_LANGS, LANGS, langsOf, type Channel, type Item, type Plan, type Rule, type Status } from '../model/types'
+import { FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, SHORT_VIDEO, isHome, isSlot, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, shownTitle, statusOf, TEXT_IMAGE, timeOf, DEFAULT_LANGS, LANGS, langsOf, type Item, type Rule, type Status } from '../model/types'
 import { unitsOf } from '../model/units'
 import { IconButton, PickText, PlatformIcon, PlayPause } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 import { TagInput, type TagPick } from '../ui/TagInput'
 import { CreateTabs } from './BankView'
-
-/** Какие площадки выбраны сразу: у сайта и письма — своя; иначе те, что канал запомнил для формата, или как у формата
- *  рубрики в канале, или где формат обычно выходит, — из тех, где он может выйти. */
-function presetPlatforms(plan: Plan, c: Channel | undefined, f: string, r?: Rule) {
-  if (FORMAT_HOME[f]) return [FORMAT_HOME[f]]
-  const can = platformsFor(f, plan.platforms)
-  const tries = [c?.picks?.[f] ?? [], r?.format === f ? r.platforms : [], (FORMAT_PLATFORMS[f] ?? []).filter((p) => c?.platforms.includes(p)), c?.platforms ?? []]
-  return tries.map((list) => list.filter((p) => can.includes(p))).find((list) => list.length) ?? []
-}
 
 /** Свои языки — у каждого человека свои, в этом браузере: что отметил в последний раз, то и стоит у нового контента. */
 const MY_LANGS = 'cp:langs'
@@ -48,8 +40,46 @@ interface Props {
  *  дальше по порядку: канал, рубрика (рубрики канала — первыми), заметка, формат, площадки (по формату; у сайта и письма
  *  их нет). Площадки, выбранные руками, канал запоминает для формата. Внизу — «Готово».
  *  Сохранение — один шаг истории; ▶ / ⏸ и «Готово» у материала — сразу, всей карточке. */
-export function ItemEditor({ id, draft, onClose, onBack }: Props) {
-  const { plan, byDate, dispatch, rubrics, rules, channels, toast } = usePlan()
+export function ItemEditor(props: Props) {
+  const { plan } = usePlan()
+  // с чистого листа каналов нет — сначала канал, потом обычная форма
+  return plan.channels.length ? <ItemForm {...props} /> : <FirstChannel onClose={props.onClose} />
+}
+
+/** Первый канал: контент выходит в каналах, поэтому без канала форме не с чего начать. */
+function FirstChannel({ onClose }: { onClose: () => void }) {
+  const { dispatch, toast } = usePlan()
+  const [name, setName] = useState('')
+  return (
+    <aside className="cp-sheet" aria-label="Новый контент">
+      <div className="cp-sheet__head">
+        <h2 className="nr-title cp-sheet__title">Сначала — канал</h2>
+        <IconButton icon="close" label="Закрыть" onClick={onClose} />
+      </div>
+      <form
+        className="cp-sheet__body"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!name.trim()) return
+          dispatch({ type: 'addChannel', name: name.trim(), start: today() })
+          toast(`Канал «${name.trim()}» создан`, true)
+        }}
+      >
+        <p className="cp-hint">Контент выходит в каналах. Заведите первый — например, «Мой блог»; рубрики (теги) и расписание добавите дальше, прямо в форме.</p>
+        <label className="cp-field">
+          <span className="nr-label">Название канала</span>
+          <input className="nr-field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Мой блог" autoFocus />
+        </label>
+        <button type="submit" className="nr-btn nr-btn--primary" disabled={!name.trim()}>
+          Создать канал
+        </button>
+      </form>
+    </aside>
+  )
+}
+
+function ItemForm({ id, draft, onClose, onBack }: Props) {
+  const { plan, byDate, dispatch, rubrics, rules, channels, toast, openRecreate } = usePlan()
   const existing = id ? plan.items.find((x) => x.id === id) : undefined
   const base: Partial<Item> = existing ?? draft ?? {}
 
@@ -63,7 +93,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
   // по умолчанию — канал, у которого больше всего форматов (Офис Датаиста)
   const busiest = [...plan.channels].sort((x, y) => plan.rules.filter((r) => r.channelId === y.id).length - plan.rules.filter((r) => r.channelId === x.id).length)[0]
   const firstChannel = base.channelId ?? busiest?.id ?? plan.channels[0].id
-  const firstRule = base.ruleId ?? rulesFor(firstChannel, base.rubricId ?? rubricsFor(firstChannel)[0]?.id ?? null)[0]?.id ?? plan.rules[0].id
+  const firstRule = base.ruleId ?? rulesFor(firstChannel, base.rubricId ?? rubricsFor(firstChannel)[0]?.id ?? null)[0]?.id ?? plan.rules[0]?.id ?? ''
   const firstRubric = base.rubricId !== undefined ? base.rubricId : rules.get(firstRule)?.rubricId ?? null
 
   const [title, setTitle] = useState(base.title && !isSlot(base as Item) ? base.title : '')
@@ -206,6 +236,7 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
     const day = toDrafts ? '' : date
     if (!shownPlatforms.length) return setError('Выберите хотя бы одну площадку')
     if (toDrafts && t === PLACEHOLDER) return setError('Для черновика нужна тема')
+    if (needRule && !newTag && !rubricId) return setError('Выберите рубрику (тег) или впишите новую')
     // новая рубрика или рубрика без формата в канале: заводим их тем же шагом истории
     const setup: Action[] = []
     let ruleNow: Rule | undefined = rule
@@ -437,6 +468,35 @@ export function ItemEditor({ id, draft, onClose, onBack }: Props) {
                   <span className="cp-plat__label">{p}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+        {/* пересоздать: длинное видео — нарезать на короткие (в один день, ежедневно или по расписанию), статью или пост — в видео */}
+        {existing && !isBank && (
+          <div className="cp-field">
+            <span className="nr-label">Пересоздать</span>
+            <div className="cp-recreate">
+              {format === FULL_VIDEO ? (
+                <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={() => openRecreate(sourceOfItem(existing, channel?.name), { output: 'shorts', count: 3 })}>
+                  <Icon name="f-vertical" size={15} />
+                  Нарезать на короткие…
+                </button>
+              ) : format !== SHORT_VIDEO ? (
+                <>
+                  <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={() => openRecreate(sourceOfItem(existing, channel?.name), { output: 'shorts', count: 1 })}>
+                    <Icon name="f-vertical" size={15} />
+                    Сделать короткое видео…
+                  </button>
+                  <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={() => openRecreate(sourceOfItem(existing, channel?.name), { output: 'long', count: 1 })}>
+                    <Icon name="f-horizontal" size={15} />
+                    Сделать длинное видео…
+                  </button>
+                </>
+              ) : null}
+              <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => openRecreate(sourceOfItem(existing, channel?.name))}>
+                <Icon name="spark" size={15} />
+                Другое…
+              </button>
             </div>
           </div>
         )}

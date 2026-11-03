@@ -5,10 +5,11 @@
 // Данные придут с сервера, когда подключим площадки; пока их нет — пусто, а на примере видно, как это будет выглядеть.
 import { useMemo, useState, type ReactNode } from 'react'
 import { today } from '../model/dates'
-import { bucketsOf, EMPTY_FEED, hasData, hourOf, METRICS, PERIODS, sampleFeed, valuesOf, type Bucket, type Feed, type Metric, type Post } from '../model/metrics'
+import { bucketsOf, EMPTY_FEED, hasData, hourOf, METRICS, PERIODS, sampleFeed, valuesOf, type Bucket, type Feed, type Metric } from '../model/metrics'
 import { newId } from '../model/store'
 import { realPlatforms, type Channel, type Competitor } from '../model/types'
 import { PlatformIcon, Switch } from '../ui/bits'
+import { useDemo } from '../ui/demo'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
 
@@ -18,7 +19,7 @@ const fmt = (n: number, unit?: string) => (unit === '%' ? `${n.toLocaleString('r
 export function AnalyticsView() {
   const { plan, dispatch, toast } = usePlan()
   const [days, setDays] = useState(7)
-  const [sample, setSample] = useState(false)
+  const [sample, setSample] = useDemo()
   const skip = plan.analytics?.skip ?? []
   const competitors = plan.analytics?.competitors ?? []
   const mine = plan.channels.filter((c) => !skip.includes(c.id))
@@ -38,7 +39,6 @@ export function AnalyticsView() {
     [sample, now, ownersKey],
   )
   const toggle = (c: Channel) => dispatch({ type: 'analytics', patch: { skip: skip.includes(c.id) ? skip.filter((x) => x !== c.id) : [...skip, c.id] } })
-  const posts = feed.posts.filter((p) => competitors.some((c) => c.id === p.owner))
   return (
     <>
       <header className="cp-top cp-an__top">
@@ -46,7 +46,7 @@ export function AnalyticsView() {
           <h1 className="nr-title">Аналитика</h1>
         </div>
         <div className="cp-top__right">
-          <Switch checked={sample} onChange={setSample}>Пример</Switch>
+          <Switch checked={sample} onChange={setSample}>Демо</Switch>
           <div className="nr-seg" role="radiogroup" aria-label="Период">
             {PERIODS.map((p) => (
               <button key={p.days} type="button" role="radio" aria-checked={days === p.days} className="nr-seg__item" onClick={() => setDays(p.days)}>
@@ -60,14 +60,14 @@ export function AnalyticsView() {
         <div className="cp-an">
           {sample ? (
             <p className="cp-an__sample" role="note">
-              Это пример, не ваши данные: так будут выглядеть графики и лента, когда подключим площадки.
+              Демо: цифры выдуманы — так будут выглядеть графики, когда подключим площадки.
             </p>
           ) : (
             <div className="cp-an__soon" role="note">
               <Icon name="chart" size={18} />
               <div>
                 <b>Данные придут из соцсетей</b>
-                <p>Подписчики, просмотры и вовлечённость — своих каналов и конкурентов, по часам. Для этого подключим площадки (нужен сервер и доступы к аккаунтам). Посмотреть, как это будет, — «Пример» вверху.</p>
+                <p>Подписчики, просмотры и вовлечённость — своих каналов и конкурентов, по часам. Для этого подключим площадки (нужен сервер и доступы к аккаунтам). Посмотреть, как это будет, — «Демо» вверху.</p>
               </div>
               <span className="cp-an__badge">скоро</span>
             </div>
@@ -155,28 +155,7 @@ export function AnalyticsView() {
             )}
           </section>
 
-          <section className="cp-an__sec" aria-labelledby="an-feed">
-            <div className="cp-an__head">
-              <h2 id="an-feed">Лента для вдохновения</h2>
-              <p className="cp-hint">Посты конкурентов с коротким саммери. «Переиспользовать» — новый контент с их темой и саммери в заметке: дальше видоизмените по-своему.</p>
-            </div>
-            {posts.length ? (
-              <ul className="cp-feed" aria-label="Посты конкурентов">
-                {posts.map((p) => (
-                  <PostItem key={p.id} post={p} owner={competitors.find((c) => c.id === p.owner)!} />
-                ))}
-              </ul>
-            ) : (
-              <div className="cp-an__empty">
-                <Icon name="list" size={22} />
-                <p>
-                  {competitors.length
-                    ? 'Пока пусто: посты и саммери появятся после первой проверки — её запустит сервер мониторинга, его ещё подключаем.'
-                    : 'Добавьте конкурентов выше — их посты с коротким саммери будут появляться здесь каждый час.'}
-                </p>
-              </div>
-            )}
-          </section>
+          <p className="cp-hint">Посты конкурентов с саммери и «Пересоздать» — на «Главной», во вкладке «Поиск».</p>
         </div>
       </div>
     </>
@@ -299,53 +278,6 @@ function MetricChart({ metric, values, buckets, name }: { metric: Metric; values
         </tbody>
       </table>
     </figure>
-  )
-}
-
-const when = (ms: number) => {
-  const h = Math.round((Date.now() - ms) / 3600_000)
-  if (h < 1) return 'только что'
-  if (h < 24) return `${h} ч назад`
-  const d = new Date(ms)
-  return `${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}, ${String(d.getHours()).padStart(2, '0')}:00`
-}
-
-/** Пост конкурента: тема, саммери, цифры; «Переиспользовать» — новый контент с этой темой, его видоизменяют. */
-function PostItem({ post, owner }: { post: Post; owner: Competitor }) {
-  const { openNew } = usePlan()
-  const topic = post.title.replace(/^Пример: /, '')
-  const reuse = () =>
-    openNew({
-      date: today(),
-      title: topic.charAt(0).toUpperCase() + topic.slice(1),
-      format: post.format,
-      note: `По мотивам: ${owner.name}, ${post.platform}${post.url ? ` — ${post.url}` : ''}\nСаммери: ${post.summary}\nЧто поменять у нас: `,
-    })
-  return (
-    <li className="cp-feed__item">
-      <div className="cp-feed__head">
-        <PlatformIcon platform={post.platform} size={15} />
-        <b>{owner.name}</b>
-        <span className="cp-muted">{when(post.at)}</span>
-        {post.sample && <span className="cp-an__badge">пример</span>}
-      </div>
-      <h3 className="cp-feed__title">{post.title}</h3>
-      <p className="cp-feed__sum">{post.summary}</p>
-      <div className="cp-feed__foot">
-        <span className="cp-muted">
-          {fmt(post.views)} просмотров · {fmt(post.likes)} реакций
-        </span>
-        {post.url && (
-          <a className="nr-btn nr-btn--ghost nr-btn--sm" href={post.url} target="_blank" rel="noopener noreferrer">
-            Открыть
-          </a>
-        )}
-        <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={reuse}>
-          <Icon name="copy" size={15} />
-          Переиспользовать
-        </button>
-      </div>
-    </li>
   )
 }
 

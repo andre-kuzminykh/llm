@@ -6,16 +6,19 @@ import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, webAnd
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
-import { isHome, labelOf, MAIL, OLD_MAIL, timeOf, type ISODate, type Item, type Plan } from './model/types'
+import { emptyPlan, isHome, labelOf, MAIL, OLD_MAIL, timeOf, type ISODate, type Item, type Plan } from './model/types'
 import { unitsOf, type Unit } from './model/units'
 import { Seg } from './ui/bits'
-import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type Span, type ToastOpts } from './ui/ctx'
+import type { Output, Source } from './model/social'
+import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type Section, type Span, type ToastOpts } from './ui/ctx'
 import { Icon } from './ui/Icon'
 import { SelectionBar } from './ui/SelectionBar'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
 import { AnalyticsView } from './views/AnalyticsView'
+import { HomeView } from './views/HomeView'
+import { RecreateSheet } from './views/RecreateSheet'
 import { DraftsSheet } from './views/BankView'
 import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
@@ -31,6 +34,7 @@ type Sheet =
   | Back
   | { kind: 'item'; id: string; back?: Back }
   | { kind: 'new'; draft: Partial<Item>; back?: Back }
+  | { kind: 'recreate'; source: Source; preset?: { output: Output; count: number } }
   | { kind: 'task'; id: string; back?: Back }
   | { kind: 'period' }
   | { kind: 'help' }
@@ -38,7 +42,7 @@ type Sheet =
 
 /** Открыли форму или задачу поверх листа — «назад» ведёт к нему. */
 const backOf = (s: Sheet): Back | undefined =>
-  !s || s.kind === 'help' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
+  !s || s.kind === 'help' || s.kind === 'recreate' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
 
 const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
 const readSpan = (): Span => {
@@ -72,13 +76,17 @@ const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
 ]
 const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
 
-/** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): календарь контента первым, аналитика второй;
- *  остальные появятся позже. */
-type Section = 'calendar' | 'analytics'
+/** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная лента первой (моя и конкурентов),
+ *  календарь контента второй, аналитика третьей; остальные появятся позже. */
 const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
+  { id: 'home', label: 'Главная', full: 'Главная — лента моя и конкурентов', icon: 'home' },
   { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
   { id: 'analytics', label: 'Аналитика', full: 'Аналитика каналов и конкурентов', icon: 'chart' },
 ]
+const readSection = (): Section => {
+  const v = readLS<string>('cp:section', 'home')
+  return v === 'calendar' || v === 'analytics' ? v : 'home'
+}
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -97,9 +105,15 @@ function writeLS(key: string, v: unknown) {
 }
 
 async function fetchSeed(url: string): Promise<Plan> {
-  const r = await fetch(url)
-  if (!r.ok) throw new Error(`Не загрузился исходный план (${r.status})`)
-  const p = parsePlan(await r.text())
+  // в HTML одним файлом план Датаиста лежит внутри страницы — без сервера (npm run single)
+  const inline = typeof document !== 'undefined' ? document.getElementById('cp-seed')?.textContent : null
+  let text = inline
+  if (!text) {
+    const r = await fetch(url)
+    if (!r.ok) throw new Error(`Не загрузился исходный план (${r.status})`)
+    text = await r.text()
+  }
+  const p = parsePlan(text)
   if (isV1(p) || p.version !== 3) throw new Error('Исходный план старого формата — перезапустите ../build.py')
   // сайт и письмо — форматы: генератор пишет их площадками, программа делит такие материалы на части
   return webAndMail(p)
@@ -111,9 +125,11 @@ const upgrade = (p: AnyPlan, seedUrl: string) => upgradePlan(p, () => fetchSeed(
 export interface AppProps {
   storage?: () => Promise<PlanStorage>
   seedUrl?: string
+  /** С чего начать, если ничего не сохранено; без него — чистый лист. */
+  initialPlan?: Plan
 }
 
-export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.json' }: AppProps) {
+export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.json', initialPlan }: AppProps) {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [error, setError] = useState('')
   const storage = useRef<PlanStorage | null>(null)
@@ -126,7 +142,8 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
         const st = await storageFactory()
         storage.current = st
         const stored = (await st.load().catch(() => null)) as AnyPlan | null
-        const plan = stored ? await upgrade(stored, seedUrl) : await fetchSeed(seedUrl)
+        // с чистого листа: без сохранённого плана — пустой; план Датаиста — примером из меню профиля
+        const plan = stored ? await upgrade(stored, seedUrl) : initialPlan ? webAndMail(initialPlan) : emptyPlan(today())
         if (!alive) return
         dispatch({ type: 'init', plan })
         setSaved(st.persistent ? 'idle' : 'memory')
@@ -202,7 +219,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     return { ...f, hiddenPlatforms: f.hiddenPlatforms.filter((p) => !isHome(p)), hiddenFormats: f.hiddenFormats?.map((x) => (x === OLD_MAIL ? MAIL : x)) }
   })
   const [sheet, setSheet] = useState<Sheet>(null)
-  const [section, setSectionState] = useState<Section>(() => (readLS<string>('cp:section', 'calendar') === 'analytics' ? 'analytics' : 'calendar'))
+  const [section, setSectionState] = useState<Section>(readSection)
   const setSection = (s: Section) => {
     setSectionState(s)
     writeLS('cp:section', s)
@@ -389,6 +406,9 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     openItem: (id) => setSheet((s) => ({ kind: 'item', id, back: backOf(s) })),
     // «+» поверх черновиков — вкладка, а не шаг вглубь: назад ведёт туда же, откуда открыли черновики
     openNew: (draft) => setSheet((s) => ({ kind: 'new', draft, back: s?.kind === 'drafts' ? undefined : backOf(s) })),
+    openRecreate: (source, preset) => setSheet({ kind: 'recreate', source, preset }),
+    section,
+    setSection,
     openTask: (id) => setSheet((s) => ({ kind: 'task', id, back: backOf(s) })),
     openDay: (date) => setSheet({ kind: 'day', date }),
     openDayId,
@@ -483,7 +503,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
         {section === 'calendar' && narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
         {section === 'calendar' && sideOpen && <Sidebar onClose={() => setSideOpen(false)} />}
         <main className="nr-main">
-          {section === 'analytics' ? <AnalyticsView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
+          {section === 'home' ? <HomeView /> : section === 'analytics' ? <AnalyticsView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} />}
@@ -491,6 +511,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
           {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}-${sheet.draft.title ?? ''}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'help' && <HelpSheet onClose={closeSheet} />}
+          {sheet?.kind === 'recreate' && <RecreateSheet key={sheet.source.title} source={sheet.source} preset={sheet.preset} onClose={closeSheet} />}
           {section === 'calendar' && !sheet && !selected.size && (
             <button type="button" className="cp-fab" aria-label="Новый контент" title="Запланировать контент" onClick={() => ctx.openNew({ date: anchor < today() ? today() : anchor })}>
               <Icon name="plus" size={26} />
@@ -585,17 +606,28 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp, onPeriod }: { o
         role="menuitem"
         className="cp-menu__item"
         onClick={async () => {
-          if (!confirm('Вернуть исходный план из генератора? Ваши правки можно будет отменить кнопкой «Отменить».')) return
           try {
             dispatch({ type: 'replace', plan: await fetchSeed(seedUrl) })
-            toast('Исходный план восстановлен', true)
+            toast('Загружен план Датаиста — пример', true)
           } catch (err) {
-            toast(err instanceof Error ? err.message : 'Не удалось загрузить исходный план')
+            toast(err instanceof Error ? err.message : 'Не удалось загрузить план')
           }
           onClose()
         }}
       >
-        <Icon name="reset" size={18} /> Сбросить к исходному плану
+        <Icon name="upload" size={18} /> Загрузить план Датаиста (пример)
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="cp-menu__item"
+        onClick={() => {
+          dispatch({ type: 'replace', plan: emptyPlan(today()) })
+          toast('Всё очищено — с чистого листа', true)
+          onClose()
+        }}
+      >
+        <Icon name="reset" size={18} /> Очистить всё
       </button>
       <div className="cp-menu__foot">
         <span className="nr-label">Тема</span>

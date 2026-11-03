@@ -39,8 +39,43 @@ const dragBy = async (loc, dx, dy) => {
   await page.mouse.up()
 }
 
-// оболочка: календарь сразу, слева — отделы и фильтры, справа вверху — поиск, вид календаря и дашборд
+// с чистого листа: первым — главная, контента нет
 await page.goto(BASE)
+await page.getByRole('heading', { name: 'Главная' }).waitFor()
+{
+  const smm = page.getByRole('navigation', { name: 'SMM' })
+  const items = await smm.getByRole('button').allTextContents()
+  const empty = await page.getByText(/Пока пусто. Подключите свои соцсети/).count()
+  // демо: моя лента, поиск по конкурентам, кто впереди, «Пересоздать» — 3 коротких из видео в один день
+  await page.getByRole('switch', { name: 'Демо' }).click()
+  const mine = await page.getByRole('region', { name: 'Вышло' }).getByRole('article').count()
+  const sumLabel = await page.locator('.cp-post__sum').first().evaluate((el) => ({ text: el.textContent, bg: getComputedStyle(el).backgroundColor }))
+  await page.screenshot({ path: `${SHOTS}/0-home.png` })
+  await page.getByRole('radio', { name: /Поиск/ }).click()
+  const leaders = await page.getByRole('table', { name: 'Кто впереди' }).getByRole('row').count()
+  await page.getByRole('radio', { name: 'Лайки' }).click()
+  await page.screenshot({ path: `${SHOTS}/0-discover.png` })
+  const video = page.getByRole('list', { name: 'Посты конкурентов' }).getByRole('article').filter({ has: page.locator('.cp-post__media--video') }).first()
+  await video.getByRole('button', { name: 'Пересоздать' }).click()
+  const re = page.getByRole('complementary', { name: 'Пересоздать' })
+  const preset = [await re.getByRole('radio', { name: 'Короткие видео' }).getAttribute('aria-checked'), await re.getByRole('group', { name: 'Сколько коротких' }).textContent(), await re.getByRole('radio', { name: 'В один день' }).getAttribute('aria-checked')]
+  await re.getByLabel('Новый канал').fill('Мой блог')
+  await re.getByRole('combobox', { name: 'Рубрика' }).fill('Нарезки')
+  await re.getByRole('option', { name: 'Новая рубрика «Нарезки»' }).click()
+  await page.screenshot({ path: `${SHOTS}/0-recreate.png` })
+  await re.getByRole('button', { name: 'Создать' }).click()
+  const made = (await toast().textContent()) ?? ''
+  await page.getByRole('switch', { name: 'Демо' }).click()
+  const soonCards = await page.getByRole('radio', { name: /Моя лента/ }).click().then(() => page.getByRole('region', { name: 'Ожидается' }).getByRole('article').count())
+  check(items.join('|') === 'Главная|Календарь|Аналитика' && empty, 'с чистого листа: первым — главная, контента нет; дальше — календарь и аналитика', `главная: ${items.join(', ')}, пусто ${empty}`)
+  check(mine > 0 && !/Саммери/.test(sumLabel.text) && sumLabel.bg !== 'rgba(0, 0, 0, 0)' && leaders > 1, `главная на демо: моя лента (${mine}), саммери — подсвеченным окошком без подписи, поиск — кто впереди (${leaders - 1})`, `главная: постов ${mine}, саммери «${sumLabel.text?.slice(0, 20)}» ${sumLabel.bg}, кто впереди ${leaders}`)
+  check(preset.join('|') === 'true|−3+коротких — части 1 из 3, 2 из 3…|true' && /Создано: 3 коротких видео — все на/.test(made) && soonCards === 3, '«Пересоздать» из видео: 3 коротких в один день — в «Ожидается» на главной', `пересоздать: ${preset.join(' / ')}; «${made}»; ожидается ${soonCards}`)
+}
+// план Датаиста — примером из профиля; дальше — календарь
+await page.getByRole('button', { name: 'Профиль' }).click()
+await page.getByRole('menuitem', { name: /Загрузить план Датаиста/ }).click()
+await toast().filter({ hasText: 'Загружен план Датаиста' }).waitFor()
+await page.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: 'Календарь контента' }).click()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const nav = page.getByRole('navigation', { name: 'Отделы' })
 check(
@@ -297,25 +332,21 @@ await page.keyboard.press('Control+z')
   await rivals.getByLabel('Ссылка или @аккаунт').fill('@aidaily')
   await rivals.getByRole('button', { name: 'Следить' }).click()
   const watched = await page.getByRole('list', { name: 'Конкуренты' }).getByText('AI Daily').count()
-  // на примере: графики соцсетей, сутки — по часам, лента конкурента и «Переиспользовать»
-  await page.getByRole('switch', { name: 'Пример' }).click()
+  // на демо: графики соцсетей, сутки — по часам
+  await page.getByRole('switch', { name: 'Демо' }).click()
   await page.getByRole('radiogroup', { name: 'Период' }).getByRole('radio', { name: 'Сутки' }).click()
   const bars = await page.locator('.cp-mc__bar').count()
   const lines = await page.locator('.cp-mc__line').count()
   const hours = ((await page.locator('.cp-an__card').first().getByRole('img', { name: /просмотры/ }).getAttribute('aria-label')) ?? '').match(/\d\d:00 — /g)?.length ?? 0
-  const posts = await page.getByRole('list', { name: 'Посты конкурентов' }).getByRole('listitem').count()
   await page.screenshot({ path: `${SHOTS}/8-analytics.png` })
-  await page.getByRole('list', { name: 'Посты конкурентов' }).getByRole('button', { name: 'Переиспользовать' }).first().click()
-  const reused = await page.getByRole('complementary', { name: 'Новый контент' }).getByRole('textbox', { name: 'Заметка' }).inputValue()
-  await page.getByRole('complementary', { name: 'Новый контент' }).getByRole('button', { name: 'Закрыть' }).click()
-  await page.getByRole('switch', { name: 'Пример' }).click()
+  await page.getByRole('switch', { name: 'Демо' }).click()
   await page.getByRole('list', { name: 'Конкуренты' }).getByRole('button', { name: 'Не следить: AI Daily' }).click()
   check(
-    items.join('|') === 'Календарь|Аналитика' && sub.x >= rail.x + rail.width - 1 && cards === channelsN && !planStats && soon === 'dashed' && watched,
-    `СММ: «Календарь» и «Аналитика» справа от отделов; ${cards} каналов, без «карточек плана»; конкуренты; маркет-анализ — пунктиром`,
+    items.join('|') === 'Главная|Календарь|Аналитика' && sub.x >= rail.x + rail.width - 1 && cards === channelsN && !planStats && soon === 'dashed' && watched,
+    `СММ: «Главная», «Календарь» и «Аналитика» справа от отделов; ${cards} каналов, без «карточек плана»; конкуренты; маркет-анализ — пунктиром`,
     `аналитика: ${items.join(', ')}, карточек ${cards}/${channelsN}, карточки плана ${planStats}, рамка «${soon}», конкурент ${watched}`,
   )
-  check(bars > 0 && lines > 0 && hours === 24 && posts > 0 && reused.startsWith('По мотивам: AI Daily'), `аналитика на примере: графики (столбики ${bars}, линии ${lines}), сутки — 24 часа, лента ${posts} постов, «Переиспользовать» — новый контент`, `пример: столбики ${bars}, линии ${lines}, часов ${hours}, постов ${posts}, заметка «${reused.slice(0, 30)}»`)
+  check(bars > 0 && lines > 0 && hours === 24, `аналитика на демо: графики (столбики ${bars}, линии ${lines}), сутки — 24 часа`, `демо: столбики ${bars}, линии ${lines}, часов ${hours}`)
   await smm.getByRole('button', { name: 'Календарь контента' }).click()
   await page.getByRole('grid', { name: /Неделя по каналам/ }).waitFor()
 }
@@ -382,7 +413,7 @@ const formY = [
   await yOf(form.getByRole('group', { name: 'Площадки' })),
   await yOf(form.getByRole('checkbox', { name: 'Готово' })),
 ]
-const gone = await form.getByText(/Подробнее|Кто делает|Подготовить к|Вне сетки|Копии на другие|Пересоздать|Общая тема|исходной сетке|^Материал$|^Статус$|Группа ·|вместе с группой/).count()
+const gone = await form.getByText(/Подробнее|Кто делает|Подготовить к|Вне сетки|Копии на другие|Пересоздать для площадок|Общая тема|исходной сетке|^Материал$|^Статус$|Группа ·|вместе с группой/).count()
 check(
   formY.every((y, i) => y > 0 && (i === 0 || y > formY[i - 1])) && !gone && (await formHead.getByRole('button', { name: 'Пауза' }).count()),
   'форма: тема вместо «Материал» (вписывается), рядом ⏸; ниже когда, канал, рубрика, заметка, формат, площадки; внизу «Готово» — без ряда статусов, группы и лишнего',
@@ -674,9 +705,17 @@ check(await page.getByRole('region', { name: 'Найдено' }).getByRole('butt
 // телефон: внизу Календарь и Профиль; фильтры — за кнопкой; вид — меню, в нём лента по дням; поиск — значком
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 await phone.goto(BASE)
-await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
+await phone.getByRole('heading', { name: 'Главная' }).waitFor()
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
-check(tabs.join('|') === 'Календарь|Аналитика|Профиль', 'телефон: внизу Календарь, Аналитика и Профиль, без дашборда', `телефон: внизу ${tabs.join(', ')}`)
+check(tabs.join('|') === 'Главная|Календарь|Аналитика|Профиль', 'телефон: внизу Главная, Календарь, Аналитика и Профиль', `телефон: внизу ${tabs.join(', ')}`)
+// на телефоне блоки справа свёрнуты — лента сразу
+const folded = await phone.locator('.cp-home__block:not([open])').count()
+check(folded >= 2, 'телефон: «Мои соцсети» и «Топики» свёрнуты — лента сразу', `телефон: свёрнутых блоков ${folded}`)
+await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Профиль' }).click()
+await phone.getByRole('menuitem', { name: /Загрузить план Датаиста/ }).click()
+await phone.getByRole('status').filter({ hasText: 'Загружен план Датаиста' }).waitFor()
+await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Календарь' }).click()
+await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка в одну строку', `телефон: шапка ${head?.height}px`)
 check(!(await phone.locator('.cp-side').count()), 'телефон: фильтры свёрнуты', 'телефон: фильтры открыты сами')

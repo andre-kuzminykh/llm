@@ -11,11 +11,11 @@ describe('T-CP-056/057 FR-CP-056/057 СММ: календарь и аналит�
     vi.useRealTimers()
   })
 
-  it('слева, справа от отделов — «Календарь» и «Аналитика»; без данных соцсетей — пусто, без «карточек плана»', async () => {
+  it('слева, справа от отделов — «Главная», «Календарь», «Аналитика»; без данных соцсетей — пусто, без «карточек плана»', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     const smm = screen.getByRole('navigation', { name: 'SMM' })
-    expect(within(smm).getAllByRole('button').map((b) => b.textContent)).toEqual(['Календарь', 'Аналитика'])
+    expect(within(smm).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Аналитика'])
     expect(within(smm).getByRole('button', { name: 'Календарь контента' })).toHaveAttribute('aria-current', 'page')
     await userEvent.click(within(smm).getByRole('button', { name: /^Аналитика/ }))
     expect(screen.getByRole('heading', { name: 'Аналитика' })).toBeInTheDocument()
@@ -39,7 +39,7 @@ describe('T-CP-056/057 FR-CP-056/057 СММ: календарь и аналит�
     expect(await screen.findByRole('grid', { name: 'Неделя по времени' })).toBeInTheDocument()
   })
 
-  it('на примере: графики подписчиков, просмотров и вовлечённости, за сутки — по часам; конкурент — тоже; его посты — «Переиспользовать»', async () => {
+  it('на демо: графики подписчиков, просмотров и вовлечённости, за сутки — по часам; конкурент — тоже', async () => {
     renderApp(undefined, { 'cp:section': '"analytics"' })
     await screen.findByRole('heading', { name: 'Аналитика' })
     // конкуренты: из маркетингового анализа — позже (пунктиром); пока заводят сами
@@ -53,10 +53,9 @@ describe('T-CP-056/057 FR-CP-056/057 СММ: календарь и аналит�
     await userEvent.click(within(form).getByRole('button', { name: 'Следить' }))
     const rival = within(screen.getByRole('list', { name: 'Конкуренты' })).getByRole('article', { name: 'AI Daily' })
     expect(rival).toHaveTextContent(/Telegram · @aidaily.*каждый час/)
-    expect(screen.getByText(/посты и саммери появятся после первой проверки/)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('switch', { name: 'Пример' }))
-    expect(screen.getByRole('note')).toHaveTextContent('Это пример, не ваши данные')
+    await userEvent.click(screen.getByRole('switch', { name: 'Демо' }))
+    expect(screen.getByRole('note')).toHaveTextContent('Демо: цифры выдуманы')
     const dataist = screen.getByRole('article', { name: 'Dataist' })
     expect(within(dataist).getAllByRole('img').map((g) => g.getAttribute('aria-label')!.split(':')[0])).toEqual(['Dataist, подписчики', 'Dataist, просмотры', 'Dataist, вовлечённость'])
     await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Период' })).getByRole('radio', { name: 'Сутки' }))
@@ -69,15 +68,8 @@ describe('T-CP-056/057 FR-CP-056/057 СММ: календарь и аналит�
     expect(within(dataist).getByRole('radio', { name: 'YouTube' })).toHaveAttribute('aria-checked', 'true')
     expect(within(rival).getAllByRole('img')).toHaveLength(3)
 
-    // лента для вдохновения: посты конкурента с саммери, помечены как пример; «Переиспользовать» — новый контент с темой
-    const feed = screen.getByRole('list', { name: 'Посты конкурентов' })
-    const first = within(feed).getAllByRole('listitem')[0]
-    expect(first).toHaveTextContent(/AI Daily.*пример/)
-    const title = within(first).getByRole('heading').textContent!.replace(/^Пример: /, '')
-    await userEvent.click(within(first).getByRole('button', { name: 'Переиспользовать' }))
-    const draft = screen.getByRole('complementary', { name: 'Новый контент' })
-    expect(within(draft).getByRole('textbox', { name: 'Тема' })).toHaveValue(title.charAt(0).toUpperCase() + title.slice(1))
-    expect((within(draft).getByRole('textbox', { name: 'Заметка' }) as HTMLTextAreaElement).value).toMatch(/^По мотивам: AI Daily, Telegram\nСаммери: Пример саммери.*\nЧто поменять у нас: $/)
+    // посты конкурентов с саммери и «Пересоздать» — на главной, во вкладке «Поиск»
+    expect(screen.getByText(/на «Главной», во вкладке «Поиск»/)).toBeInTheDocument()
 
     await userEvent.click(within(screen.getByRole('list', { name: 'Конкуренты' })).getByRole('button', { name: 'Не следить: AI Daily' }))
     expect(screen.queryByRole('list', { name: 'Конкуренты' })).toBeNull()

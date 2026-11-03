@@ -80,6 +80,7 @@ export interface Item {
   trigger?: string // версия для другой площадки: создаётся автоматически, когда выйдет оригинал (его id)
   langs?: string[] // на каких языках выходит: «ru», «en»; без поля — по-русски
   series?: string // повтор: у всех материалов одного повтора — один id
+  voice?: 'tts' | 'avatar' | 'self' // видео из текста: озвучка голосом, аватар (лицо) или запишу сам
 }
 
 /** Канал конкурента: его заводит человек (позже подтянутся из маркетингового анализа); мониторим каждый час. */
@@ -95,6 +96,15 @@ export interface Competitor {
 export interface Analytics {
   skip?: string[] // свои каналы, которые не анализируем; без поля — все
   competitors: Competitor[]
+  accounts?: Account[] // мои соцсети, подключённые на главной: из них собирается моя лента
+}
+
+/** Мой аккаунт в соцсети: из него собирается моя лента на главной (посты, цифры, теги). */
+export interface Account {
+  id: string
+  name: string
+  platform: string
+  handle: string // ссылка или @аккаунт
 }
 
 export interface Plan {
@@ -246,6 +256,31 @@ export const LANGS: { id: string; code: string; name: string }[] = [
 ]
 export const DEFAULT_LANGS = ['ru']
 export const langsOf = (it: Pick<Item, 'langs'>) => it.langs ?? DEFAULT_LANGS
+
+/** Какие площадки выбраны сразу: у сайта и письма — своя; иначе те, что канал запомнил для формата, или как у формата
+ *  рубрики в канале, или где формат обычно выходит, — из тех, где он может выйти. */
+export function presetPlatforms(plan: Plan, c: Channel | undefined, f: string, r?: Rule) {
+  if (FORMAT_HOME[f]) return [FORMAT_HOME[f]]
+  const can = platformsFor(f, plan.platforms)
+  const tries = [c?.picks?.[f] ?? [], r?.format === f ? r.platforms : [], (FORMAT_PLATFORMS[f] ?? []).filter((p) => c?.platforms.includes(p)), c?.platforms ?? []]
+  return tries.map((list) => list.filter((p) => can.includes(p))).find((list) => list.length) ?? []
+}
+
+/** Пустой план — с чистого листа: каналы, рубрики (теги) и расписание человек заводит сам. Площадки — все известные;
+ *  сайт и рассылка нужны форматам «Веб» и «Рассылка». */
+export function emptyPlan(today: ISODate): Plan {
+  const [y, m, d] = today.split('-').map(Number)
+  return {
+    version: 3,
+    start: today,
+    end: `${y + 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+    platforms: ['YouTube', 'Instagram', 'TikTok', 'Threads', 'X', 'Telegram', 'LinkedIn', 'Web', 'Mail'],
+    channels: [],
+    rubrics: [],
+    rules: [],
+    items: [],
+  }
+}
 
 export const DEFAULT_TIME = '12:00'
 /** Как подписан поток вместо времени: «24/7». */

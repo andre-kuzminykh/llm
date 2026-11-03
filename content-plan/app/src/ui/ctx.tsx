@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 import type { Filters } from '../model/filters'
 import type { HintLine, Move } from '../model/hint'
 import type { Violation } from '../model/rules'
+import type { Output, Source } from '../model/social'
 import type { Action } from '../model/store'
 import type { Channel, ISODate, Item, Plan, Rubric, Rule, Status } from '../model/types'
 import type { Unit } from '../model/units'
@@ -19,6 +20,8 @@ export interface ToastAction {
   label: string
   run: () => void
 }
+export type Section = 'home' | 'calendar' | 'analytics'
+
 export interface ToastOpts {
   undo?: boolean
   actions?: ToastAction[]
@@ -59,6 +62,11 @@ export interface Ctx {
   setSpan: (s: Span) => void
   /** Черновики (банк идей) — во вкладке «+». */
   openDrafts: () => void
+  /** Пересоздать пост, видео или материал календаря: пост, короткие ×N, длинное видео, статья. */
+  openRecreate: (source: Source, preset?: { output: Output; count: number }) => void
+  /** Раздел СММ: главная (лента), календарь, аналитика. */
+  section: Section
+  setSection: (s: Section) => void
   /** Планирование недели: уточнить темы пустых слотов. */
   /** Наверстать просроченное, не двигая остальной план. */
   /** Перенести период (отпуск): на следующие слоты или в свободные места. */

@@ -1,4 +1,4 @@
-import { bucketsOf, EMPTY_FEED, hasData, sampleFeed, valuesOf, type Feed } from './metrics'
+import { bucketsOf, EMPTY_FEED, hasData, sampleFeed, tagsOf, valuesOf, type Feed } from './metrics'
 
 const at = (s: string) => new Date(s).getTime()
 
@@ -35,15 +35,19 @@ describe('T-CP-057 FR-CP-057 данные соцсетей: корзины и з
     expect(hasData(feed, 'a')).toBe(true)
     expect(hasData(EMPTY_FEED, 'a')).toBe(false)
   })
-  it('пример — одинаковый при каждом открытии, по часам за 90 дней; посты — только у конкурентов и помечены', () => {
+  it('пример — одинаковый при каждом открытии, по часам за 90 дней; посты — мои и конкурентов, помечены; теги — из текста', () => {
     const owners = [{ id: 'me', platforms: ['YouTube'] }, { id: 'rival', platforms: ['Telegram'], rival: true }]
     const a = sampleFeed(now, owners)
     const b = sampleFeed(now, owners)
     expect(a.series.map((s) => s.points.length)).toEqual(b.series.map((s) => s.points.length))
     expect(a.series[0].points.slice(0, 5)).toEqual(b.series[0].points.slice(0, 5))
     expect(a.series.find((s) => s.metric === 'followers')!.points).toHaveLength(90 * 24 + 1)
-    expect(a.posts.length).toBeGreaterThan(0)
-    expect(a.posts.every((p) => p.owner === 'rival' && p.sample && p.title.startsWith('Пример'))).toBe(true)
+    expect(a.posts.some((p) => p.owner === 'rival' && !p.mine)).toBe(true)
+    expect(a.posts.some((p) => p.owner === 'me' && p.mine)).toBe(true)
+    expect(a.posts.every((p) => p.sample && tagsOf(p.text).length > 0 && p.comments >= 0)).toBe(true)
+    // YouTube — видео, Telegram — посты
+    expect(a.posts.filter((p) => p.platform === 'YouTube').every((p) => p.kind === 'video' || p.kind === 'short')).toBe(true)
+    expect(tagsOf('Кейс #ИИ и #кейсы_клиентов, ещё раз #ии')).toEqual(['ии', 'кейсы_клиентов'])
     expect(a.posts.map((p) => p.at)).toEqual([...a.posts.map((p) => p.at)].sort((x, y) => y - x))
   })
 })

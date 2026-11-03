@@ -25,7 +25,9 @@ export function memoryStorage(): PlanStorage {
 
 const DB = 'content-plan'
 const STORE = 'state'
-const KEY = 'plan'
+// чистый лист: прежний план (с контентом Датаиста) остался под ключом «plan» — программа его больше не открывает;
+// вернуть пример можно из меню профиля («Загрузить план Датаиста»)
+const KEY = 'plan-2'
 
 function request<T>(r: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
