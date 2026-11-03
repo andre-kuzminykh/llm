@@ -22,6 +22,7 @@ export interface Channel {
   platforms: string[]
   sections: Section[]
   picks?: Record<string, string[]> // какие площадки выбрали в последний раз у формата: в форме они открываются выбранными
+  langs?: string[] // на каких языках канал выходит: русский — в один канал, английский — в другой; без поля — на любых
 }
 
 export interface Rubric {
@@ -81,9 +82,22 @@ export interface Item {
   langs?: string[] // на каких языках выходит: «ru», «en»; без поля — по-русски
   series?: string // повтор: у всех материалов одного повтора — один id
   voice?: 'tts' | 'avatar' | 'self' // видео из текста: озвучка голосом, аватар (лицо) или запишу сам
-  images?: string[] // картинки к заметке — до 10, data: URL (сжатые)
-  ref?: SourceRef // из чего пересоздан: пост или видео (своё или конкурента) — контекст для копирования
+  files?: Attachment[] // к заметке — до 5 файлов: картинки и тексты
+  images?: string[] // так картинки заметки хранились раньше: читаются как файлы
+  ref?: SourceRef // из чего пересоздан: пост или видео (своё или конкурента); сам контекст — текстом в заметке
 }
+
+/** Файл в заметке: картинка или текст (txt, md, pdf, docx…) — data: URL, хранится с планом. */
+export interface Attachment {
+  name: string
+  type: string
+  size: number
+  url: string
+}
+export const isImage = (f: Pick<Attachment, 'type'>) => f.type.startsWith('image/')
+/** Файлы заметки: новые — files, старые картинки — images. */
+export const filesOf = (it: Pick<Item, 'files' | 'images'>): Attachment[] =>
+  it.files ?? (it.images ?? []).map((url, i) => ({ name: `Картинка ${i + 1}`, type: url.slice(5, url.indexOf(';')) || 'image/jpeg', size: 0, url }))
 
 /** Пост или видео, из которого пересоздали материал: тема, саммери, где и чей. */
 export interface SourceRef {
@@ -94,7 +108,8 @@ export interface SourceRef {
   url?: string
   itemId?: string // материал календаря
 }
-export const MAX_IMAGES = 10
+export const MAX_FILES = 5
+export const MAX_FILE_MB = 5
 
 /** Канал конкурента: его заводит человек (позже подтянутся из маркетингового анализа); мониторим каждый час. */
 export interface Competitor {

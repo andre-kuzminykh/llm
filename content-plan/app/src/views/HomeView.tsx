@@ -10,7 +10,7 @@ import { indexByDate } from '../model/filters'
 import { bucketsOf, tagsOf, type Post } from '../model/metrics'
 import { followersApply, KPIS, postVisible, topicLabel, totals, type Dim, type HomeFilters } from '../model/overview'
 import { sortPosts, SORTS, sourceOfItem, type Sort } from '../model/social'
-import { FORMAT_ICON, FORMATS, isHome, rubricKey, shownTitle, statusOf, timeOf } from '../model/types'
+import { filesOf, FORMAT_ICON, FORMATS, isHome, isImage, rubricKey, shownTitle, statusOf, timeOf } from '../model/types'
 import { unitsOf, type Unit } from '../model/units'
 import { PlatformIcon, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
@@ -296,7 +296,7 @@ function PlanPost({ unit }: { unit: Unit }) {
   const published = unit.head.status === 'published'
   const formats = [...new Set(unit.items.map((it) => it.format))].filter((f) => FORMAT_ICON[f])
   const where = [...new Set(unit.items.flatMap((it) => it.platforms))].filter((p) => !isHome(p))
-  const img = unit.head.images?.[0]
+  const img = filesOf(unit.head).find(isImage)?.url
   return (
     <article className={`cp-post cp-post--plan${published ? '' : ' cp-post--soon'}`} aria-label={shownTitle(unit.head)}>
       <header className="cp-post__head">

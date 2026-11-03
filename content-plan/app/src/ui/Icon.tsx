@@ -150,6 +150,7 @@ const P: Record<string, ReactElement> = {
       <path d="M4 17.5l4.8-4.6 3.4 3.1 3.1-2.7 4.7 4.2" />
     </>
   ),
+  clip: <path d="M20 11.5l-7.6 7.6a5 5 0 0 1-7.1-7.1l8.1-8.1a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3" />,
   'arrow-up': <path d="M12 19V5.5M6 11.5l6-6 6 6" />,
   settings: (
     <>

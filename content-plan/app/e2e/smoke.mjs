@@ -54,7 +54,12 @@ await page.getByRole('heading', { name: 'Главная' }).waitFor()
   const ov = page.getByRole('region', { name: 'Аналитика' })
   await ov.waitFor()
   const kpis = await ov.getByRole('group', { name: 'Метрики' }).getByRole('button').count()
+  // сверху минимально: метрики строкой; «Подробнее» — график и таблица
+  const compact = { lines: await ov.locator('.cp-ov__line').count(), h: Math.round((await ov.boundingBox()).height) }
+  await page.screenshot({ path: `${SHOTS}/0-home-compact.png` })
+  await ov.getByRole('button', { name: /Подробнее/ }).click()
   const lines = await ov.locator('.cp-ov__line').count()
+  const width = Math.round((await page.locator('.cp-home').boundingBox()).width)
   const sumLabel = await page.locator('.cp-post__sum').first().evaluate((el) => ({ text: el.textContent, bg: getComputedStyle(el).backgroundColor }))
   const video = await page.locator('.cp-post').filter({ has: page.locator('.cp-post__media--video') }).first().evaluate((el) => {
     const m = el.querySelector('.cp-post__media--video').getBoundingClientRect()
@@ -69,6 +74,7 @@ await page.getByRole('heading', { name: 'Главная' }).waitFor()
   const sidePicked = await page.getByRole('complementary', { name: 'Фильтры' }).getByRole('group', { name: 'Топики' }).locator('[aria-pressed="true"]').count()
   await page.screenshot({ path: `${SHOTS}/0-drill.png` })
   await page.getByRole('button', { name: `Снять фильтр: Топик: ${topic}` }).click()
+  check(compact.lines === 0 && compact.h < 160 && width <= 860, `главная сверху минимально: метрики строкой (${compact.h} px), колонка ${width} px`, `свёрнуто: ${JSON.stringify(compact)}, ширина ${width}`)
   check(kpis === 5 && lines === 2 && chip && sidePicked === 1 && !/#/.test(topic ?? ''), `главная на демо: 5 плиток, график (${lines} линии), провал в топик «${topic}» — меткой и в панели слева`, `аналитика: плиток ${kpis}, линий ${lines}, метка ${chip}, в панели ${sidePicked}, топик «${topic}»`)
   check(!/Саммери/.test(sumLabel.text) && sumLabel.bg !== 'rgba(0, 0, 0, 0)' && video >= 98, `лента: саммери — подсвеченным окошком, длинное видео — на всю карточку (${video} %)`, `саммери «${sumLabel.text?.slice(0, 20)}» ${sumLabel.bg}, видео ${video} %`)
   // листаешь — графики сворачиваются в строку сверху, справа внизу «Вернуться»
@@ -92,7 +98,7 @@ await page.getByRole('heading', { name: 'Главная' }).waitFor()
   const re = page.getByRole('complementary', { name: 'Новый контент' })
   const preset = [
     await re.getByRole('heading', { name: 'Пересоздать' }).count(),
-    await re.getByLabel('Из чего').count(),
+    (await re.getByRole('textbox', { name: 'Заметка' }).inputValue()).startsWith('По мотивам: «') ? 1 : 0,
     await re.getByRole('radio', { name: 'Короткое вертикальное видео' }).getAttribute('aria-checked'),
     await re.getByRole('group', { name: 'Сколько коротких' }).textContent(),
     await re.getByRole('radio', { name: 'В один день' }).getAttribute('aria-checked'),
@@ -509,7 +515,7 @@ await fmtGroup.getByRole('radio', { name: 'Полное горизонтальн
 check(!webPlats && !mailPlats, 'формат «Веб» или «Рассылка» — площадок нет', `площадки у веба: ${webPlats}, у письма: ${mailPlats}`)
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${SHOTS}/5-editor.png` })
-await form.getByRole('button', { name: 'Отмена' }).click()
+await form.getByRole('button', { name: 'Закрыть' }).click()
 ok('форма материала')
 await page.keyboard.press('Escape')
 
@@ -538,11 +544,19 @@ await page.keyboard.press('Escape')
   const langs = await nf.getByRole('group', { name: 'Языки' }).getByRole('checkbox').count()
   await page.screenshot({ path: `${SHOTS}/5-langs.png` })
   await nf.getByRole('button', { name: /^Языки:/ }).click()
-  await nf.getByLabel('Добавить картинки').setInputFiles([{ name: 'a.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') }])
-  await nf.getByRole('list', { name: 'Картинки' }).getByRole('listitem').first().waitFor()
+  await nf.getByLabel('Добавить файлы').setInputFiles([
+    { name: 'a.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') },
+    { name: 'сценарий.txt', mimeType: 'text/plain', buffer: Buffer.from('Хук, суть, финал') },
+  ])
+  await nf.getByRole('list', { name: 'Файлы' }).getByRole('listitem').nth(1).waitFor()
+  // языки по каналам: английский — в другой канал
+  await nf.getByRole('button', { name: /^Языки:/ }).click()
+  await nf.getByRole('checkbox', { name: 'English' }).click()
+  await nf.getByRole('button', { name: /^Языки:/ }).click()
+  const langMap = await nf.getByRole('group', { name: 'Языки по каналам' }).getByRole('combobox').count()
   check(
-    channels[0] === 'Без канала' && channels.at(-1) === 'Новый канал…' && repeats.join('|') === 'Не повторять|Каждый день|По будням|Каждую неделю|Через неделю|Раз в месяц|Другое…' && daysOn === 1 && hint && custom === 'раз в 3 дня, 4 раза' && langBtn === 'Языки: Русский' && langs > 10,
-    `новый контент: «Без канала», повтор (${hint}; «${custom}»), языки списком (${langs}), картинки в заметке`,
+    channels[0] === 'Без канала' && channels.at(-1) === 'Новый канал…' && repeats.join('|') === 'Не повторять|Каждый день|По будням|Каждую неделю|Через неделю|Раз в месяц|Другое…' && daysOn === 1 && hint && custom === 'раз в 3 дня, 4 раза' && langBtn === 'Языки: Русский' && langs > 10 && langMap === 2,
+    `новый контент: «Без канала», повтор (${hint}; «${custom}»), языки списком (${langs}) и по каналам (${langMap}), файлы в заметке`,
     `каналы ${channels.join(', ')}; повтор ${repeats.join(', ')} / ${daysOn} / «${hint}» / «${custom}»; языки «${langBtn}» ${langs}`,
   )
   await nf.getByRole('button', { name: 'Закрыть' }).click()
@@ -769,11 +783,14 @@ await phone.getByRole('region', { name: 'Аналитика' }).waitFor()
 const phoneHome = await phone.evaluate(() => ({
   side: !!document.querySelector('.cp-side'),
   wide: document.documentElement.scrollWidth > window.innerWidth,
-  cols: getComputedStyle(document.querySelector('.cp-ov__kpis')).gridTemplateColumns.split(' ').length,
+  strip: (() => {
+    const k = document.querySelector('.cp-ov__kpis')
+    return { rows: new Set([...k.children].map((c) => Math.round(c.getBoundingClientRect().top))).size, scrolls: k.scrollWidth > k.clientWidth }
+  })(),
 }))
 await phone.screenshot({ path: `${SHOTS}/9-phone-home.png` })
 await phone.getByRole('switch', { name: 'Демо' }).click()
-check(!phoneHome.side && !phoneHome.wide && phoneHome.cols === 2, 'телефон: главная — фильтры за кнопкой, плитки по две, без прокрутки вбок', `телефон, главная: ${JSON.stringify(phoneHome)}`)
+check(!phoneHome.side && !phoneHome.wide && phoneHome.strip.rows === 1 && phoneHome.strip.scrolls, 'телефон: главная — фильтры за кнопкой, метрики одной строкой (листаются вбок), страница вбок не едет', `телефон, главная: ${JSON.stringify(phoneHome)}`)
 await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Профиль' }).click()
 await phone.getByRole('menuitem', { name: /Загрузить план Датаиста/ }).click()
 await phone.getByRole('status').filter({ hasText: 'Загружен план Датаиста' }).waitFor()

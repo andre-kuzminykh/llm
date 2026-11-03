@@ -81,7 +81,13 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
     expect(within(kpis).getAllByRole('button').map((b) => b.querySelector('.cp-kpi__label')!.textContent)).toEqual(['Просмотры', 'Лайки', 'Комментарии', 'Вовлечённость', 'Подписчики'])
     const pressed = () => within(kpis).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.querySelector('.cp-kpi__label')!.textContent)
     expect(pressed()).toEqual(['Просмотры', 'Лайки'])
+    // сверху минимально: период и метрики строкой; графика и таблицы нет, пока не раскрыли
+    expect(within(ov).queryByRole('img', { name: /^График/ })).toBeNull()
+    expect(within(ov).queryByRole('table')).toBeNull()
+    expect(within(ov).getByRole('button', { name: /Подробнее/ })).toHaveAttribute('aria-expanded', 'false')
+    // щелчок по метрике — раскрывает график с ней
     await userEvent.click(within(kpis).getByRole('button', { name: /Комментарии/ }))
+    expect(within(ov).getByRole('button', { name: /Свернуть/ })).toHaveAttribute('aria-expanded', 'true')
     expect(within(ov).getByRole('img', { name: /^График: просмотры, лайки, комментарии/ })).toBeInTheDocument()
     // за сутки — по часам
     await userEvent.click(within(ov).getByRole('radio', { name: 'Сутки' }))
@@ -132,6 +138,7 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
     await screen.findByRole('heading', { name: 'Главная' })
     await userEvent.click(screen.getByRole('radio', { name: /Поиск/ }))
     const ov = screen.getByRole('region', { name: 'Аналитика' })
+    await userEvent.click(within(ov).getByRole('button', { name: /Подробнее/ }))
     // кто впереди: разрез по аккаунтам — четыре демо-конкурента
     expect(within(within(ov).getByRole('table', { name: 'Разрез: Аккаунты' })).getAllByRole('row')).toHaveLength(5)
     await userEvent.click(screen.getByRole('radio', { name: 'Комменты' }))
@@ -175,17 +182,15 @@ describe('T-CP-062 FR-CP-062 «Пересоздать» — та же форма
     await userEvent.click(within(video).getByRole('button', { name: 'Пересоздать' }))
     const sheet = screen.getByRole('complementary', { name: 'Новый контент' })
     expect(within(sheet).getByRole('heading', { name: 'Пересоздать' })).toBeInTheDocument()
-    // источник — контекстом сверху; тема — его; формат выбирают как обычно — из длинного видео сразу «вертикаль ×3»
-    expect(within(sheet).getByLabelText('Из чего')).toHaveTextContent(title)
+    // весь контекст — в заметке (откуда и о чём); тема — его; формат выбирают как обычно — из длинного видео сразу «вертикаль ×3»
+    expect(within(sheet).queryByLabelText('Из чего')).toBeNull()
+    expect((within(sheet).getByRole('textbox', { name: 'Заметка' }) as HTMLTextAreaElement).value).toMatch(new RegExp(`^По мотивам: «${title}» — `))
     expect(within(sheet).getByRole('textbox', { name: 'Тема' })).toHaveValue(title)
     expect(within(within(sheet).getByRole('radiogroup', { name: 'Формат' })).getByRole('radio', { checked: true })).toHaveAccessibleName('Короткое вертикальное видео')
     expect(within(sheet).getByRole('group', { name: 'Сколько коротких' })).toHaveTextContent(/^−3\+$/)
     expect(within(sheet).getByRole('radio', { name: 'В один день' })).toHaveAttribute('aria-checked', 'true')
     expect(within(sheet).queryByText(/части 1 из/)).toBeNull()
     await userEvent.click(within(sheet).getByRole('radio', { name: /^Аватар/ }))
-    // «В заметку» — саммери источника в заметку
-    await userEvent.click(within(sheet).getByRole('button', { name: 'В заметку' }))
-    expect((within(sheet).getByRole('textbox', { name: 'Заметка' }) as HTMLTextAreaElement).value.length).toBeGreaterThan(10)
     await userEvent.selectOptions(within(sheet).getByRole('combobox', { name: 'Канал' }), 'Dataist')
     await userEvent.clear(within(sheet).getByRole('combobox', { name: 'Рубрика' }))
     await userEvent.type(within(sheet).getByRole('combobox', { name: 'Рубрика' }), 'Тез')
@@ -220,13 +225,17 @@ describe('T-CP-062 FR-CP-062 «Пересоздать» — та же форма
     expect(within(tue).queryByRole('button', { name: /^Тезисы.*Нужна тема/ })).toBeNull()
   })
 
-  it('из календаря: длинное видео — «Нарезать на короткие…»: канал, рубрика и день — как у видео', async () => {
+  it('из календаря: «Пересоздать» — кнопкой внизу формы; длинное видео — нарезать на 3, канал, рубрика и день — как у видео', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: /^Демо · FULL: Стратегия/ }))
-    await userEvent.click(within(screen.getByRole('complementary', { name: 'Материал' })).getByRole('button', { name: 'Нарезать на короткие…' }))
+    const item = screen.getByRole('complementary', { name: 'Материал' })
+    const foot = item.querySelector('.cp-sheet__foot') as HTMLElement
+    expect(within(foot).getByRole('button', { name: 'Пересоздать' })).toBeInTheDocument()
+    expect(within(item).queryByText('Нарезать на короткие…')).toBeNull()
+    await userEvent.click(within(foot).getByRole('button', { name: 'Пересоздать' }))
     const sheet = screen.getByRole('complementary', { name: 'Новый контент' })
-    expect(within(sheet).getByLabelText('Из чего')).toHaveTextContent('Стратегия')
+    expect(within(sheet).getByRole('textbox', { name: 'Заметка' })).toHaveValue('По мотивам: «Стратегия» — Dataist')
     expect(within(sheet).getByRole('group', { name: 'Сколько коротких' })).toHaveTextContent('3')
     expect(within(sheet).getByRole('combobox', { name: 'Канал' })).toHaveDisplayValue('Dataist')
     expect(within(sheet).getByRole('combobox', { name: 'Рубрика' })).toHaveValue('Демо')

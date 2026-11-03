@@ -77,6 +77,12 @@ export interface Source {
   rubricId?: string | null
 }
 
+/** Контекст для пересоздания — текстом в заметку: откуда, ссылка, о чём. Дальше человек дописывает своё. */
+export const contextOf = (s: Source) =>
+  [`По мотивам: «${s.title}»${s.owner || s.platform ? ` — ${[s.owner, s.platform].filter(Boolean).join(', ')}` : ''}`, s.url, s.summary && s.summary !== s.title ? s.summary : '']
+    .filter(Boolean)
+    .join('\n')
+
 /** С чего начать форму: длинное видео — нарезать на 3 коротких, короткое — пост, текст — короткое видео. */
 export const presetOfSource = (s: Source): { format: string; count: number } =>
   s.kind === 'video' ? { format: SHORT_VIDEO, count: 3 } : s.kind === 'short' ? { format: TEXT_IMAGE, count: 1 } : { format: SHORT_VIDEO, count: 1 }

@@ -1,17 +1,17 @@
 import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { dateText, dayTitle, shortDate, today, weekday, WEEKDAYS, addDays } from '../model/dates'
 import { presetOf, presetRule, PRESETS, repeatDates, repeatText, times, type Preset, type RepeatRule } from '../model/repeat'
-import { partsActions, presetOfSource, scheduleRule, scheduleDates, sourceOfItem, VOICES, type Place, type Source, type Voice } from '../model/social'
+import { contextOf, partsActions, presetOfSource, scheduleRule, scheduleDates, sourceOfItem, VOICES, type Place, type Source, type Voice } from '../model/social'
 import { newId, type Action } from '../model/store'
 import {
-  FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, isHome, isSlot, MAX_IMAGES, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, SHORT_VIDEO, shownTitle,
-  statusOf, TEXT_IMAGE, timeOf, DEFAULT_LANGS, LANGS, langsOf, type Item, type Rule, type SourceRef, type Status,
+  FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, filesOf, isHome, isImage, isSlot, MAX_FILE_MB, MAX_FILES, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, SHORT_VIDEO, shownTitle,
+  statusOf, TEXT_IMAGE, timeOf, DEFAULT_LANGS, LANGS, langsOf, type Attachment, type Item, type Rule, type SourceRef, type Status,
 } from '../model/types'
 import { unitsOf } from '../model/units'
 import { IconButton, PickText, PlatformIcon, PlayPause } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
-import { imageFiles, readImage } from '../ui/images'
+import { ACCEPT, noteFiles, readFile } from '../ui/images'
 import { LangPicker } from '../ui/LangPicker'
 import { RepeatDialog } from '../ui/RepeatDialog'
 import { TagInput, type TagPick } from '../ui/TagInput'
@@ -67,6 +67,8 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
           date: srcItem?.date && srcItem.date >= today() ? srcItem.date : today(),
           channelId: srcItem?.channelId,
           rubricId: source.rubricId ?? null,
+          // весь контекст для пересоздания — в заметке: откуда, ссылка, о чём
+          note: contextOf(source),
           ref: { title: source.title, summary: source.summary, platform: source.platform, owner: source.owner, url: source.url, itemId: source.itemId },
         }
       : {}),
@@ -98,7 +100,9 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const [platforms, setPlatforms] = useState<string[]>(() => base.platforms ?? presetPlatforms(plan, channels.get(firstChannel), firstFormat, rules.get(firstRule)))
   const [status, setStatus] = useState<Status>(base.status ?? 'planned')
   const [note, setNote] = useState(base.note ?? '')
-  const [images, setImages] = useState<string[]>(base.images ?? [])
+  const [files, setFiles] = useState<Attachment[]>(() => filesOf(base))
+  // языки по каналам: русский — в один канал, английский — в другой (что поменяли руками)
+  const [langMap, setLangMap] = useState<Record<string, string>>({})
   const [time, setTime] = useState(base.time ?? '')
   const [touched, setTouched] = useState(false) // площадки выбрали руками — канал их запомнит
   const [langs, setLangs] = useState<string[]>(() => (existing ? langsOf(existing) : base.langs ?? myLangs()))
@@ -249,13 +253,57 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const placeNow: Place = !date ? 'drafts' : place === 'schedule' && !sched ? 'sameDay' : place === 'drafts' ? 'sameDay' : place
   const slots = sched && date ? scheduleDates(plan, sched, date, parts) : []
 
-  const addImages = async (files: File[]) => {
-    const room = MAX_IMAGES - images.length
-    if (!files.length) return
-    if (room <= 0) return setError(`Не больше ${MAX_IMAGES} картинок`)
-    const read = await Promise.all(files.slice(0, room).map((f) => readImage(f).catch(() => '')))
-    setImages((list) => [...list, ...read.filter(Boolean)].slice(0, MAX_IMAGES))
-    setError(files.length > room ? `Не больше ${MAX_IMAGES} картинок — лишние не добавлены` : '')
+  const addFiles = async (list: File[]) => {
+    const room = MAX_FILES - files.length
+    if (!list.length) return
+    if (room <= 0) return setError(`Не больше ${MAX_FILES} файлов`)
+    const big = list.filter((f) => f.size > MAX_FILE_MB * 1024 * 1024)
+    const ok = list.filter((f) => !big.includes(f))
+    const read = await Promise.all(ok.slice(0, room).map((f) => readFile(f).catch(() => null)))
+    setFiles((cur) => [...cur, ...read.filter((x): x is Attachment => !!x)].slice(0, MAX_FILES))
+    setError(big.length ? `Файл больше ${MAX_FILE_MB} МБ не добавлен: ${big.map((f) => f.name).join(', ')}` : ok.length > room ? `Не больше ${MAX_FILES} файлов — лишние не добавлены` : '')
+  }
+
+  // языки по каналам: у языка — свой канал; канал помнит свои языки (английский — в «английский» канал)
+  const langHome = (l: string) => {
+    if (langMap[l] !== undefined) return langMap[l]
+    if (!realChannel) return channelId
+    const c = channels.get(realChannel)
+    if (!c?.langs?.length || c.langs.includes(l)) return realChannel
+    return plan.channels.find((x) => x.langs?.includes(l))?.id ?? realChannel
+  }
+  const homes = new Map<string, string[]>()
+  for (const l of langs) homes.set(langHome(l), [...(homes.get(langHome(l)) ?? []), l])
+  const mainLangs = homes.get(channelId) ?? []
+  const versions = [...homes].filter(([c]) => c !== channelId)
+  const chName = (c: string) => (c === NEW_CHANNEL ? newChannel.trim() || 'новый канал' : channels.get(c)?.name ?? 'без канала')
+  const codes = (ls: string[]) => ls.map((l) => LANGS.find((x) => x.id === l)?.code ?? l).join(' + ')
+  const versionsText = [[channelId, mainLangs] as [string, string[]], ...versions].filter(([, ls]) => ls.length).map(([c, ls]) => `${codes(ls)} — ${chName(c)}`).join(', ')
+  /** Версии на других языках — в своих каналах: та же тема и заметка; формат рубрики в канале — если есть, иначе разово. */
+  const versionsOf = (main: Item, newCid: string): Item[] =>
+    versions.map(([vc, ls]) => {
+      const cid = vc === NEW_CHANNEL ? newCid : vc
+      const c = channels.get(cid)
+      const r = main.rubricId && cid ? plan.rules.find((x) => x.channelId === cid && x.rubricId === main.rubricId && x.format === main.format) : undefined
+      const own = FORMAT_HOME[main.format] || !c ? main.platforms : main.platforms.filter((p) => c.platforms.includes(p))
+      const { sectionId: _s, group: _g, derive: _d, series: _r, done: _done, origDate: _o, trigger: _t, due: _due, ...rest } = main
+      const v: Item = { ...rest, id: newId(), channelId: cid, ruleId: r?.id ?? '', langs: ls, platforms: own.length ? own : presetPlatforms(plan, c, main.format, r), status: existing ? 'planned' : main.status }
+      if (v.date && (!r || !r.days[weekday(v.date)])) v.offGrid = true
+      else delete v.offGrid
+      return v
+    })
+  /** Канал запомнит свои языки: в следующий раз язык сам встанет в свой канал. */
+  const langMemory = (newCid: string): Action[] => {
+    if (!versions.length && !Object.keys(langMap).length) return []
+    const out: Action[] = []
+    for (const [vc, ls] of homes) {
+      if (!vc) continue
+      const cid = vc === NEW_CHANNEL ? newCid : vc
+      const was = channels.get(cid)?.langs ?? []
+      const next = LANGS.map((l) => l.id).filter((l) => was.includes(l) || ls.includes(l))
+      if (next.join() !== was.join()) out.push({ type: 'channel', id: cid, patch: { langs: next } })
+    }
+    return out
   }
 
   const save = (toDrafts = false) => {
@@ -266,6 +314,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
     // без канала или рубрики материал — разовый, ему нужно название (пустой слот бывает только в сетке рубрики)
     if (!gridded && !named) return setError('Впишите название')
     if (channelId === NEW_CHANNEL && !newChannel.trim()) return setError('Впишите название канала или выберите «Без канала»')
+    if (!mainLangs.length) return setError(`Оставьте хотя бы один язык в канале «${chName(channelId)}» — или смените канал выше`)
     const setup: Action[] = []
     // новый канал — заводим тем же шагом истории
     let cid = realChannel
@@ -295,6 +344,14 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
           ...(remember ? { picks: { ...channel.picks, [format]: shownPlatforms } } : {}),
         },
       })
+    setup.push(...langMemory(cid))
+    // версии на других языках — в других каналах; тот же шаг истории
+    const vt = versions.length ? ` · ${versionsText}` : ''
+    const extra = (main: Item): Action[] => versionsOf(main, cid).flatMap((v) => {
+      const sid = v.date && repeats.length ? newId('s') : undefined
+      if (sid) v.series = sid
+      return [{ type: 'create', item: v, withFamily: false } as Action, ...(sid ? repeatCopies(v, undefined, false, sid) : [])]
+    })
     const free = !ruleNow
     const patch: Partial<Item> = {
       title: t,
@@ -304,9 +361,10 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
       rubricId: ruleNow ? ruleNow.rubricId ?? rubricId : rubricId,
       platforms: shownPlatforms,
       status,
-      langs,
+      langs: mainLangs,
       note: note || undefined,
-      images: images.length ? images : undefined,
+      files: files.length ? files : undefined,
+      images: undefined,
       format,
       time: time && time !== timeOf({}, ruleNow) ? time : undefined,
       voice: (source || base.voice) && VIDEO.has(format) ? voice : undefined,
@@ -316,15 +374,15 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
     const run = (actions: Action[]) => dispatch(actions.length > 1 ? { type: 'batch', actions } : actions[0])
     if (langsTouched) rememberLangs(langs)
     if (existing && isBank && date) {
-      run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: named || existing.title } }, { type: 'assign', bankId: existing.id, date }])
-      toast(`Тема поставлена на ${shortDate(date)}`, true)
+      run([...setup, { type: 'update', id: existing.id, patch: { ...patch, title: named || existing.title } }, { type: 'assign', bankId: existing.id, date }, ...extra({ ...existing, ...patch, title: named || existing.title, date } as Item)])
+      toast(`Тема поставлена на ${shortDate(date)}${vt}`, true)
     } else if (existing) {
       // повтор от этого материала вперёд: копии со своим днём, общий series
       const series = repeats.length ? existing.series ?? newId('s') : undefined
       const edited = { ...patch, ...(series ? { series } : {}) }
       // карточка — одна: группа переносится вместе
-      run([...setup, { type: 'edit', id: existing.id, patch: edited, date: date && date !== existing.date ? date : undefined, withGroup: true }, ...(series ? repeatCopies({ ...existing, ...edited, date } as Item, ruleNow, needRule, series) : [])])
-      toast(series ? `Сохранено и повторится ещё ${times(repeats.length)} — ${repeatText(repeat, date)}` : 'Сохранено', true)
+      run([...setup, { type: 'edit', id: existing.id, patch: edited, date: date && date !== existing.date ? date : undefined, withGroup: true }, ...(series ? repeatCopies({ ...existing, ...edited, date } as Item, ruleNow, needRule, series) : []), ...extra({ ...existing, ...edited, date: date || existing.date } as Item)])
+      toast(`${series ? `Сохранено и повторится ещё ${times(repeats.length)} — ${repeatText(repeat, date)}` : 'Сохранено'}${vt}`, true)
     } else {
       const sample = ruleNow ? plan.items.find((x) => x.ruleId === ruleNow!.id && x.date && !x.derive) : undefined
       const item: Item = {
@@ -338,11 +396,11 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
         format,
         platforms: shownPlatforms,
         status,
-        langs,
+        langs: mainLangs,
         source: source ? (day ? 'пересоздано' : 'черновик') : t === PLACEHOLDER ? 'нужна тема' : day ? 'вручную' : 'черновик',
         rank: sample?.rank ?? 50,
         note: patch.note,
-        images: patch.images,
+        files: patch.files,
         time: patch.time,
         offGrid: patch.offGrid,
         voice: patch.voice,
@@ -352,9 +410,13 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
       if (parts > 1) {
         // нарезка: части — в один день, по одному в день или по расписанию; одним шагом истории
         const { actions, dates } = partsActions(plan, item, parts, toDrafts ? 'drafts' : placeNow, placeNow === 'schedule' ? sched : undefined)
-        run([...setup, ...actions])
+        // версии на других языках — те же части в те же дни, в своём канале
+        const vparts: Action[] = versionsOf(item, cid).flatMap((v) =>
+          dates.map((d, i) => ({ type: 'create', item: { ...v, id: newId(), date: d, title: `${v.title} — часть ${i + 1} из ${parts}`, ...(d ? { offGrid: true } : {}) }, withFamily: false }) as Action),
+        )
+        run([...setup, ...actions, ...vparts])
         const first = dates.find(Boolean)
-        toast(`Создано: ${parts} коротких — ${partsText(toDrafts ? 'drafts' : placeNow)}`, {
+        toast(`Создано: ${parts} коротких — ${partsText(toDrafts ? 'drafts' : placeNow)}${vt}`, {
           undo: true,
           actions: [first ? { label: 'В календарь', run: () => (setSection('calendar'), show(first)) } : { label: 'Черновики', run: () => (setSection('calendar'), openDrafts()) }],
         })
@@ -362,8 +424,8 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
         const series = day && repeats.length ? newId('s') : undefined
         if (series) item.series = series
         // тизер, анонсы и письма — как у ближайшего материала рубрики, без переключателя; повтор — тем же шагом истории
-        run([...setup, { type: 'create', item, withFamily: !!day && !!ruleNow && !needRule }, ...(series ? repeatCopies(item, ruleNow, needRule, series) : [])])
-        const msg = day ? `Создано на ${shortDate(day)}${series ? ` и ещё ${times(repeats.length)} — ${repeatText(repeat, day)}` : ''}` : 'Сохранено в черновики'
+        run([...setup, { type: 'create', item, withFamily: !!day && !!ruleNow && !needRule }, ...(series ? repeatCopies(item, ruleNow, needRule, series) : []), ...extra(item)])
+        const msg = `${day ? `Создано на ${shortDate(day)}${series ? ` и ещё ${times(repeats.length)} — ${repeatText(repeat, day)}` : ''}` : 'Сохранено в черновики'}${vt}`
         // пересоздали с главной — календарь в другом разделе: ссылка туда
         if (source) toast(msg, { undo: true, actions: [day ? { label: 'В календарь', run: () => (setSection('calendar'), show(day)) } : { label: 'Черновики', run: () => (setSection('calendar'), openDrafts()) }] })
         else toast(msg, true)
@@ -416,27 +478,6 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
       </div>
       <div className="cp-sheet__body nr-scroll">
         {!existing && topic}
-        {/* из чего пересоздаём: пост или видео — контекстом, чтобы копировать своими словами */}
-        {ref && (
-          <div className="cp-src" aria-label="Из чего">
-            <span className="cp-src__head">
-              {ref.platform ? <PlatformIcon platform={ref.platform} size={14} /> : <Icon name="calendar" size={14} />}
-              {[ref.owner, ref.platform].filter(Boolean).join(' · ') || 'Материал календаря'}
-              {ref.url && (
-                <a className="cp-src__link" href={ref.url} target="_blank" rel="noopener noreferrer">
-                  оригинал
-                </a>
-              )}
-            </span>
-            <b>{ref.title}</b>
-            <p className="cp-src__sum">{ref.summary}</p>
-            {!note.includes(ref.summary) && (
-              <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-src__copy" onClick={() => setNote((n) => (n ? `${n}\n\n${ref.summary}` : ref.summary))}>
-                <Icon name="copy" size={14} />В заметку
-              </button>
-            )}
-          </div>
-        )}
         <div className="cp-form__when">
           <PickText type="date" label="Дата" value={date} text={date ? dayTitle(date) : ''} placeholder="Без даты — в черновики" onChange={setDate} />
           {date && (
@@ -554,9 +595,9 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
             note={note}
             setNote={setNote}
             noteRef={noteRef}
-            images={images}
-            onAdd={addImages}
-            onRemove={(i) => setImages((list) => list.filter((_, k) => k !== i))}
+            files={files}
+            onAdd={addFiles}
+            onRemove={(i) => setFiles((list) => list.filter((_, k) => k !== i))}
           />
         </div>
 
@@ -657,7 +698,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
             </div>
           </div>
         )}
-        {/* языки — списком с галочками; отмеченные стоят у нового контента и в следующий раз */}
+        {/* языки — списком с галочками; отмеченные стоят у нового контента и в следующий раз; у каждого — свой канал */}
         <div className="cp-field">
           <span className="nr-label">Языки</span>
           <LangPicker
@@ -667,31 +708,31 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
               setLangsTouched(true)
             }}
           />
-        </div>
-        {/* пересоздать этот материал: та же форма с ним как контекстом */}
-        {existing && !isBank && (
-          <div className="cp-field">
-            <span className="nr-label">Пересоздать</span>
-            <div className="cp-recreate">
-              {format === FULL_VIDEO && (
-                <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={() => openRecreate(sourceOfItem(existing, channel?.name), { format: SHORT_VIDEO, count: 3 })}>
-                  <Icon name="f-vertical" size={15} />
-                  Нарезать на короткие…
-                </button>
-              )}
-              {!VIDEO.has(format) && (
-                <button type="button" className="nr-btn nr-btn--secondary nr-btn--sm" onClick={() => openRecreate(sourceOfItem(existing, channel?.name), { format: SHORT_VIDEO, count: 1 })}>
-                  <Icon name="f-vertical" size={15} />
-                  Сделать видео…
-                </button>
-              )}
-              <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => openRecreate(sourceOfItem(existing, channel?.name), { format, count: 1 })}>
-                <Icon name="spark" size={15} />
-                Пересоздать…
-              </button>
+          {langs.length > 1 && (plan.channels.length > 0 || channelId === NEW_CHANNEL) && (
+            <div className="cp-langmap" role="group" aria-label="Языки по каналам">
+              {langs.map((l) => {
+                const L = LANGS.find((x) => x.id === l)!
+                return (
+                  <label key={l} className="cp-langmap__row">
+                    <span className="cp-lang__code">{L.code}</span>
+                    <span className="cp-langmap__name">{L.name}</span>
+                    <Icon name="chev-right" size={14} />
+                    <select className="nr-field" aria-label={`Канал для языка: ${L.name}`} value={langHome(l)} onChange={(e) => setLangMap({ ...langMap, [l]: e.target.value })}>
+                      <option value="">Без канала</option>
+                      {plan.channels.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                      {channelId === NEW_CHANNEL && <option value={NEW_CHANNEL}>{newChannel.trim() || 'Новый канал'}</option>}
+                    </select>
+                  </label>
+                )
+              })}
+              <p className="cp-hint">
+                {versions.length ? `Версии: ${versionsText} — канал запомнит свой язык.` : 'Все языки — в одном канале; язык можно отправить в другой канал.'}
+              </p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
         {error && <p className="cp-hint" style={{ color: 'var(--nr-danger)' }} role="alert">{error}</p>}
       </div>
       <div className="cp-sheet__foot">
@@ -723,12 +764,18 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
                 <Icon name="copy" size={18} />
               </button>
             )}
+            {/* пересоздать: та же форма, этот материал — контекстом в заметке; длинное видео — нарезать на короткие */}
+            {!isBank && (
+              <button type="button" className="nr-btn nr-btn--ghost cp-foot__recreate" onClick={() => openRecreate(sourceOfItem(existing, channel?.name))} title="Пересоздать: пост, короткие видео, длинное видео, статья">
+                <Icon name="spark" size={16} />
+                <span>Пересоздать</span>
+              </button>
+            )}
           </>
         )}
         <span className="cp-top__spacer" />
-        {existing ? (
-          <button type="button" className="nr-btn nr-btn--ghost" onClick={onClose}>Отмена</button>
-        ) : (
+        {/* у материала «Отмены» нет — закрыть крестиком сверху или Esc; место внизу — «Пересоздать» */}
+        {!existing && (
           <button type="button" className="nr-btn nr-btn--ghost" onClick={() => save(true)} title="Без даты — в банк идей">
             <Icon name="draft" size={16} />
             В черновики
@@ -742,18 +789,21 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   )
 }
 
-/** Заметка: текст любой длины (поле растёт) и до 10 картинок — кнопкой, вставкой из буфера или перетаскиванием. */
-function NoteBox({ note, setNote, noteRef, images, onAdd, onRemove }: {
+/** Заметка: текст любой длины (поле растёт) и до 5 файлов — картинки и тексты: кнопкой, вставкой из буфера или
+ *  перетаскиванием. Картинки — миниатюрами (щелчок — крупно), тексты — плашкой с названием и размером. */
+function NoteBox({ note, setNote, noteRef, files, onAdd, onRemove }: {
   note: string
   setNote: (v: string) => void
   noteRef: RefObject<HTMLTextAreaElement>
-  images: string[]
+  files: Attachment[]
   onAdd: (files: File[]) => void
   onRemove: (i: number) => void
 }) {
-  const file = useRef<HTMLInputElement>(null)
+  const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
   const [big, setBig] = useState<number | null>(null)
+  const size = (n: number) => (!n ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} КБ` : `${(n / 1024 / 1024).toFixed(1)} МБ`)
+  const ext = (name: string) => (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'файл').toUpperCase()
   return (
     <div
       className={`cp-note${over ? ' cp-note--drop' : ''}`}
@@ -764,11 +814,11 @@ function NoteBox({ note, setNote, noteRef, images, onAdd, onRemove }: {
       }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
-        const files = imageFiles(e.dataTransfer.files)
+        const list = noteFiles(e.dataTransfer.files)
         setOver(false)
-        if (!files.length) return
+        if (!list.length) return
         e.preventDefault()
-        onAdd(files)
+        onAdd(list)
       }}
     >
       <textarea
@@ -779,48 +829,61 @@ function NoteBox({ note, setNote, noteRef, images, onAdd, onRemove }: {
         value={note}
         onChange={(e) => setNote(e.target.value)}
         onPaste={(e) => {
-          const files = imageFiles(e.clipboardData.files)
-          if (!files.length) return
+          const list = noteFiles(e.clipboardData.files)
+          if (!list.length) return
           e.preventDefault()
-          onAdd(files)
+          onAdd(list)
         }}
-        placeholder="Сценарий, текст поста, ссылки, что учесть — сколько угодно. Картинки можно вставить или перетащить."
+        placeholder="Контекст, сценарий, текст поста, ссылки — сколько угодно. Файлы (картинки и тексты) можно вставить или перетащить."
       />
       <div className="cp-note__bar">
-        {images.length > 0 && (
-          <ul className="cp-note__imgs" aria-label="Картинки">
-            {images.map((src, i) => (
-              <li key={i} className="cp-note__img">
-                <button type="button" className="cp-note__thumb" aria-label={`Картинка ${i + 1}`} onClick={() => setBig(i)}>
-                  <img src={src} alt="" />
-                </button>
-                <button type="button" className="cp-note__del" aria-label={`Убрать картинку ${i + 1}`} title="Убрать" onClick={() => onRemove(i)}>
-                  <Icon name="close" size={11} />
-                </button>
-              </li>
-            ))}
+        {files.length > 0 && (
+          <ul className="cp-note__files" aria-label="Файлы">
+            {files.map((f, i) =>
+              isImage(f) ? (
+                <li key={i} className="cp-note__img">
+                  <button type="button" className="cp-note__thumb" aria-label={`Картинка: ${f.name}`} onClick={() => setBig(i)}>
+                    <img src={f.url} alt="" />
+                  </button>
+                  <button type="button" className="cp-note__del" aria-label={`Убрать: ${f.name}`} title="Убрать" onClick={() => onRemove(i)}>
+                    <Icon name="close" size={11} />
+                  </button>
+                </li>
+              ) : (
+                <li key={i} className="cp-note__doc">
+                  <a className="cp-note__doclink" href={f.url} download={f.name} title={`Открыть: ${f.name}`}>
+                    <span className="cp-note__ext">{ext(f.name)}</span>
+                    <span className="cp-note__docname">{f.name}</span>
+                    <span className="cp-muted">{size(f.size)}</span>
+                  </a>
+                  <button type="button" className="cp-note__del" aria-label={`Убрать: ${f.name}`} title="Убрать" onClick={() => onRemove(i)}>
+                    <Icon name="close" size={11} />
+                  </button>
+                </li>
+              ),
+            )}
           </ul>
         )}
-        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-note__add" disabled={images.length >= MAX_IMAGES} onClick={() => file.current?.click()} title={`До ${MAX_IMAGES} картинок`}>
-          <Icon name="image" size={16} />
-          {images.length ? `${images.length}/${MAX_IMAGES}` : 'Картинки'}
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-note__add" disabled={files.length >= MAX_FILES} onClick={() => input.current?.click()} title={`До ${MAX_FILES} файлов: картинки и тексты`}>
+          <Icon name="clip" size={16} />
+          {files.length ? `Файлы ${files.length}/${MAX_FILES}` : 'Прикрепить файл'}
         </button>
         <input
-          ref={file}
+          ref={input}
           type="file"
-          accept="image/*"
+          accept={ACCEPT}
           multiple
           hidden
-          aria-label="Добавить картинки"
+          aria-label="Добавить файлы"
           onChange={(e) => {
-            onAdd(imageFiles(e.target.files))
+            onAdd(noteFiles(e.target.files))
             e.target.value = ''
           }}
         />
       </div>
-      {big !== null && images[big] && (
+      {big !== null && files[big] && (
         <div className="cp-dialog__scrim cp-lightbox" role="dialog" aria-modal="true" aria-label="Картинка" onClick={() => setBig(null)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setBig(null))}>
-          <img src={images[big]} alt={`Картинка ${big + 1}`} />
+          <img src={files[big].url} alt={files[big].name} />
         </div>
       )}
     </div>

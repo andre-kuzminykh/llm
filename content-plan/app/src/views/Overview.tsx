@@ -1,6 +1,7 @@
-// Аналитика на главной — как «Эффективность» в Google Search Console: период, плитки метрик (щелчок — линия на графике,
-// цифра и изменение к прошлому такому же периоду), график и таблица по разрезам. Щелчок по строке таблицы — «провалиться»:
-// фильтр по ней ставится на всю главную. Пока данных из соцсетей нет — только в «Демо».
+// Аналитика на главной — как «Эффективность» в Google Search Console, но сверху минимально: период и основные метрики
+// одной строкой (цифра и изменение к прошлому такому же периоду). «Подробнее» раскрывает график (щелчок по метрике —
+// линия) и таблицу по разрезам; щелчок по строке таблицы — «провалиться»: фильтр по ней ставится на всю главную.
+// Раскрыто или свёрнуто — помнится. Пока данных из соцсетей нет — только в «Демо».
 import { useMemo, useState } from 'react'
 import { bucketsOf, PERIODS, type Bucket, type Post, type Series } from '../model/metrics'
 import { deltaPct, DIMS, KPIS, kpiValues, rowsBy, topicLabel, totals, type Col, type Dim, type Kpi, type Totals } from '../model/overview'
@@ -29,6 +30,21 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
   defaultDim: Dim
 }) {
   const [on, setOn] = useState<Kpi[]>(['views', 'likes'])
+  const [open, setOpenState] = useState(() => {
+    try {
+      return localStorage.getItem('cp:ov-open') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const setOpen = (v: boolean) => {
+    setOpenState(v)
+    try {
+      localStorage.setItem('cp:ov-open', String(v))
+    } catch {
+      /* до перезагрузки */
+    }
+  }
   const [dim, setDim] = useState<Dim>(defaultDim)
   const [sort, setSort] = useState<Col>('views')
   const [all, setAll] = useState(false)
@@ -67,7 +83,7 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
   ]
   const head = DIMS.find((d) => d.id === dim)!
   return (
-    <section className="cp-ov" aria-label="Аналитика">
+    <section className={`cp-ov${open ? ' cp-ov--open' : ''}`} aria-label="Аналитика">
       <div className="cp-ov__bar">
         <div className="nr-seg" role="radiogroup" aria-label="Период">
           {PERIODS.map((p) => (
@@ -77,6 +93,10 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
           ))}
         </div>
         <span className="cp-muted cp-ov__posts">{t.posts ? `${t.posts} постов за период` : 'постов за период нет'}</span>
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-ov__toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? 'Свернуть' : 'Подробнее'}
+          <Icon name="chev-right" size={14} />
+        </button>
       </div>
       <div className="cp-ov__kpis" role="group" aria-label="Метрики">
         {KPIS.map((k) => {
@@ -91,7 +111,8 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
               aria-pressed={on.includes(k.id) && !off}
               disabled={off}
               title={off ? 'Подписчики — у аккаунта, не у поста: по топику, формату или посту их не посчитать' : `${k.label} — ${k.hint}; щелчок — линия на графике`}
-              onClick={() => toggleKpi(k.id)}
+              // свёрнуто — щелчок раскрывает график с этой метрикой; раскрыто — линия вкл/выкл
+              onClick={() => (open ? toggleKpi(k.id) : (setOpen(true), !on.includes(k.id) && setOn([...on, k.id])))}
             >
               <span className="cp-kpi__label">
                 <span className="cp-kpi__box" aria-hidden="true">
@@ -101,14 +122,19 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
               </span>
               <b className="cp-kpi__val">{off ? '—' : fmtKpi(k.id, v)}</b>
               {!off && d !== null && (
-                <span className={`cp-kpi__delta${d > 0 ? ' cp-kpi__delta--up' : d < 0 ? ' cp-kpi__delta--down' : ''}`}>
-                  {k.id === 'followers' ? `${d >= 0 ? '+' : '−'}${fmtNum(Math.abs(d))} за период` : `${d > 0 ? '↑' : d < 0 ? '↓' : ''} ${Math.abs(d)} % к прошлым ${days === 1 ? 'суткам' : `${days} дн.`}`}
+                <span
+                  className={`cp-kpi__delta${d > 0 ? ' cp-kpi__delta--up' : d < 0 ? ' cp-kpi__delta--down' : ''}`}
+                  title={k.id === 'followers' ? 'прирост за период' : `к прошлым ${days === 1 ? 'суткам' : `${days} дн.`}`}
+                >
+                  {k.id === 'followers' ? `${d >= 0 ? '+' : '−'}${fmtNum(Math.abs(d))}` : `${d > 0 ? '↑' : d < 0 ? '↓' : ''} ${Math.abs(d)} %`}
                 </span>
               )}
             </button>
           )
         })}
       </div>
+      {open && (
+        <>
       <KpiChart values={values} on={shown} buckets={buckets} />
       <div className="cp-ov__tabs" role="tablist" aria-label="Разрез">
         {DIMS.map((d) => (
@@ -159,6 +185,8 @@ export function Overview({ posts, series, followersOk, now, days, setDays, who, 
         </div>
       ) : (
         <p className="cp-hint cp-ov__none">За этот период по фильтру ничего нет.</p>
+      )}
+        </>
       )}
     </section>
   )
