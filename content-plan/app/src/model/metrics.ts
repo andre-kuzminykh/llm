@@ -151,7 +151,19 @@ const SAMPLE_TOPICS: [string, string, PostKind, string][] = [
 ]
 const KIND_FORMAT: Record<PostKind, string> = { video: FULL_VIDEO, short: SHORT_VIDEO, post: TEXT_IMAGE, article: WEB_PAGE }
 
-/** Пример данных за 90 дней по часам для своих каналов и конкурентов; посты — за две недели (мои — с mine). */
+/** Пост набирает просмотры быстрее всего в первые сутки-двое: к моменту t — доля 1 − e^(−(t − выход)/TAU). */
+export const TAU = 36 * HOUR
+const gained = (at: number, t: number) => (t <= at ? 0 : 1 - Math.exp(-(t - at) / TAU))
+/** Какая доля цифр поста (на now) набрана за [from, to) — для графиков по часам и дням. */
+export function shareIn(at: number, from: number, to: number, now: number): number {
+  const total = gained(at, now)
+  if (!total) return 0
+  const a = Math.max(from, at)
+  const b = Math.min(to, now)
+  return b > a ? (gained(at, b) - gained(at, a)) / total : 0
+}
+
+/** Пример данных за 90 дней по часам для своих каналов и конкурентов; посты — тоже за 90 дней (мои — с mine). */
 export function sampleFeed(now: number, owners: { id: string; platforms: string[]; rival?: boolean; posts?: boolean }[]): Feed {
   const end = hourOf(now)
   const start = end - 90 * DAY
@@ -179,13 +191,14 @@ export function sampleFeed(now: number, owners: { id: string; platforms: string[
       }
       series.push({ owner: o.id, platform, metric: 'followers', points: f }, { owner: o.id, platform, metric: 'views', points: v }, { owner: o.id, platform, metric: 'er', points: e })
       if (o.posts === false) continue
-      for (let d = 0; d < 14; d++) {
+      for (let d = 0; d < 90; d++) {
         if (r() < 0.35) continue
         const [title, summary, kind0, tags] = SAMPLE_TOPICS[Math.floor(r() * SAMPLE_TOPICS.length)]
         // у видеоплощадок — видео, у текстовых — посты
         const kind: PostKind = platform === 'YouTube' ? (kind0 === 'short' ? 'short' : 'video') : platform === 'TikTok' || platform === 'Instagram' ? 'short' : kind0 === 'article' ? 'article' : 'post'
         const at = end - d * DAY - Math.floor(r() * 12) * HOUR
-        const views = Math.round(viewsBase * (8 + r() * 40))
+        // свежий пост ещё набирает: цифры — сколько набрал к этому часу
+        const views = Math.round(viewsBase * (8 + r() * 40) * gained(at, now + HOUR))
         posts.push({
           id: `${o.id}|${platform}|${d}`,
           owner: o.id,

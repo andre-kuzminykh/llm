@@ -5,7 +5,7 @@ import { useId, useState } from 'react'
 import { rubricKey, rubricName, type Rubric } from '../model/types'
 import { Icon } from './Icon'
 
-export type TagPick = { rubric: Rubric } | { name: string }
+export type TagPick = { rubric: Rubric } | { name: string } | { none: true }
 
 // сравниваем без регистра и решётки: «#кейсы_клиентов» — это «Кейсы клиентов»
 const clean = (s: string) => rubricKey(s)
@@ -20,7 +20,7 @@ export function suggestTags(options: Rubric[], text: string, max = 6): Rubric[] 
   return [...starts, ...inside].slice(0, max)
 }
 
-export function TagInput({ label, value, options, primary, onPick, disabled, placeholder = 'Рубрика', allowNew = true }: {
+export function TagInput({ label, value, options, primary, onPick, disabled, placeholder = 'Рубрика', allowNew = true, clearable = false }: {
   label: string
   value: string // что показано, пока не начали печатать: «Тезисы»
   options: Rubric[]
@@ -30,6 +30,8 @@ export function TagInput({ label, value, options, primary, onPick, disabled, pla
   disabled?: boolean
   placeholder?: string
   allowNew?: boolean
+  /** Первой строкой — «Без рубрики»: рубрику можно не ставить. */
+  clearable?: boolean
 }) {
   const id = useId()
   const [open, setOpen] = useState(false)
@@ -41,7 +43,8 @@ export function TagInput({ label, value, options, primary, onPick, disabled, pla
   const rest = primary ? list.filter((r) => !primary.has(r.id)) : []
   const q = text ? clean(text) : ''
   const exact = options.some((r) => tagName(r) === q)
-  const rows: TagPick[] = [...[...first, ...rest].map((rubric) => ({ rubric })), ...(allowNew && q && !exact ? [{ name: rubricName(text!) }] : [])]
+  const none: TagPick[] = clearable && open && !q && value ? [{ none: true }] : []
+  const rows: TagPick[] = [...none, ...[...first, ...rest].map((rubric) => ({ rubric })), ...(allowNew && q && !exact ? [{ name: rubricName(text!) }] : [])]
   const close = () => {
     setOpen(false)
     setText(null)
@@ -56,7 +59,7 @@ export function TagInput({ label, value, options, primary, onPick, disabled, pla
   }
   const option = (p: TagPick, i: number) => (
     <span
-      key={'rubric' in p ? p.rubric.id : 'new'}
+      key={'rubric' in p ? p.rubric.id : 'none' in p ? 'none' : 'new'}
       id={`${id}-${i}`}
       role="option"
       aria-selected={i === active}
@@ -67,7 +70,7 @@ export function TagInput({ label, value, options, primary, onPick, disabled, pla
       }}
       onMouseEnter={() => setActive(i)}
     >
-      {'rubric' in p ? p.rubric.name : `Новая рубрика «${p.name}»`}
+      {'rubric' in p ? p.rubric.name : 'none' in p ? <span className="cp-muted">Без рубрики</span> : `Новая рубрика «${p.name}»`}
     </span>
   )
   return (
@@ -120,10 +123,11 @@ export function TagInput({ label, value, options, primary, onPick, disabled, pla
       </span>
       {open && rows.length > 0 && (
         <span className="cp-taginput__list nr-scroll" role="listbox" id={`${id}-list`} aria-label={`Подсказки: ${label}`}>
+          {none.map((p, i) => option(p, i))}
           {primary && first.length > 0 && rest.length > 0 && <span className="cp-taginput__head" aria-hidden="true">В этом канале</span>}
-          {rows.slice(0, first.length).map((p, i) => option(p, i))}
+          {rows.slice(none.length, none.length + first.length).map((p, i) => option(p, none.length + i))}
           {primary && rest.length > 0 && <span className="cp-taginput__head" aria-hidden="true">{first.length ? 'Другие' : 'В этом канале таких нет'}</span>}
-          {rows.slice(first.length).map((p, i) => option(p, first.length + i))}
+          {rows.slice(none.length + first.length).map((p, i) => option(p, none.length + first.length + i))}
         </span>
       )}
     </span>

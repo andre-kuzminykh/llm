@@ -15,3 +15,7 @@ if (typeof window.PointerEvent !== 'function') {
   }
   window.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent
 }
+
+// «Демо» помнится в модуле — каждый тест начинает с того, что лежит в localStorage
+import { resetDemo } from '../ui/demo'
+beforeEach(() => resetDemo())

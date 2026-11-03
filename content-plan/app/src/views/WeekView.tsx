@@ -4,7 +4,7 @@ import {
 } from '../model/calendar'
 import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS, weekday } from '../model/dates'
 import { whereText } from '../model/hint'
-import { FORMAT_SHORT, FULL_VIDEO, realPlatforms, SHORT_VIDEO, shownTitle, type ISODate, type Item, type Plan } from '../model/types'
+import { FORMAT_SHORT, FULL_VIDEO, GRAY, realPlatforms, SHORT_VIDEO, shownTitle, type ISODate, type Item, type Plan } from '../model/types'
 import { type Order } from '../model/store'
 import { type Unit } from '../model/units'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
@@ -49,6 +49,9 @@ export function channelLanes(plan: Plan, hidden: string[]): Lane[] {
       match: (it) => it.channelId === c.id && !video(it) && !inSection(it),
     })
   }
+  // контент без канала — своей дорожкой внизу, если он есть
+  const ids = new Set(plan.channels.map((c) => c.id))
+  if (plan.items.some((it) => !ids.has(it.channelId))) out.push({ id: '__none', label: 'Без канала', color: GRAY, match: (it) => !ids.has(it.channelId) })
   return out
 }
 
@@ -441,7 +444,8 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
     unitsOn(date).filter((u) => !u.stream),
     (u) => blockGeometry(u.time, u.end),
   )
-  const inner = width - 8
+  // справа у карточек — полоса пустого места, как в Google Календаре: щёлкнуть туда — ещё один материал на тот же час
+  const inner = width - 4 - (width >= 140 ? 18 : 12)
   return (
     <div
       className={`cp-tg__col${weekday(date) === SAT ? ' cp-tg__col--rest' : ''}${drop.over ? ' cp-tg__col--drop' : ''}`}

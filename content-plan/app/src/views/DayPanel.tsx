@@ -38,9 +38,9 @@ export function DayPanel({ date, onClose }: { date: ISODate; onClose: () => void
         {[...groups].map(([cid, list]) => {
           const c = channels.get(cid)
           return (
-            <section key={cid} className="cp-day-group" aria-label={c?.name}>
+            <section key={cid} className="cp-day-group" aria-label={c?.name ?? 'Без канала'}>
               <div className="cp-group-head">
-                {c?.name}
+                {c?.name ?? 'Без канала'}
                 <span className="cp-muted">{list.length}</span>
               </div>
               {list.map((u) => (

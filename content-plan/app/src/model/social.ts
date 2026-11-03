@@ -1,10 +1,10 @@
 // Главная лента: мои соцсети и конкуренты, «кто впереди» по просмотрам, лайкам и комментариям, и «Пересоздать» —
-// из чужого или своего поста, видео или статьи сделать пост, короткие видео (нарезать на N), длинное видео или статью
-// со сценарием и озвучкой (голос или аватар). Пересозданное ложится в календарь: в черновики или на даты.
+// из чужого или своего поста, видео или статьи сделать новый контент в той же форме: пост, короткие видео (нарезать на N),
+// длинное видео или статью, с озвучкой (голос или аватар). Пересозданное ложится в календарь: в черновики или на даты.
 import { addDays, weekday } from './dates'
 import type { Post, PostKind } from './metrics'
 import { newId, type Action } from './store'
-import { FORMAT_SHORT, FULL_VIDEO, isSlot, presetPlatforms, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Account, type Competitor, type ISODate, type Item, type Plan, type Rule } from './types'
+import { FULL_VIDEO, isSlot, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Account, type Competitor, type ISODate, type Item, type Plan, type Rule } from './types'
 
 /** Демо: свои аккаунты и конкуренты, если человек ещё никого не подключил, — чтобы прототип было что листать. */
 export const DEMO_ACCOUNTS: Account[] = [
@@ -54,14 +54,10 @@ export function leaders(posts: Post[], by: Sort): Leader[] {
 }
 
 // ── пересоздать ──────────────────────────────────────────────────────────────────────────────────────
+// «Пересоздать» открывает ту же форму, что и новый контент: пост или видео — контекстом сверху, формат выбирает человек.
+// Длинное видео можно нарезать на N коротких: в один день (несколько рилсов в день — дальше распихать руками),
+// ежедневно по одному или по расписанию — друг за другом в ближайшие дни, когда формат рубрики в канале выходит по сетке.
 
-export type Output = 'post' | 'shorts' | 'long' | 'article'
-export const OUTPUTS: { id: Output; label: string; format: string; icon: string }[] = [
-  { id: 'post', label: 'Пост', format: TEXT_IMAGE, icon: 'f-post' },
-  { id: 'shorts', label: 'Короткие видео', format: SHORT_VIDEO, icon: 'f-vertical' },
-  { id: 'long', label: 'Длинное видео', format: FULL_VIDEO, icon: 'f-horizontal' },
-  { id: 'article', label: 'Статья', format: WEB_PAGE, icon: 'f-web' },
-]
 export type Voice = 'tts' | 'avatar' | 'self'
 export const VOICES: { id: Voice; label: string; note: string }[] = [
   { id: 'tts', label: 'Голосом', note: 'по тексту' },
@@ -81,31 +77,11 @@ export interface Source {
   rubricId?: string | null
 }
 
-/** Что предложить сразу: длинное видео — нарезать на короткие (3), короткое — пост, текст — короткое видео. */
-export const defaultOutput = (s: Source): { output: Output; count: number } =>
-  s.kind === 'video' ? { output: 'shorts', count: 3 } : s.kind === 'short' ? { output: 'post', count: 1 } : { output: 'shorts', count: 1 }
+/** С чего начать форму: длинное видео — нарезать на 3 коротких, короткое — пост, текст — короткое видео. */
+export const presetOfSource = (s: Source): { format: string; count: number } =>
+  s.kind === 'video' ? { format: SHORT_VIDEO, count: 3 } : s.kind === 'short' ? { format: TEXT_IMAGE, count: 1 } : { format: SHORT_VIDEO, count: 1 }
 
-const VOICE_LINE: Record<Voice, string> = {
-  tts: 'Озвучка: голосом по этому тексту.',
-  avatar: 'Озвучка: аватар (лицо) читает этот текст.',
-  self: 'Озвучка: запишу сам по этому тексту.',
-}
-
-/** Черновик сценария — заготовка по теме и саммери источника; в продукте его напишет ИИ, здесь — правят руками. */
-export function scriptOf(s: Source, output: Output, voice: Voice, part = 1, parts = 1): string {
-  const from = `Источник: ${[s.owner, s.platform].filter(Boolean).join(', ') || 'материал календаря'} — «${s.title}»${s.url ? ` (${s.url})` : ''}`
-  const voiceLine = output === 'shorts' || output === 'long' ? `\n${VOICE_LINE[voice]}` : ''
-  const body: Record<Output, string> = {
-    shorts: `Часть ${part} из ${parts}.\nХук (0–3 с): почему это важно — одной фразой.\nСуть (3–40 с): ${s.summary}\nФинал (5 с): ${part < parts ? `продолжение — в части ${part + 1}.` : 'подписывайтесь, разберём ещё.'}`,
-    long: `Вступление: о чём ролик и что зритель получит.\nКонтекст: ${s.summary}\nГлавное: три мысли из источника — своими словами, со своими примерами.\nПрактика: как применить у себя.\nВывод и призыв: что сделать после просмотра.`,
-    post: `Заголовок: ${s.title}\nТекст: ${s.summary} Добавить свой опыт и вывод.\nВопрос к подписчикам: а как у вас?`,
-    article: `Заголовок: ${s.title}\nЛид: ${s.summary}\nРазделы: контекст, разбор, примеры, вывод.`,
-  }
-  return `${body[output]}${voiceLine}\n\n${from}`
-}
-
-/** Куда поставить: в черновики; все в один день (несколько рилсов в день — дальше распихать руками); по одному в день;
- *  по расписанию — друг за другом в ближайшие дни, когда формат рубрики в канале выходит по сетке (пустые места — заполнить). */
+/** Как поставить части: в черновики, все в один день, по одному в день, по расписанию. */
 export type Place = 'drafts' | 'sameDay' | 'daily' | 'schedule'
 
 /** Формат рубрики в канале с расписанием (есть дни по сетке) — для «по расписанию». */
@@ -125,78 +101,37 @@ export function scheduleDates(plan: Plan, rule: Rule, from: ISODate, n: number):
   return out
 }
 
-export interface Recreate {
-  source: Source
-  output: Output
-  count: number // коротких видео — на сколько нарезать
-  voice: Voice
-  channelId: string
-  rubricId: string | null // рубрика (тег) из плана
-  newRubric?: string // или новая — заведётся
-  place: Place
-  date: ISODate // с какого дня ставить (для черновиков не нужен)
-  title: string
-  script: string // сценарий; у коротких — свой номер части в начале
-}
-
-/** Действия, которые создают пересозданное: рубрику и формат, если их нет, и сами материалы — одним шагом истории.
- *  По расписанию пустые слоты рубрики занимаются (тема и сценарий — в них), остальное встаёт на свободные дни сетки. */
-export function recreateActions(plan: Plan, r: Recreate): { actions: Action[]; dates: (ISODate | null)[] } {
+/** Части нарезки: «Тема — часть 2 из 5». По расписанию пустые слоты рубрики занимаются (тема и заметка — в них),
+ *  остальное встаёт на свободные дни сетки; в один день и ежедневно — разово, вне сетки. Одним шагом истории. */
+export function partsActions(plan: Plan, base: Item, n: number, place: Place, sched?: Rule): { actions: Action[]; dates: (ISODate | null)[] } {
   const actions: Action[] = []
-  const format = OUTPUTS.find((o) => o.id === r.output)!.format
-  let rubricId = r.rubricId
-  if (!rubricId && r.newRubric?.trim()) {
-    rubricId = newId('k')
-    actions.push({ type: 'addRubric', name: r.newRubric.trim(), id: rubricId })
-  }
-  const channel = plan.channels.find((c) => c.id === r.channelId)
-  const sched = r.place === 'schedule' ? scheduleRule(plan, r.channelId, rubricId, format) : undefined
-  let rule: Rule | undefined = sched ?? plan.rules.find((x) => x.channelId === r.channelId && x.rubricId === rubricId && x.format === format)
-  let ruleId = rule?.id
-  if (!ruleId) {
-    // такого формата у рубрики в канале нет — заведётся разовым, без дней по сетке
-    ruleId = newId('r')
-    actions.push({ type: 'addRule', rubricId, channelId: r.channelId, name: FORMAT_SHORT[format] ?? format, id: ruleId, days: [false, false, false, false, false, false, false], format })
-    rule = undefined
-  }
-  const platforms = presetPlatforms(plan, channel, format, rule)
-  const n = r.output === 'shorts' ? Math.max(1, Math.min(20, r.count)) : 1
-  const places = sched ? scheduleDates(plan, sched, r.date, n) : []
-  const dateOf = (i: number): ISODate | null =>
-    r.place === 'drafts' ? null : r.place === 'sameDay' ? r.date : r.place === 'daily' ? addDays(r.date, i) : places[i]?.date ?? addDays(places[places.length - 1]?.date ?? r.date, 1 + i - places.length)
-  const titleOf = (i: number) => (n > 1 ? `${r.title} — часть ${i + 1} из ${n}` : r.title)
-  const noteOf = (i: number) => (n > 1 ? r.script.replace(/^Часть \d+ из \d+\./, `Часть ${i + 1} из ${n}.`) : r.script)
   const dates: (ISODate | null)[] = []
-  const items: Item[] = []
+  const from = base.date
+  const places = sched && from ? scheduleDates(plan, sched, from, n) : []
+  const dateOf = (i: number): ISODate | null =>
+    !from || place === 'drafts'
+      ? null
+      : place === 'sameDay'
+        ? from
+        : place === 'daily'
+          ? addDays(from, i)
+          : places[i]?.date ?? addDays(places[places.length - 1]?.date ?? from, 1 + i - places.length)
   for (let i = 0; i < n; i++) {
     const date = dateOf(i)
     dates.push(date)
-    // по расписанию: пустой слот рубрики — занимаем его, а не ставим рядом второй материал
-    const slot = sched ? places[i]?.slot : undefined
+    const title = n > 1 ? `${base.title} — часть ${i + 1} из ${n}` : base.title
+    const slot = place === 'schedule' ? places[i]?.slot : undefined
     if (slot) {
-      actions.push({ type: 'update', id: slot.id, patch: { title: titleOf(i), note: noteOf(i), ...(r.output === 'shorts' || r.output === 'long' ? { voice: r.voice } : {}) } })
+      actions.push({ type: 'update', id: slot.id, patch: { title, ...(base.note ? { note: base.note } : {}), ...(base.ref ? { ref: base.ref } : {}), ...(base.voice ? { voice: base.voice } : {}) } })
       continue
     }
-    const it: Item = {
-      id: newId(),
-      date,
-      channelId: r.channelId,
-      ruleId: ruleId!,
-      rubricId,
-      title: titleOf(i),
-      format,
-      platforms,
-      status: 'planned',
-      source: date ? 'пересоздано' : 'черновик',
-      rank: 50,
-      note: noteOf(i),
-    }
-    // в один день или ежедневно — разово, вне сетки (несколько рилсов в день сетка не считает лишними); по расписанию — по сетке
-    if (date && !sched) it.offGrid = true
-    if (r.output === 'shorts' || r.output === 'long') it.voice = r.voice
-    items.push(it)
+    const it: Item = { ...base, id: newId(), date, title, source: date ? base.source : 'черновик' }
+    if (place === 'schedule' && sched) {
+      it.ruleId = sched.id
+      delete it.offGrid
+    } else if (date) it.offGrid = true
+    actions.push({ type: 'create', item: it, withFamily: false })
   }
-  for (const item of items) actions.push({ type: 'create', item, withFamily: false })
   return { actions, dates }
 }
 

@@ -8,17 +8,18 @@ import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
 import { emptyPlan, isHome, labelOf, MAIL, OLD_MAIL, timeOf, type ISODate, type Item, type Plan } from './model/types'
 import { unitsOf, type Unit } from './model/units'
+import { NO_HOME_FILTERS } from './model/overview'
 import { Seg } from './ui/bits'
-import type { Output, Source } from './model/social'
-import { PlanCtx, usePlan, type Ctx, type Drag, type Mode, type Section, type Span, type ToastOpts } from './ui/ctx'
+import type { Source } from './model/social'
+import { PlanCtx, usePlan, type Ctx, type Drag, type HomeState, type Mode, type Section, type Span, type ToastOpts } from './ui/ctx'
 import { Icon } from './ui/Icon'
 import { SelectionBar } from './ui/SelectionBar'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
-import { AnalyticsView } from './views/AnalyticsView'
+import { HomeSide } from './views/HomeSide'
 import { HomeView } from './views/HomeView'
-import { RecreateSheet } from './views/RecreateSheet'
+import { SettingsSheet } from './views/SettingsSheet'
 import { DraftsSheet } from './views/BankView'
 import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
@@ -33,8 +34,8 @@ type Back = { kind: 'day'; date: ISODate } | { kind: 'drafts' }
 type Sheet =
   | Back
   | { kind: 'item'; id: string; back?: Back }
-  | { kind: 'new'; draft: Partial<Item>; back?: Back }
-  | { kind: 'recreate'; source: Source; preset?: { output: Output; count: number } }
+  | { kind: 'new'; draft: Partial<Item>; back?: Back; source?: Source; preset?: { format: string; count: number } }
+  | { kind: 'settings' }
   | { kind: 'task'; id: string; back?: Back }
   | { kind: 'period' }
   | { kind: 'help' }
@@ -42,7 +43,7 @@ type Sheet =
 
 /** Открыли форму или задачу поверх листа — «назад» ведёт к нему. */
 const backOf = (s: Sheet): Back | undefined =>
-  !s || s.kind === 'help' || s.kind === 'recreate' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
+  !s || s.kind === 'help' || s.kind === 'settings' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
 
 const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
 const readSpan = (): Span => {
@@ -76,17 +77,13 @@ const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
 ]
 const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
 
-/** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная лента первой (моя и конкурентов),
- *  календарь контента второй, аналитика третьей; остальные появятся позже. */
+/** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная первой (графики и лента — моя и
+ *  конкурентов), календарь контента второй; остальные появятся позже. */
 const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
-  { id: 'home', label: 'Главная', full: 'Главная — лента моя и конкурентов', icon: 'home' },
+  { id: 'home', label: 'Главная', full: 'Главная — аналитика и лента', icon: 'home' },
   { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
-  { id: 'analytics', label: 'Аналитика', full: 'Аналитика каналов и конкурентов', icon: 'chart' },
 ]
-const readSection = (): Section => {
-  const v = readLS<string>('cp:section', 'home')
-  return v === 'calendar' || v === 'analytics' ? v : 'home'
-}
+const readSection = (): Section => (readLS<string>('cp:section', 'home') === 'calendar' ? 'calendar' : 'home')
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -220,6 +217,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   })
   const [sheet, setSheet] = useState<Sheet>(null)
   const [section, setSectionState] = useState<Section>(readSection)
+  const [home, setHomeState] = useState<HomeState>({ tab: 'mine', days: 7, filters: NO_HOME_FILTERS })
   const setSection = (s: Section) => {
     setSectionState(s)
     writeLS('cp:section', s)
@@ -406,7 +404,11 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     openItem: (id) => setSheet((s) => ({ kind: 'item', id, back: backOf(s) })),
     // «+» поверх черновиков — вкладка, а не шаг вглубь: назад ведёт туда же, откуда открыли черновики
     openNew: (draft) => setSheet((s) => ({ kind: 'new', draft, back: s?.kind === 'drafts' ? undefined : backOf(s) })),
-    openRecreate: (source, preset) => setSheet({ kind: 'recreate', source, preset }),
+    openRecreate: (source, preset) => setSheet({ kind: 'new', draft: {}, source, preset }),
+    openSettings: () => setSheet({ kind: 'settings' }),
+    home,
+    // другая вкладка — другие аккаунты: фильтры главной начинаются заново
+    setHome: (patch) => setHomeState((h) => ({ ...h, ...patch, ...(patch.tab && patch.tab !== h.tab && !patch.filters ? { filters: NO_HOME_FILTERS } : {}) })),
     section,
     setSection,
     openTask: (id) => setSheet((s) => ({ kind: 'task', id, back: backOf(s) })),
@@ -500,18 +502,27 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
             ))}
           </nav>
         )}
-        {section === 'calendar' && narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {section === 'calendar' && sideOpen && <Sidebar onClose={() => setSideOpen(false)} />}
+        {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
+        {sideOpen && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : <HomeSide onClose={() => setSideOpen(false)} />)}
         <main className="nr-main">
-          {section === 'home' ? <HomeView /> : section === 'analytics' ? <AnalyticsView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
+          {section === 'home' ? <HomeView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} />}
           {sheet?.kind === 'item' && <ItemEditor key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
-          {sheet?.kind === 'new' && <ItemEditor key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}-${sheet.draft.title ?? ''}`} draft={sheet.draft} onClose={back ?? closeSheet} onBack={back} />}
+          {sheet?.kind === 'new' && (
+            <ItemEditor
+              key={`new-${sheet.draft.date}-${sheet.draft.channelId}-${sheet.draft.time}-${sheet.draft.title ?? ''}-${sheet.source?.title ?? ''}-${sheet.preset?.format ?? ''}`}
+              draft={sheet.draft}
+              source={sheet.source}
+              preset={sheet.preset}
+              onClose={back ?? closeSheet}
+              onBack={back}
+            />
+          )}
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'help' && <HelpSheet onClose={closeSheet} />}
-          {sheet?.kind === 'recreate' && <RecreateSheet key={sheet.source.title} source={sheet.source} preset={sheet.preset} onClose={closeSheet} />}
+          {sheet?.kind === 'settings' && <SettingsSheet onClose={closeSheet} />}
           {section === 'calendar' && !sheet && !selected.size && (
             <button type="button" className="cp-fab" aria-label="Новый контент" title="Запланировать контент" onClick={() => ctx.openNew({ date: anchor < today() ? today() : anchor })}>
               <Icon name="plus" size={26} />
@@ -555,7 +566,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
 }
 
 function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp, onPeriod }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; onHelp: () => void; onPeriod: () => void }) {
-  const { plan, dispatch, toast, saved } = usePlan()
+  const { plan, dispatch, toast, saved, openSettings } = usePlan()
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
   return (
@@ -568,6 +579,9 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp, onPeriod }: { o
         </span>
       </div>
       <p className="cp-menu__note">Скоро: {SOON.join(', ')}</p>
+      <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { openSettings(); onClose() }}>
+        <Icon name="settings" size={18} /> Настройки: соцсети и конкуренты
+      </button>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={onHelp}>
         <Icon name="help" size={18} /> Как пользоваться
       </button>

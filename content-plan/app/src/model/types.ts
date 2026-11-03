@@ -57,9 +57,9 @@ export type Status = 'planned' | 'progress' | 'paused' | 'ready' | 'published'
 export interface Item {
   id: string
   date: ISODate | null // null — тема в банке, ещё без даты
-  channelId: string
+  channelId: string // '' — без канала: выпустить можно и так, главное — название
   sectionId?: string
-  ruleId: string
+  ruleId: string // '' — без формата рубрики в сетке (нет канала или рубрики): разовый
   rubricId: string | null
   title: string // тема: «Стратегия»; «…» — слот, тема ещё не задана
   format: string
@@ -81,7 +81,20 @@ export interface Item {
   langs?: string[] // на каких языках выходит: «ru», «en»; без поля — по-русски
   series?: string // повтор: у всех материалов одного повтора — один id
   voice?: 'tts' | 'avatar' | 'self' // видео из текста: озвучка голосом, аватар (лицо) или запишу сам
+  images?: string[] // картинки к заметке — до 10, data: URL (сжатые)
+  ref?: SourceRef // из чего пересоздан: пост или видео (своё или конкурента) — контекст для копирования
 }
+
+/** Пост или видео, из которого пересоздали материал: тема, саммери, где и чей. */
+export interface SourceRef {
+  title: string
+  summary: string
+  platform?: string
+  owner?: string
+  url?: string
+  itemId?: string // материал календаря
+}
+export const MAX_IMAGES = 10
 
 /** Канал конкурента: его заводит человек (позже подтянутся из маркетингового анализа); мониторим каждый час. */
 export interface Competitor {
@@ -158,6 +171,7 @@ export const titleIsFormat = (title: string, rule: Rule | undefined) => !!rule &
 /** Строка CSV-календаря: «Демо · FULL: Стратегия»; для авто-рубрик — только подпись. */
 export function lineOf(rubric: Rubric | undefined, rule: Rule | undefined, title: string) {
   const label = labelOf(rubric, rule)
+  if (!label) return title // без рубрики и формата — просто тема
   return titleIsFormat(title, rule) ? label : `${label}: ${title}`
 }
 
@@ -244,15 +258,24 @@ export function typeOf(rule: Rule | undefined, platform: string) {
   return DEFAULT_TYPES[platform] ?? platform
 }
 
-/** Языки контента — в форме одной строкой, можно несколько. Без поля у материала — русский. */
+/** Языки контента — в форме списком с галочками, можно несколько. Без поля у материала — русский. */
 export const LANGS: { id: string; code: string; name: string }[] = [
   { id: 'ru', code: 'RU', name: 'Русский' },
   { id: 'en', code: 'EN', name: 'English' },
   { id: 'es', code: 'ES', name: 'Español' },
   { id: 'de', code: 'DE', name: 'Deutsch' },
   { id: 'fr', code: 'FR', name: 'Français' },
+  { id: 'it', code: 'IT', name: 'Italiano' },
   { id: 'pt', code: 'PT', name: 'Português' },
+  { id: 'pl', code: 'PL', name: 'Polski' },
+  { id: 'uk', code: 'UK', name: 'Українська' },
+  { id: 'kk', code: 'KK', name: 'Қазақша' },
+  { id: 'tr', code: 'TR', name: 'Türkçe' },
+  { id: 'ar', code: 'AR', name: 'العربية' },
+  { id: 'hi', code: 'HI', name: 'हिन्दी' },
   { id: 'zh', code: 'ZH', name: '中文' },
+  { id: 'ja', code: 'JA', name: '日本語' },
+  { id: 'ko', code: 'KO', name: '한국어' },
 ]
 export const DEFAULT_LANGS = ['ru']
 export const langsOf = (it: Pick<Item, 'langs'>) => it.langs ?? DEFAULT_LANGS
@@ -262,7 +285,8 @@ export const langsOf = (it: Pick<Item, 'langs'>) => it.langs ?? DEFAULT_LANGS
 export function presetPlatforms(plan: Plan, c: Channel | undefined, f: string, r?: Rule) {
   if (FORMAT_HOME[f]) return [FORMAT_HOME[f]]
   const can = platformsFor(f, plan.platforms)
-  const tries = [c?.picks?.[f] ?? [], r?.format === f ? r.platforms : [], (FORMAT_PLATFORMS[f] ?? []).filter((p) => c?.platforms.includes(p)), c?.platforms ?? []]
+  // без канала — где формат обычно выходит
+  const tries = [c?.picks?.[f] ?? [], r?.format === f ? r.platforms : [], (FORMAT_PLATFORMS[f] ?? []).filter((p) => !c || c.platforms.includes(p)), c?.platforms ?? []]
   return tries.map((list) => list.filter((p) => can.includes(p))).find((list) => list.length) ?? []
 }
 

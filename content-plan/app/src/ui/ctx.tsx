@@ -1,8 +1,9 @@
 import { createContext, useContext } from 'react'
 import type { Filters } from '../model/filters'
+import type { HomeFilters } from '../model/overview'
 import type { HintLine, Move } from '../model/hint'
 import type { Violation } from '../model/rules'
-import type { Output, Source } from '../model/social'
+import type { Source } from '../model/social'
 import type { Action } from '../model/store'
 import type { Channel, ISODate, Item, Plan, Rubric, Rule, Status } from '../model/types'
 import type { Unit } from '../model/units'
@@ -20,7 +21,14 @@ export interface ToastAction {
   label: string
   run: () => void
 }
-export type Section = 'home' | 'calendar' | 'analytics'
+export type Section = 'home' | 'calendar'
+
+/** Главная: чья лента (моя или конкурентов — «Поиск»), период графиков и фильтры — общие для графиков, таблицы и ленты. */
+export interface HomeState {
+  tab: 'mine' | 'discover'
+  days: number
+  filters: HomeFilters
+}
 
 export interface ToastOpts {
   undo?: boolean
@@ -62,9 +70,13 @@ export interface Ctx {
   setSpan: (s: Span) => void
   /** Черновики (банк идей) — во вкладке «+». */
   openDrafts: () => void
-  /** Пересоздать пост, видео или материал календаря: пост, короткие ×N, длинное видео, статья. */
-  openRecreate: (source: Source, preset?: { output: Output; count: number }) => void
-  /** Раздел СММ: главная (лента), календарь, аналитика. */
+  /** Пересоздать пост, видео или материал календаря — в той же форме, что и новый контент: источник — контекстом сверху. */
+  openRecreate: (source: Source, preset?: { format: string; count: number }) => void
+  /** Настройки справа: мои соцсети и конкуренты. */
+  openSettings: () => void
+  home: HomeState
+  setHome: (patch: Partial<HomeState>) => void
+  /** Раздел СММ: главная (графики и лента), календарь. */
   section: Section
   setSection: (s: Section) => void
   /** Планирование недели: уточнить темы пустых слотов. */

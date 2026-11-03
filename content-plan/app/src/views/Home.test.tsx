@@ -1,10 +1,12 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../App'
 import { memoryStorage } from '../model/storage'
 import { renderApp } from '../test/renderApp'
 
-describe('T-CP-060 FR-CP-060 с чистого листа: контента нет, первый канал — из формы', () => {
+const smm = () => screen.getByRole('navigation', { name: 'SMM' })
+
+describe('T-CP-060 FR-CP-060 с чистого листа: главная просит подключить соцсети, контент — без канала и рубрики', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-03T10:00:00'))
@@ -14,40 +16,51 @@ describe('T-CP-060 FR-CP-060 с чистого листа: контента не
     vi.useRealTimers()
   })
 
-  it('открывается главная, пусто; в календаре «+» сначала просит канал; созданное — в «Ожидается» на главной', async () => {
+  it('два пункта меню; «Подключите соцсети» ведёт в настройки; в календаре «+» сразу форма — новый канал прямо в ней', async () => {
     render(<App storage={async () => memoryStorage()} />)
-    const smm = await screen.findByRole('navigation', { name: 'SMM' })
-    expect(within(smm).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Аналитика'])
-    expect(within(smm).getByRole('button', { name: /^Главная/ })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByText(/Пока пусто. Подключите свои соцсети/)).toBeInTheDocument()
+    await screen.findByRole('navigation', { name: 'SMM' })
+    expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь'])
+    expect(within(smm()).getByRole('button', { name: /^Главная/ })).toHaveAttribute('aria-current', 'page')
+    // без соцсетей и демо — графиков нет, уведомление «подключите»
+    expect(screen.queryByRole('region', { name: 'Аналитика' })).toBeNull()
+    const note = screen.getByRole('note')
+    expect(note).toHaveTextContent('Подключите соцсети, чтобы видеть ленту и графики')
+    await userEvent.click(within(note).getByRole('button', { name: 'Подключить' }))
+    const settings = screen.getByRole('complementary', { name: 'Настройки' })
+    const add = within(settings).getByRole('form', { name: 'Подключить соцсеть' })
+    await userEvent.selectOptions(within(add).getByLabelText('Площадка'), 'Telegram')
+    await userEvent.type(within(add).getByLabelText('Название'), 'Мой блог')
+    await userEvent.type(within(add).getByLabelText('@аккаунт или ссылка'), '@myblog')
+    await userEvent.click(within(add).getByRole('button', { name: 'Подключить' }))
+    expect(within(within(settings).getByRole('list', { name: 'Мои соцсети' })).getAllByRole('listitem')).toHaveLength(1)
+    await userEvent.click(within(settings).getByRole('button', { name: 'Закрыть' }))
+    expect(screen.getByRole('note')).toHaveTextContent('Подключено соцсетей: 1')
+    // аккаунт — в фильтрах слева
+    expect(within(screen.getByRole('complementary', { name: 'Фильтры' })).getByRole('button', { name: 'Мой блог' })).toHaveAttribute('aria-pressed', 'true')
 
-    await userEvent.click(within(smm).getByRole('button', { name: 'Календарь контента' }))
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Календарь контента' }))
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     expect(document.querySelectorAll('.cp-tg__col .cp-card')).toHaveLength(0)
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
-    const first = screen.getByRole('complementary', { name: 'Новый контент' })
-    expect(within(first).getByRole('heading', { name: 'Сначала — канал' })).toBeInTheDocument()
-    await userEvent.type(within(first).getByLabelText('Название канала'), 'Мой блог')
-    await userEvent.click(within(first).getByRole('button', { name: 'Создать канал' }))
-
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
-    expect(within(form).getByRole('combobox', { name: 'Канал' })).toHaveDisplayValue('Мой блог')
+    expect(within(form).getByRole('combobox', { name: 'Канал' })).toHaveDisplayValue('Без канала')
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Канал' }), 'Новый канал…')
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Название канала' }), 'Мой блог')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Первый разбор')
-    // без рубрики не создаётся: рубрик ещё нет — вписать новую
-    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
-    expect(within(form).getByRole('alert')).toHaveTextContent('Выберите рубрику (тег) или впишите новую')
     await userEvent.type(within(form).getByRole('combobox', { name: 'Рубрика' }), 'Обзоры')
     await userEvent.click(within(form).getByRole('option', { name: 'Новая рубрика «Обзоры»' }))
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
 
-    await userEvent.click(within(smm).getByRole('button', { name: /^Главная/ }))
+    await userEvent.click(within(smm()).getByRole('button', { name: /^Главная/ }))
     const soon = screen.getByRole('region', { name: 'Ожидается' })
     expect(within(soon).getByRole('article', { name: 'Первый разбор' })).toHaveTextContent(/Мой блог.*Ожидается.*из календаря/)
-    expect(within(screen.getByRole('list', { name: 'Топики' })).getByRole('button', { name: /#обзоры/ })).toBeInTheDocument()
+    // рубрика — без решётки
+    expect(within(soon).getByRole('article', { name: 'Первый разбор' })).toHaveTextContent('обзоры')
+    expect(within(soon).getByRole('article', { name: 'Первый разбор' }).textContent).not.toMatch(/#/)
   })
 })
 
-describe('T-CP-061 FR-CP-061 главная: моя лента и поиск по конкурентам', () => {
+describe('T-CP-061 FR-CP-061 главная: аналитика как в Search Console, лента идей, фильтры слева', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-28T15:20:00'))
@@ -56,48 +69,93 @@ describe('T-CP-061 FR-CP-061 главная: моя лента и поиск п�
     vi.useRealTimers()
   })
 
-  it('демо: мои посты и материалы календаря, топики из тегов; поиск — конкуренты, кто впереди, сортировка, + следить', async () => {
+  it('демо: плитки метрик, график, разрезы; щелчок по строке — провалиться (фильтр на графики и ленту); топики без «#»', async () => {
     renderApp(undefined, { 'cp:section': '"home"' })
     await screen.findByRole('heading', { name: 'Главная' })
     // материалы календаря — настоящие, без демо: тезис 28 окт ещё не вышел — «Ожидается»
     expect(within(screen.getByRole('region', { name: 'Ожидается' })).getAllByRole('article').length).toBeGreaterThan(0)
     await userEvent.click(screen.getByRole('switch', { name: 'Демо' }))
-    expect(screen.getByRole('note')).toHaveTextContent('Демо: посты и цифры выдуманы')
-    const out = screen.getByRole('region', { name: 'Вышло' })
-    const post = within(out).getAllByRole('article')[0]
-    // саммери — подсвеченным окошком, без подписи «Саммери»
-    expect(post).toHaveTextContent(/Мой канал.*демо/)
-    expect(post.querySelector('.cp-post__sum')!.textContent).not.toMatch(/Саммери/)
-    // топик из тегов: щелчок — только посты с ним
-    const topics = screen.getByRole('list', { name: 'Топики' })
-    await userEvent.click(within(topics).getByRole('button', { name: /^#ии/ }))
-    expect(document.querySelector('.cp-home__filter')).toHaveTextContent('Топик #ии')
-    for (const a of within(screen.getByRole('region', { name: 'Вышло' })).getAllByRole('article')) expect(a).toHaveTextContent('#ии')
-    // взять тег в рубрики календаря
-    await userEvent.click(within(topics).getByRole('button', { name: 'В рубрики: агенты' }))
-    expect(within(topics).queryByRole('button', { name: 'В рубрики: агенты' })).toBeNull()
+    expect(screen.getByRole('note')).toHaveTextContent('Демо: посты, графики и цифры выдуманы')
+    const ov = screen.getByRole('region', { name: 'Аналитика' })
+    const kpis = within(ov).getByRole('group', { name: 'Метрики' })
+    expect(within(kpis).getAllByRole('button').map((b) => b.querySelector('.cp-kpi__label')!.textContent)).toEqual(['Просмотры', 'Лайки', 'Комментарии', 'Вовлечённость', 'Подписчики'])
+    const pressed = () => within(kpis).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.querySelector('.cp-kpi__label')!.textContent)
+    expect(pressed()).toEqual(['Просмотры', 'Лайки'])
+    await userEvent.click(within(kpis).getByRole('button', { name: /Комментарии/ }))
+    expect(within(ov).getByRole('img', { name: /^График: просмотры, лайки, комментарии/ })).toBeInTheDocument()
+    // за сутки — по часам
+    await userEvent.click(within(ov).getByRole('radio', { name: 'Сутки' }))
+    expect(within(ov).getByRole('img', { name: /^График: .*, \d\d:00 — \d\d:00$/ })).toBeInTheDocument()
+    await userEvent.click(within(ov).getByRole('radio', { name: '7 дней' }))
+    // таблица: сортировка по столбцу
+    await userEvent.click(within(ov).getByRole('tab', { name: 'Топики' }))
+    const table = () => within(ov).getByRole('table', { name: 'Разрез: Топики' })
+    await userEvent.click(within(table()).getByRole('button', { name: 'Лайки' }))
+    const likes = within(table()).getAllByRole('row').slice(1).map((r) => r.querySelectorAll('td')[1].textContent!)
+    expect(likes.length).toBeGreaterThan(1)
+    // провалиться: топик «ии» — метка над графиками, лента только с ним, подписчиков по топику не посчитать
+    const first = within(table()).getAllByRole('row')[1]
+    const topic = first.querySelector('.cp-ov__cell')!.textContent!
+    expect(topic).not.toMatch(/#/)
+    await userEvent.click(within(first).getByRole('button'))
+    expect(screen.getByRole('button', { name: `Снять фильтр: Топик: ${topic}` })).toBeInTheDocument()
+    expect(within(kpis).getByRole('button', { name: /Подписчики/ })).toBeDisabled()
+    for (const a of within(screen.getByRole('region', { name: 'Вышло' })).getAllByRole('article').filter((x) => x.querySelector('.cp-post__tags')))
+      expect(within(a.querySelector('.cp-post__tags') as HTMLElement).getAllByRole('button').map((b) => b.textContent)).toContain(topic)
+    // в панели слева тот же топик выделен — те же фильтры
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
+    expect(within(within(side).getByRole('group', { name: 'Топики' })).getByRole('button', { name: new RegExp(`^${topic}`) })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(screen.getByRole('button', { name: `Снять фильтр: Топик: ${topic}` }))
+    // площадка: только YouTube
+    await userEvent.click(within(ov).getByRole('tab', { name: 'Площадки' }))
+    const yt = within(within(ov).getByRole('table', { name: 'Разрез: Площадки' })).getByRole('button', { name: /YouTube/ })
+    await userEvent.click(yt)
+    expect(screen.getByRole('button', { name: 'Снять фильтр: Площадка: YouTube' })).toBeInTheDocument()
+    expect(within(ov).getAllByRole('table')[0].querySelectorAll('tbody tr')).toHaveLength(1)
+    for (const a of within(screen.getByRole('region', { name: 'Вышло' })).getAllByRole('article').filter((x) => x.querySelector('.cp-an__badge')?.textContent === 'демо'))
+      expect(a.querySelector('.cp-post__ava .cp-pi')).toHaveAttribute('title', 'YouTube')
+    // длинное видео — на всю ширину карточки (без своей ширины), саммери — окошком без подписи
+    const video = document.querySelector('.cp-post__media--video') as HTMLElement
+    expect(video.style.width).toBe('')
+    expect(document.querySelector('.cp-post__sum')!.textContent).not.toMatch(/Саммери/)
 
+    // листаешь — графики сворачиваются в строку, справа внизу «Вернуться»
+    const body = document.querySelector('.cp-home__wrap .cp-body') as HTMLElement
+    body.scrollTop = 1500
+    fireEvent.scroll(body)
+    expect(screen.getByRole('button', { name: 'Графики свёрнуты — развернуть' })).toHaveTextContent(/Просмотры/)
+    await userEvent.click(screen.getByRole('button', { name: 'Вернуться к графикам' }))
+  })
+
+  it('поиск: лента конкурентов, кто впереди — разрез «Аккаунты», сортировка, поиск; конкуренты — в настройках', async () => {
+    renderApp(undefined, { 'cp:section': '"home"', 'cp:demo': 'true' })
+    await screen.findByRole('heading', { name: 'Главная' })
     await userEvent.click(screen.getByRole('radio', { name: /Поиск/ }))
-    const board = screen.getByRole('table', { name: 'Кто впереди' })
-    expect(within(board).getAllByRole('row')).toHaveLength(5) // заголовок и четыре демо-конкурента
+    const ov = screen.getByRole('region', { name: 'Аналитика' })
+    // кто впереди: разрез по аккаунтам — четыре демо-конкурента
+    expect(within(within(ov).getByRole('table', { name: 'Разрез: Аккаунты' })).getAllByRole('row')).toHaveLength(5)
     await userEvent.click(screen.getByRole('radio', { name: 'Комменты' }))
     const posts = within(screen.getByRole('list', { name: 'Посты конкурентов' })).getAllByRole('article')
-    const comments = posts.map((a) => Number((a.querySelector('[title="Комментарии"]')!.textContent ?? '').replace(/\D/g, '')))
+    const comments = posts.map((a) => {
+      const t = a.querySelector('[title="Комментарии"]')!.textContent ?? ''
+      return Number(t.replace(/[^\d,]/g, '').replace(',', '.')) * (/тыс/.test(t) ? 1000 : 1)
+    })
     expect(comments).toEqual([...comments].sort((a, b) => b - a))
-    // поиск по аккаунту
     await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск по конкурентам' }), 'Tech Shorts')
     for (const a of within(screen.getByRole('list', { name: 'Посты конкурентов' })).getAllByRole('article')) expect(a).toHaveTextContent('Tech Shorts')
-    // + следить: свой конкурент вместо демо
-    const follow = screen.getByRole('form', { name: 'Следить за аккаунтом' })
+    // + следить — в настройках (из панели слева «+»)
+    await userEvent.click(within(screen.getByRole('complementary', { name: 'Фильтры' })).getByRole('button', { name: 'Следить за аккаунтом' }))
+    const settings = screen.getByRole('complementary', { name: 'Настройки' })
+    const follow = within(settings).getByRole('form', { name: 'Следить за аккаунтом' })
     await userEvent.selectOptions(within(follow).getByLabelText('Площадка'), 'Telegram')
     await userEvent.type(within(follow).getByLabelText('Название'), 'Мой конкурент')
     await userEvent.type(within(follow).getByLabelText('@аккаунт или ссылка'), '@rival')
     await userEvent.click(within(follow).getByRole('button', { name: '+ Следить' }))
-    expect(within(screen.getByRole('list', { name: 'Слежу' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Мой конкурент@rivalУбрать: Мой конкурент'.replace('Убрать: Мой конкурент', '')])
+    expect(within(within(settings).getByRole('list', { name: 'Конкуренты' })).getAllByRole('listitem')[0]).toHaveTextContent('Мой конкурент@rival')
   })
 })
 
-describe('T-CP-062 FR-CP-062 «Пересоздать»: пост, короткие ×N, длинное видео; в один день, ежедневно, по расписанию', () => {
+describe('T-CP-062 FR-CP-062 «Пересоздать» — та же форма создания контента: пост или видео — контекстом', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-26T09:00:00'))
@@ -113,55 +171,64 @@ describe('T-CP-062 FR-CP-062 «Пересоздать»: пост, коротк�
     const video = within(screen.getByRole('list', { name: 'Посты конкурентов' }))
       .getAllByRole('article')
       .find((a) => a.querySelector('.cp-post__media--video'))!
+    const title = video.querySelector('.cp-post__title')!.textContent!
     await userEvent.click(within(video).getByRole('button', { name: 'Пересоздать' }))
-    const sheet = screen.getByRole('complementary', { name: 'Пересоздать' })
-    // из длинного видео — сразу «нарезать на 3», в один день
-    expect(within(sheet).getByRole('radio', { name: 'Короткие видео' })).toHaveAttribute('aria-checked', 'true')
-    expect(within(sheet).getByRole('group', { name: 'Сколько коротких' })).toHaveTextContent('3')
+    const sheet = screen.getByRole('complementary', { name: 'Новый контент' })
+    expect(within(sheet).getByRole('heading', { name: 'Пересоздать' })).toBeInTheDocument()
+    // источник — контекстом сверху; тема — его; формат выбирают как обычно — из длинного видео сразу «вертикаль ×3»
+    expect(within(sheet).getByLabelText('Из чего')).toHaveTextContent(title)
+    expect(within(sheet).getByRole('textbox', { name: 'Тема' })).toHaveValue(title)
+    expect(within(within(sheet).getByRole('radiogroup', { name: 'Формат' })).getByRole('radio', { checked: true })).toHaveAccessibleName('Короткое вертикальное видео')
+    expect(within(sheet).getByRole('group', { name: 'Сколько коротких' })).toHaveTextContent(/^−3\+$/)
     expect(within(sheet).getByRole('radio', { name: 'В один день' })).toHaveAttribute('aria-checked', 'true')
-    expect((within(sheet).getByRole('textbox', { name: 'Сценарий' }) as HTMLTextAreaElement).value).toMatch(/^Часть 1 из 3\.[\s\S]*Озвучка: голосом/)
+    expect(within(sheet).queryByText(/части 1 из/)).toBeNull()
     await userEvent.click(within(sheet).getByRole('radio', { name: /^Аватар/ }))
-    expect((within(sheet).getByRole('textbox', { name: 'Сценарий' }) as HTMLTextAreaElement).value).toMatch(/аватар \(лицо\)/)
+    // «В заметку» — саммери источника в заметку
+    await userEvent.click(within(sheet).getByRole('button', { name: 'В заметку' }))
+    expect((within(sheet).getByRole('textbox', { name: 'Заметка' }) as HTMLTextAreaElement).value.length).toBeGreaterThan(10)
+    await userEvent.selectOptions(within(sheet).getByRole('combobox', { name: 'Канал' }), 'Dataist')
+    await userEvent.clear(within(sheet).getByRole('combobox', { name: 'Рубрика' }))
     await userEvent.type(within(sheet).getByRole('combobox', { name: 'Рубрика' }), 'Тез')
     await userEvent.click(within(sheet).getByRole('option', { name: 'Тезисы' }))
     await userEvent.click(within(sheet).getByRole('button', { name: 'Создать' }))
-    expect(screen.getByText(/Создано: 3 коротких видео — все на 26 окт/)).toBeInTheDocument()
-    // в календаре — три части в один день
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'SMM' })).getByRole('button', { name: 'Календарь контента' }))
+    expect(screen.getByText(/Создано: 3 коротких — все на 26 окт/)).toBeInTheDocument()
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Календарь контента' }))
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     const day = document.querySelector('.cp-tg__col[data-date="2026-10-26"]') as HTMLElement
     for (const i of [1, 2, 3]) expect(within(day).getByRole('button', { name: new RegExp(`^Тезисы.*часть ${i} из 3`) })).toBeInTheDocument()
 
     // по расписанию: у Тезисов в Dataist короткие выходят по будням — первым занимается пустой слот 27 окт
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'SMM' })).getByRole('button', { name: /^Главная/ }))
+    await userEvent.click(within(smm()).getByRole('button', { name: /^Главная/ }))
     await userEvent.click(screen.getByRole('radio', { name: /Поиск/ }))
     const again = within(screen.getByRole('list', { name: 'Посты конкурентов' }))
       .getAllByRole('article')
       .find((a) => a.querySelector('.cp-post__media--video'))!
     await userEvent.click(within(again).getByRole('button', { name: 'Пересоздать' }))
-    const s2 = screen.getByRole('complementary', { name: 'Пересоздать' })
+    const s2 = screen.getByRole('complementary', { name: 'Новый контент' })
     await userEvent.click(within(s2).getByRole('button', { name: 'Меньше' }))
+    await userEvent.selectOptions(within(s2).getByRole('combobox', { name: 'Канал' }), 'Dataist')
+    await userEvent.clear(within(s2).getByRole('combobox', { name: 'Рубрика' }))
     await userEvent.type(within(s2).getByRole('combobox', { name: 'Рубрика' }), 'Тез')
     await userEvent.click(within(s2).getByRole('option', { name: 'Тезисы' }))
     await userEvent.click(within(s2).getByRole('radio', { name: 'По расписанию' }))
     expect(within(s2).getByText(/Друг за другом в ближайшие дни расписания: 27 окт \(пустое место\), 28 окт/)).toBeInTheDocument()
     await userEvent.click(within(s2).getByRole('button', { name: 'Создать' }))
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'SMM' })).getByRole('button', { name: 'Календарь контента' }))
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Календарь контента' }))
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     const tue = document.querySelector('.cp-tg__col[data-date="2026-10-27"]') as HTMLElement
     expect(within(tue).getByRole('button', { name: /^Тезисы.*часть 1 из 2/ })).toBeInTheDocument()
     expect(within(tue).queryByRole('button', { name: /^Тезисы.*Нужна тема/ })).toBeNull()
   })
 
-  it('из календаря: длинное видео — «Нарезать на короткие…», статья — «Сделать видео…»', async () => {
+  it('из календаря: длинное видео — «Нарезать на короткие…»: канал, рубрика и день — как у видео', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     await userEvent.click(screen.getByRole('button', { name: /^Демо · FULL: Стратегия/ }))
     await userEvent.click(within(screen.getByRole('complementary', { name: 'Материал' })).getByRole('button', { name: 'Нарезать на короткие…' }))
-    const sheet = screen.getByRole('complementary', { name: 'Пересоздать' })
+    const sheet = screen.getByRole('complementary', { name: 'Новый контент' })
     expect(within(sheet).getByLabelText('Из чего')).toHaveTextContent('Стратегия')
     expect(within(sheet).getByRole('group', { name: 'Сколько коротких' })).toHaveTextContent('3')
-    // рубрика — как у источника; день — как у видео
+    expect(within(sheet).getByRole('combobox', { name: 'Канал' })).toHaveDisplayValue('Dataist')
     expect(within(sheet).getByRole('combobox', { name: 'Рубрика' })).toHaveValue('Демо')
     expect(within(sheet).getByText(/Все 3 — на 26 окт/)).toBeInTheDocument()
   })
