@@ -21,6 +21,21 @@ npm run build      # → dist/
 npm run preview    # посмотреть сборку на http://localhost:5174
 ```
 
+## Открыть внутри Neuronium (nr-launch/1)
+
+Адрес SMM — **https://smm.neuronium.ai**, Neuronium — **https://os.neuronium.ai**. Neuronium открывает SMM значком
+слева: в своём окне, если SMM это разрешает, иначе в новой вкладке. Разрешает одна строка в окружении сборки и
+установки (или в `.env`, образец — [`.env.example`](.env.example)):
+
+```bash
+NR_HOST_ORIGINS=https://os.neuronium.ai
+```
+
+Сборка пишет `dist/nr-launch.json` (`"frame": true`, без переменной — `false`), а `node scripts/nr-launch.mjs nginx`
+(или `caddy`) — конфиг сервера с `Content-Security-Policy: frame-ancestors 'self' https://os.neuronium.ai`. Без
+переменной всё как раньше: во фрейм — только сам сайт. Входа у SMM нет — внутри Neuronium менять нечего.
+Установка, конфиги nginx и Caddy, DNS — [`deploy/README.md`](deploy/README.md).
+
 ## Что умеет
 
 | Экран | Что там |
@@ -89,6 +104,7 @@ npm test             # логика и интерфейс (vitest + Testing Libr
 npm run typecheck
 npm run build && npm run preview &   # затем:
 npm run test:e2e     # настоящий браузер: перенос указателем, край, лист, месяц, щелчок по шкале, наверстать, рубрики, черновики, поиск, тёмная тема, телефон
+npm run test:nr-launch   # nr-launch/1: сборка с NR_HOST_ORIGINS и без, SMM во фрейме «Neuronium» и не у чужого сайта
 ```
 
 `test:e2e` ищет Chromium в `/opt/pw-browsers`; другой путь — через переменную `CHROME`.

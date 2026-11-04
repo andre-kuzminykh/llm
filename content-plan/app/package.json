@@ -11,6 +11,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:e2e": "node e2e/smoke.mjs",
+    "test:nr-launch": "node e2e/nr-launch.mjs",
     "demo": "node e2e/demo.mjs",
     "single": "npm run build && node scripts/single.mjs"
   },
