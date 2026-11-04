@@ -8,9 +8,10 @@ import { FULL_VIDEO, isSlot, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Account, ty
 
 /** Демо: свои аккаунты и конкуренты, если человек ещё никого не подключил, — чтобы прототип было что листать. */
 export const DEMO_ACCOUNTS: Account[] = [
-  { id: 'demo-me-yt', name: 'Мой канал', platform: 'YouTube', handle: '@my_channel' },
-  { id: 'demo-me-tg', name: 'Мой канал', platform: 'Telegram', handle: '@my_channel' },
-  { id: 'demo-me-ig', name: 'Мой канал', platform: 'Instagram', handle: '@my_channel' },
+  { id: 'demo-me-yt', name: 'Мой канал', platform: 'YouTube', handle: '@my_channel', lang: 'ru' },
+  { id: 'demo-me-yt-en', name: 'My channel', platform: 'YouTube', handle: '@my_channel_en', lang: 'en' },
+  { id: 'demo-me-tg', name: 'Мой канал', platform: 'Telegram', handle: '@my_channel', lang: 'ru' },
+  { id: 'demo-me-ig', name: 'Мой канал', platform: 'Instagram', handle: '@my_channel', lang: 'ru' },
 ]
 export const DEMO_RIVALS: Competitor[] = [
   { id: 'demo-rv-1', name: 'AI Daily', platform: 'YouTube', handle: '@aidaily', added: '2026-10-01' },

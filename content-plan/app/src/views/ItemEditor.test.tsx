@@ -343,37 +343,36 @@ describe('T-CP-051 FR-CP-051 «Готово» — карточка сразу б
   })
 })
 
-describe('T-CP-054 FR-CP-054 языки — списком с галочками; отмеченные запоминаются', () => {
-  it('у нового — русский; отметил английский — в следующий раз RU и EN уже стоят; у материала без языков — русский', async () => {
+describe('T-CP-054 FR-CP-054 языков в форме нет: контент всегда на двух языках, язык — у подключённой соцсети', () => {
+  it('в форме нового и старого материала языков нет; в настройках у своей соцсети — язык RU или EN, у конкурента — нет', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
-    const checked = (form: HTMLElement) =>
-      within(within(form).getByRole('group', { name: 'Языки' }))
-        .getAllByRole('checkbox')
-        .filter((b) => (b as HTMLInputElement).checked)
-        .map((b) => b.getAttribute('aria-label'))
-    const open = async (form: HTMLElement) => userEvent.click(within(form).getByRole('button', { name: /^Языки:/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
-    let form = screen.getByRole('complementary', { name: 'Новый контент' })
-    expect(within(form).getByRole('button', { name: /^Языки:/ })).toHaveAccessibleName('Языки: Русский')
-    await open(form)
-    const list = within(within(form).getByRole('group', { name: 'Языки' })).getAllByRole('checkbox').map((b) => b.getAttribute('aria-label'))
-    expect(list.slice(0, 5)).toEqual(['Русский', 'English', 'Español', 'Deutsch', 'Français'])
-    expect(list.length).toBeGreaterThan(10)
-    expect(checked(form)).toEqual(['Русский'])
-    // последний язык не снять
-    expect(within(form).getByRole('checkbox', { name: 'Русский' })).toBeDisabled()
-    await userEvent.click(within(form).getByRole('checkbox', { name: 'English' }))
-    expect(checked(form)).toEqual(['Русский', 'English'])
-    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Двуязычный пост')
-    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
-    form = screen.getByRole('complementary', { name: 'Новый контент' })
-    expect(within(form).getByRole('button', { name: /^Языки:/ })).toHaveAccessibleName('Языки: Русский, English')
+    const form = screen.getByRole('complementary', { name: 'Новый контент' })
+    expect(within(form).queryByText('Языки')).toBeNull()
+    expect(within(form).queryByRole('button', { name: /^Языки/ })).toBeNull()
+    expect(within(form).queryByRole('group', { name: 'Языки по каналам' })).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
-    // материал из плана без языков — по-русски
     await userEvent.click(within(day('2026-10-26')).getByRole('button', { name: /^Демо · FULL: Стратегия/ }))
-    expect(within(screen.getByRole('complementary', { name: 'Материал' })).getByRole('button', { name: /^Языки:/ })).toHaveAccessibleName('Языки: Русский')
+    expect(within(screen.getByRole('complementary', { name: 'Материал' })).queryByText('Языки')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    // язык — свойство подключения: русская версия уходит в аккаунты RU, английская — в EN
+    await userEvent.click(screen.getByRole('button', { name: 'Профиль' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Настройки: соцсети и конкуренты/ }))
+    const settings = screen.getByRole('complementary', { name: 'Настройки' })
+    expect(settings).toHaveTextContent('Контент всегда на двух языках')
+    const add = within(settings).getByRole('form', { name: 'Подключить соцсеть' })
+    const lang = within(add).getByRole('combobox', { name: 'Язык' })
+    expect([...(lang as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['RU — Русский', 'EN — English'])
+    expect(lang).toHaveDisplayValue('RU — Русский')
+    await userEvent.selectOptions(lang, 'en')
+    await userEvent.type(within(add).getByLabelText('Название'), 'Dataist EN')
+    await userEvent.click(within(add).getByRole('button', { name: 'Подключить' }))
+    const mine = within(settings).getByRole('list', { name: 'Мои соцсети' })
+    expect(within(mine).getByRole('listitem')).toHaveTextContent('Dataist EN')
+    expect(within(mine).getByRole('listitem')).toHaveTextContent('EN')
+    expect(screen.getByText(/«Dataist EN» \(EN\) подключён/)).toBeInTheDocument()
+    expect(within(within(settings).getByRole('form', { name: 'Следить за аккаунтом' })).queryByRole('combobox', { name: 'Язык' })).toBeNull()
   })
 })
 
@@ -472,54 +471,5 @@ describe('T-CP-063 FR-CP-063 повтор «Другое…» как в Google �
     const item = screen.getByRole('complementary', { name: 'Материал' })
     expect(within(within(item).getByRole('list', { name: 'Файлы' })).getAllByRole('listitem')).toHaveLength(5)
     expect(within(item).getByRole('textbox', { name: 'Заметка' })).toHaveValue('Длинное описание. '.repeat(20))
-  })
-})
-
-describe('T-CP-064 FR-CP-064 языки по каналам: русский — в один канал, английский — в другой', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-10-28T09:00:00'))
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-  it('у английского — свой канал: две версии одним шагом; канал запоминает язык — в следующий раз английский сам туда', async () => {
-    renderApp()
-    await screen.findByRole('grid', { name: 'Неделя по времени' })
-    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
-    let form = screen.getByRole('complementary', { name: 'Новый контент' })
-    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Итоги недели')
-    // один язык — выбирать канал не нужно
-    expect(within(form).queryByRole('group', { name: 'Языки по каналам' })).toBeNull()
-    await userEvent.click(within(form).getByRole('button', { name: /^Языки:/ }))
-    await userEvent.click(within(form).getByRole('checkbox', { name: 'English' }))
-    const map = within(form).getByRole('group', { name: 'Языки по каналам' })
-    expect(within(map).getByRole('combobox', { name: 'Канал для языка: Русский' })).toHaveDisplayValue('Dataist')
-    expect(within(map).getByRole('combobox', { name: 'Канал для языка: English' })).toHaveDisplayValue('Dataist')
-    await userEvent.selectOptions(within(map).getByRole('combobox', { name: 'Канал для языка: English' }), 'Landao')
-    expect(map).toHaveTextContent('Версии: RU — Dataist, EN — Landao')
-    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
-    expect(screen.getByText(/Создано на 28 окт · RU — Dataist, EN — Landao/)).toBeInTheDocument()
-    // обе версии — в один день, каждая в своём канале и со своим языком
-    const versions: string[] = []
-    for (const card of within(day('2026-10-28')).getAllByRole('button', { name: /Итоги недели, \d\d:\d\d/ })) {
-      await userEvent.click(card)
-      const f = screen.getByRole('complementary', { name: 'Материал' })
-      versions.push(`${(within(f).getByRole('combobox', { name: 'Канал' }) as HTMLSelectElement).selectedOptions[0].textContent}: ${within(f).getByRole('button', { name: /^Языки:/ }).getAttribute('aria-label')}`)
-      await userEvent.click(within(f).getByRole('button', { name: 'Закрыть' }))
-    }
-    expect(versions).toContain('Dataist: Языки: Русский')
-    expect(versions).toContain('Landao: Языки: English')
-    // в следующий раз: русский — в Dataist, английский — сам в Landao
-    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
-    form = screen.getByRole('complementary', { name: 'Новый контент' })
-    const map2 = within(form).getByRole('group', { name: 'Языки по каналам' })
-    expect(within(map2).getByRole('combobox', { name: 'Канал для языка: English' })).toHaveDisplayValue('Landao')
-    expect(within(map2).getByRole('combobox', { name: 'Канал для языка: Русский' })).toHaveDisplayValue('Dataist')
-    // оба языка увели из канала — подскажет
-    await userEvent.selectOptions(within(map2).getByRole('combobox', { name: 'Канал для языка: Русский' }), 'Landao')
-    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Пусто в канале')
-    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
-    expect(within(form).getByRole('alert')).toHaveTextContent('Оставьте хотя бы один язык в канале «Dataist»')
   })
 })

@@ -19,7 +19,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
       <div className="cp-sheet__body nr-scroll">
         <section className="cp-set" aria-labelledby="set-mine">
           <h3 id="set-mine" className="cp-set__h">Мои соцсети</h3>
-          <p className="cp-hint">Из них собираются графики и моя лента на главной: посты, теги (топики) и цифры.</p>
+          <p className="cp-hint">Из них собираются графики и моя лента на главной: посты, теги (топики) и цифры. Контент всегда на двух языках: русская версия уходит в аккаунты RU, английская — в аккаунты EN.</p>
           <AccountList
             items={accounts}
             label="Мои соцсети"
@@ -32,9 +32,10 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
             label="Подключить соцсеть"
             button="Подключить"
             namePlaceholder="Мой канал"
+            withLang
             onAdd={(a) => {
               dispatch({ type: 'analytics', patch: { accounts: [...accounts, a] } })
-              toast(`${a.platform} «${a.name}» подключён — посты и цифры придут, когда подключим API площадок`, true)
+              toast(`${a.platform} «${a.name}»${a.lang ? ` (${a.lang.toUpperCase()})` : ''} подключён — посты и цифры придут, когда подключим API площадок`, true)
             }}
           />
         </section>

@@ -382,13 +382,16 @@ await page.keyboard.press('Control+z')
   const watched = await settings.getByRole('list', { name: 'Конкуренты' }).getByText('AI Daily').count()
   const soon = await settings.locator('.cp-an__soon[aria-disabled="true"]', { hasText: 'Из маркетингового анализа' }).evaluate((el) => getComputedStyle(el).borderStyle)
   const mine = await settings.getByRole('form', { name: 'Подключить соцсеть' }).count()
+  // язык — у своей соцсети (RU/EN): контент всегда на двух языках, каждая версия уходит в свои аккаунты
+  const langOpts = await settings.getByRole('form', { name: 'Подключить соцсеть' }).getByRole('combobox', { name: 'Язык' }).locator('option').allTextContents()
+  const rivalLang = await follow.getByRole('combobox', { name: 'Язык' }).count()
   await page.screenshot({ path: `${SHOTS}/8-settings.png` })
   await settings.getByRole('list', { name: 'Конкуренты' }).getByRole('button', { name: 'Убрать: AI Daily' }).click()
   await settings.getByRole('button', { name: 'Закрыть' }).click()
   check(
-    items.join('|') === 'Главная|Календарь' && sub.x >= rail.x + rail.width - 1 && soon === 'dashed' && watched && mine,
-    'СММ: «Главная» и «Календарь» справа от отделов; соцсети и конкуренты — в настройках; маркет-анализ — пунктиром',
-    `СММ: ${items.join(', ')}, рамка «${soon}», конкурент ${watched}, мои соцсети ${mine}`,
+    items.join('|') === 'Главная|Календарь' && sub.x >= rail.x + rail.width - 1 && soon === 'dashed' && watched && mine && langOpts.join('|') === 'RU — Русский|EN — English' && !rivalLang,
+    'СММ: «Главная» и «Календарь» справа от отделов; соцсети (с языком RU/EN) и конкуренты — в настройках; маркет-анализ — пунктиром',
+    `СММ: ${items.join(', ')}, рамка «${soon}», конкурент ${watched}, мои соцсети ${mine}, языки ${langOpts.join(', ')}, у конкурента ${rivalLang}`,
   )
   await page.getByRole('grid', { name: /Неделя по каналам/ }).waitFor()
 }
@@ -520,7 +523,7 @@ ok('форма материала')
 await page.keyboard.press('Escape')
 
 // новый контент: можно без канала и рубрики; повтор — каждый день, по неделям, «Другое…» (как в Google Календаре);
-// языки — списком с галочками (русский — по умолчанию); заметка — с картинками
+// языков в форме нет — контент всегда на двух; заметка — с картинками и текстами
 {
   await page.getByRole('button', { name: 'Новый контент' }).click()
   const nf = page.getByRole('complementary', { name: 'Новый контент' })
@@ -539,25 +542,18 @@ await page.keyboard.press('Escape')
   await page.screenshot({ path: `${SHOTS}/5-repeat.png` })
   await dlg.getByRole('button', { name: 'Готово' }).click()
   const custom = await nf.getByRole('combobox', { name: 'Повтор' }).evaluate((el) => el.selectedOptions[0].textContent)
-  const langBtn = await nf.getByRole('button', { name: /^Языки:/ }).getAttribute('aria-label')
-  await nf.getByRole('button', { name: /^Языки:/ }).click()
-  const langs = await nf.getByRole('group', { name: 'Языки' }).getByRole('checkbox').count()
-  await page.screenshot({ path: `${SHOTS}/5-langs.png` })
-  await nf.getByRole('button', { name: /^Языки:/ }).click()
+  const langs = await nf.getByText('Языки', { exact: true }).count()
   await nf.getByLabel('Добавить файлы').setInputFiles([
     { name: 'a.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') },
     { name: 'сценарий.txt', mimeType: 'text/plain', buffer: Buffer.from('Хук, суть, финал') },
   ])
   await nf.getByRole('list', { name: 'Файлы' }).getByRole('listitem').nth(1).waitFor()
-  // языки по каналам: английский — в другой канал
-  await nf.getByRole('button', { name: /^Языки:/ }).click()
-  await nf.getByRole('checkbox', { name: 'English' }).click()
-  await nf.getByRole('button', { name: /^Языки:/ }).click()
-  const langMap = await nf.getByRole('group', { name: 'Языки по каналам' }).getByRole('combobox').count()
+  const files = await nf.getByRole('list', { name: 'Файлы' }).getByRole('listitem').count()
+  await page.screenshot({ path: `${SHOTS}/5-files.png` })
   check(
-    channels[0] === 'Без канала' && channels.at(-1) === 'Новый канал…' && repeats.join('|') === 'Не повторять|Каждый день|По будням|Каждую неделю|Через неделю|Раз в месяц|Другое…' && daysOn === 1 && hint && custom === 'раз в 3 дня, 4 раза' && langBtn === 'Языки: Русский' && langs > 10 && langMap === 2,
-    `новый контент: «Без канала», повтор (${hint}; «${custom}»), языки списком (${langs}) и по каналам (${langMap}), файлы в заметке`,
-    `каналы ${channels.join(', ')}; повтор ${repeats.join(', ')} / ${daysOn} / «${hint}» / «${custom}»; языки «${langBtn}» ${langs}`,
+    channels[0] === 'Без канала' && channels.at(-1) === 'Новый канал…' && repeats.join('|') === 'Не повторять|Каждый день|По будням|Каждую неделю|Через неделю|Раз в месяц|Другое…' && daysOn === 1 && hint && custom === 'раз в 3 дня, 4 раза' && !langs && files === 2,
+    `новый контент: «Без канала», повтор (${hint}; «${custom}»), без языков, файлы в заметке (${files})`,
+    `каналы ${channels.join(', ')}; повтор ${repeats.join(', ')} / ${daysOn} / «${hint}» / «${custom}»; языков ${langs}; файлов ${files}`,
   )
   await nf.getByRole('button', { name: 'Закрыть' }).click()
 }

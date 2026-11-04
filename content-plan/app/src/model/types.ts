@@ -22,7 +22,6 @@ export interface Channel {
   platforms: string[]
   sections: Section[]
   picks?: Record<string, string[]> // какие площадки выбрали в последний раз у формата: в форме они открываются выбранными
-  langs?: string[] // на каких языках канал выходит: русский — в один канал, английский — в другой; без поля — на любых
 }
 
 export interface Rubric {
@@ -79,7 +78,6 @@ export interface Item {
   due?: ISODate // подготовить к; без него — за несколько дней до выхода (leadOf)
   done?: string[] // готовые части задачи: «id материала|площадка»
   trigger?: string // версия для другой площадки: создаётся автоматически, когда выйдет оригинал (его id)
-  langs?: string[] // на каких языках выходит: «ru», «en»; без поля — по-русски
   series?: string // повтор: у всех материалов одного повтора — один id
   voice?: 'tts' | 'avatar' | 'self' // видео из текста: озвучка голосом, аватар (лицо) или запишу сам
   files?: Attachment[] // к заметке — до 5 файлов: картинки и тексты
@@ -133,7 +131,15 @@ export interface Account {
   name: string
   platform: string
   handle: string // ссылка или @аккаунт
+  lang?: Lang // свой аккаунт: на каком языке выходит — сюда уходит эта языковая версия контента
 }
+
+/** Контент всегда на двух языках; у каждого языка — свои подключённые аккаунты. Это свойство подключения, не материала. */
+export type Lang = 'ru' | 'en'
+export const LANGS: { id: Lang; code: string; name: string }[] = [
+  { id: 'ru', code: 'RU', name: 'Русский' },
+  { id: 'en', code: 'EN', name: 'English' },
+]
 
 export interface Plan {
   version: 3
@@ -272,28 +278,6 @@ export function typeOf(rule: Rule | undefined, platform: string) {
   if (platform === 'YouTube' && rule?.format === SHORT_VIDEO) return 'Shorts'
   return DEFAULT_TYPES[platform] ?? platform
 }
-
-/** Языки контента — в форме списком с галочками, можно несколько. Без поля у материала — русский. */
-export const LANGS: { id: string; code: string; name: string }[] = [
-  { id: 'ru', code: 'RU', name: 'Русский' },
-  { id: 'en', code: 'EN', name: 'English' },
-  { id: 'es', code: 'ES', name: 'Español' },
-  { id: 'de', code: 'DE', name: 'Deutsch' },
-  { id: 'fr', code: 'FR', name: 'Français' },
-  { id: 'it', code: 'IT', name: 'Italiano' },
-  { id: 'pt', code: 'PT', name: 'Português' },
-  { id: 'pl', code: 'PL', name: 'Polski' },
-  { id: 'uk', code: 'UK', name: 'Українська' },
-  { id: 'kk', code: 'KK', name: 'Қазақша' },
-  { id: 'tr', code: 'TR', name: 'Türkçe' },
-  { id: 'ar', code: 'AR', name: 'العربية' },
-  { id: 'hi', code: 'HI', name: 'हिन्दी' },
-  { id: 'zh', code: 'ZH', name: '中文' },
-  { id: 'ja', code: 'JA', name: '日本語' },
-  { id: 'ko', code: 'KO', name: '한국어' },
-]
-export const DEFAULT_LANGS = ['ru']
-export const langsOf = (it: Pick<Item, 'langs'>) => it.langs ?? DEFAULT_LANGS
 
 /** Какие площадки выбраны сразу: у сайта и письма — своя; иначе те, что канал запомнил для формата, или как у формата
  *  рубрики в канале, или где формат обычно выходит, — из тех, где он может выйти. */
