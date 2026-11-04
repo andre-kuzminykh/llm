@@ -282,6 +282,12 @@ select.nr-field {
   transition: background-color var(--nr-dur-1) var(--nr-ease), color var(--nr-dur-1) var(--nr-ease); }
 @media (hover: hover) { .cp-sub__item:hover { background: var(--nr-fill-2); color: var(--nr-text); } }
 .cp-sub__item[aria-current='page'] { background: var(--nr-accent-soft); color: var(--nr-accent-text); }
+/* в окне Neuronium (FR-CP-069, FR-CP-070): панели отделов нет — её ширина 0; профиль — внизу колонки разделов,
+   её же значком и подписью; меню — справа от колонки */
+.cp-framed { --nr-rail-w: 0px; }
+.cp-sub__profile { margin-top: auto; }
+.cp-sub__item[aria-expanded='true'] { background: var(--nr-fill-2); color: var(--nr-text); }
+.cp-sub .cp-menu { left: calc(var(--cp-sub-w) + 8px); }
 
 .cp-side {
   flex: none; width: var(--nr-sidebar-w); display: flex; flex-direction: column; gap: 18px; padding: 12px 12px 24px;
@@ -804,7 +810,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-avatar--sm { width: 24px; height: 24px; }
 .cp-menu__head { display: flex; align-items: center; gap: 10px; padding: 6px 8px 10px; margin-bottom: 2px; border-bottom: 1px solid var(--nr-sep-soft); }
 .cp-menu__head > span:last-child { display: flex; flex-direction: column; min-width: 0; font-size: var(--nr-fs-md); }
-.cp-menu .cp-menu__note:first-of-type { padding-top: 4px; }
+.cp-menu__head + .cp-menu__note { padding-top: 4px; }
 .cp-switch { gap: 6px; background: var(--nr-fill-2); color: var(--nr-text); }
 @media (hover: hover) { .cp-switch:hover { background: var(--nr-fill); } }
 .cp-fab {

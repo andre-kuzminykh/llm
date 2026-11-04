@@ -15,6 +15,7 @@ import { PlanCtx, usePlan, type Ctx, type Drag, type HomeState, type Mode, type 
 import { Icon } from './ui/Icon'
 import { SelectionBar } from './ui/SelectionBar'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
+import { inFrame } from './ui/frame'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
 import { HomeSide } from './views/HomeSide'
@@ -78,7 +79,8 @@ const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
 const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
 
 /** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная первой (графики и лента — моя и
- *  конкурентов), календарь контента второй; остальные появятся позже. */
+ *  конкурентов), календарь контента второй; остальные появятся позже. В окне Neuronium отделы — у него, а профиль —
+ *  внизу этой колонки (FR-CP-069, FR-CP-070). */
 const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
   { id: 'home', label: 'Главная', full: 'Главная — аналитика и лента', icon: 'home' },
   { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
@@ -244,6 +246,8 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   }, [narrow])
   const [menu, setMenu] = useState(false)
   const theme = useTheme()
+  // в окне Neuronium меню отделов одно — у него: своей панели отделов SMM не рисует (FR-CP-069)
+  const [framed] = useState(() => inFrame())
 
   const setMode = (m: Mode) => {
     setModeState(m)
@@ -450,10 +454,21 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
 
   const closeSheet = () => setSheet(null)
   const back = sheet && 'back' in sheet && sheet.back ? () => setSheet(sheet.back!) : undefined
+  const profileMenu = menu && (
+    <ProfileMenu
+      onClose={() => setMenu(false)}
+      seedUrl={seedUrl}
+      theme={theme.pref}
+      onTheme={theme.choose}
+      framed={framed}
+      onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }}
+      onPeriod={() => { setMenu(false); setSheet({ kind: 'period' }) }}
+    />
+  )
 
   return (
     <PlanCtx.Provider value={ctx}>
-      <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}`}>
+      <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}${framed ? ' cp-framed' : ''}`}>
         {phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
             {SECTIONS.map((s) => (
@@ -466,9 +481,9 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
               <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
               <span>Профиль</span>
             </button>
-            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} onPeriod={() => { setMenu(false); setSheet({ kind: 'period' }) }} />}
+            {profileMenu}
           </nav>
-        ) : (
+        ) : framed ? null : (
           <nav className="nr-rail" aria-label="Отделы">
             <div className="nr-rail-brand" aria-hidden="true">Nr</div>
             {DEPARTMENTS.map((d) =>
@@ -489,7 +504,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
               <span className="cp-avatar" aria-hidden="true"><Icon name="user" size={16} /></span>
               <span className="cp-rail-tip" aria-hidden="true">Профиль</span>
             </button>
-            {menu && <ProfileMenu onClose={() => setMenu(false)} seedUrl={seedUrl} theme={theme.pref} onTheme={theme.choose} onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }} onPeriod={() => { setMenu(false); setSheet({ kind: 'period' }) }} />}
+            {profileMenu}
           </nav>
         )}
         {!phone && (
@@ -500,6 +515,14 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
                 <span aria-hidden="true">{s.label}</span>
               </button>
             ))}
+            {/* в окне Neuronium панели отделов нет — профиль внизу этой колонки, как её разделы; кружок аккаунта — у Neuronium */}
+            {framed && (
+              <button type="button" className="cp-sub__item cp-sub__profile" aria-label="Профиль" aria-expanded={menu} title="Профиль" onClick={() => setMenu((m) => !m)}>
+                <Icon name="user" size={20} />
+                <span aria-hidden="true">Профиль</span>
+              </button>
+            )}
+            {framed && profileMenu}
           </nav>
         )}
         {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
@@ -565,7 +588,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   )
 }
 
-function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp, onPeriod }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; onHelp: () => void; onPeriod: () => void }) {
+function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPeriod }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; framed: boolean; onHelp: () => void; onPeriod: () => void }) {
   const { plan, dispatch, toast, saved, openSettings } = usePlan()
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
@@ -578,7 +601,8 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, onHelp, onPeriod }: { o
           <span className="cp-muted">SMM · контент-план</span>
         </span>
       </div>
-      <p className="cp-menu__note">Скоро: {SOON.join(', ')}</p>
+      {/* отделы в окне Neuronium — у него: списка «скоро» здесь нет */}
+      {!framed && <p className="cp-menu__note">Скоро: {SOON.join(', ')}</p>}
       <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { openSettings(); onClose() }}>
         <Icon name="settings" size={18} /> Настройки: соцсети и конкуренты
       </button>

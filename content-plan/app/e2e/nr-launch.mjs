@@ -108,7 +108,34 @@ try {
   const launch = await (await fetch(`http://127.0.0.1:${appOn.port}/nr-launch.json`)).json()
   check(launch.frame === true, '/nr-launch.json отдаётся рядом с приложением', `/nr-launch.json: ${JSON.stringify(launch)}`)
 
-  /** Хозяйская страница с фреймом SMM: открылось ли приложение внутри и что сказал браузер. */
+  /** Что SMM рисует слева во фрейме (T-CP-069, T-CP-070): панель отделов, знак Nr, «— скоро»; «Профиль» внизу колонки
+   *  разделов и его меню — справа от неё, без строки «Скоро: …». */
+  const shell = async (page, inside, shot) => {
+    const smm = inside.getByRole('navigation', { name: 'SMM' })
+    const out = {
+      rail: await inside.getByRole('navigation', { name: 'Отделы' }).count(),
+      brand: await inside.locator('.nr-rail-brand').count(),
+      soon: await inside.getByRole('button', { name: /— скоро$/ }).count(),
+      items: await smm.getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label'))),
+    }
+    const col = await smm.boundingBox()
+    const profile = smm.getByRole('button', { name: 'Профиль' })
+    if (!(await profile.count())) return out
+    const btn = await profile.boundingBox()
+    await profile.click()
+    const menu = inside.getByRole('menu', { name: 'Профиль' })
+    await menu.waitFor({ timeout: 4000 })
+    const box = await menu.boundingBox()
+    out.foot = Math.round(col.y + col.height - (btn.y + btn.height)) // от низа кнопки до низа колонки, px
+    out.beside = Math.round(box.x - (col.x + col.width)) // меню справа от колонки, px
+    out.note = await menu.getByText(/^Скоро:/).count()
+    out.settings = await menu.getByRole('menuitem', { name: 'Настройки: соцсети и конкуренты' }).count()
+    if (shot) await page.screenshot({ path: join(SHOTS, shot) })
+    await page.keyboard.press('Escape')
+    return out
+  }
+
+  /** Хозяйская страница с фреймом SMM: открылось ли приложение внутри, что слева и что сказал браузер. */
   const host = async (hostPort, appPort, shot) => {
     const page = await browser.newPage({ viewport: { width: 1240, height: 800 } })
     const errors = []
@@ -124,13 +151,27 @@ try {
       .catch(() => false)
     const framed = shown ? await (await page.$('#f')).contentFrame().then((f) => f.evaluate(() => window.top !== window.self)) : false
     if (shot) await page.screenshot({ path: join(SHOTS, shot) })
+    const left = shown && shot ? await shell(page, inside, shot.replace('.png', '-profile.png')) : null
     await page.close()
-    return { shown, framed, errors, refused }
+    return { shown, framed, errors, refused, left }
   }
 
   // T-CP-068: «Neuronium» из списка — SMM открыт в его окне и работает как есть (входа нет)
   const yes = await host(nr.port, appOn.port, 'nr-launch-frame.png')
   check(yes.shown && yes.framed && !yes.errors.length, 'Neuronium из списка: SMM во фрейме — «Главная» на месте, ошибок нет', `во фрейме: ${JSON.stringify(yes)}`)
+  // T-CP-069: меню отделов одно — у Neuronium; своей панели, знака Nr и «— скоро» у SMM во фрейме нет
+  const left = yes.left ?? {}
+  check(
+    left.rail === 0 && left.brand === 0 && left.soon === 0 && left.items?.slice(0, 2).join('|') === 'Главная — аналитика и лента|Календарь контента',
+    'во фрейме своей панели отделов у SMM нет: ни Nr, ни отделов; «Главная» и «Календарь» на месте',
+    `слева во фрейме: ${JSON.stringify(left)}`,
+  )
+  // T-CP-070: «Профиль» — внизу колонки разделов, меню — справа от неё, без «Скоро: …»
+  check(
+    left.items?.at(-1) === 'Профиль' && left.foot >= 0 && left.foot <= 24 && left.beside >= 0 && left.beside <= 16 && left.note === 0 && left.settings === 1,
+    '«Профиль» — внизу колонки разделов, меню — справа от неё (настройки на месте, «Скоро» нет)',
+    `профиль во фрейме: ${JSON.stringify(left)}`,
+  )
   // чужой сайт — браузер не показывает
   const no = await host(evil.port, appOn.port)
   check(!no.shown && no.refused.some((t) => t.includes('frame-ancestors')), 'чужой сайт: браузер не показывает SMM (frame-ancestors)', `чужой сайт: ${JSON.stringify(no)}`)
