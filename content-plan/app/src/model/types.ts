@@ -143,6 +143,7 @@ export const LANGS: { id: Lang; code: string; name: string }[] = [
 
 export interface Plan {
   version: 3
+  example?: string // план Датаиста из календаря (public/seed.json, scripts/dataist-seed.mjs): «dataist-calendar»
   start: ISODate
   end: ISODate
   platforms: string[]

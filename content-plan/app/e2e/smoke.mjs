@@ -6,12 +6,17 @@
 // рубрику с подсказками, «+», «Неделя / Месяц», «Наверстать», «Как пользоваться», тёмную тему, сохранение и телефон.
 // Скриншоты — в e2e/shots (или в $SHOTS).
 import { mkdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5174/'
 const SHOTS = process.env.SHOTS ?? new URL('./shots/', import.meta.url).pathname
 const CHROME = process.env.CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 mkdirSync(SHOTS, { recursive: true })
+// проверки ниже написаны на старом примере (план Andre AIT из ../build.py) — он и отдаётся вместо seed.json;
+// план Датаиста (календарь со страницы) — своими проверками в конце, на настоящем seed.json
+const OLD_SEED = fileURLToPath(new URL('../src/test/seed-andre.json', import.meta.url))
+const oldSeed = (p) => p.route('**/seed.json', (r) => r.fulfill({ path: OLD_SEED, contentType: 'application/json' }))
 
 const fail = (msg) => {
   console.error(`✗ ${msg}`)
@@ -22,6 +27,7 @@ const check = (cond, yes, no) => (cond ? ok(yes) : fail(no))
 
 const browser = await chromium.launch({ executablePath: CHROME })
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+await oldSeed(page)
 page.on('pageerror', (e) => fail(`ошибка на странице: ${e.message}`))
 const cell = (d) => page.locator(`.cp-tg__col[data-date="${d}"]`)
 const toast = () => page.getByRole('status').filter({ has: page.locator('.cp-toast__msg') })
@@ -769,6 +775,7 @@ check(await page.getByRole('region', { name: 'Найдено' }).getByRole('butt
 
 // телефон: внизу Главная, Календарь и Профиль; фильтры — за кнопкой; вид — меню, в нём лента по дням; поиск — значком
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+await oldSeed(phone)
 await phone.goto(BASE)
 await phone.getByRole('heading', { name: 'Главная' }).waitFor()
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
@@ -828,5 +835,61 @@ check(!(await phone.locator('.cp-side').count()), 'фильтры на теле�
 await phone.getByRole('button', { name: 'Фильтры' }).click()
 await phone.mouse.click(370, 400)
 check(!(await phone.locator('.cp-side').count()), 'тап мимо закрывает фильтры', 'тап мимо фильтров их не закрыл')
+
+// план Датаиста — календарь со страницы (public/seed.json): из профиля; неделя с 8 ноября и месяц
+{
+  const dc = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  dc.on('pageerror', (e) => fail(`ошибка на странице: ${e.message}`))
+  await dc.goto(BASE)
+  await dc.getByRole('heading', { name: 'Главная' }).waitFor()
+  await dc.getByRole('button', { name: 'Профиль' }).click()
+  const t0 = Date.now()
+  await dc.getByRole('menuitem', { name: 'Загрузить план Датаиста' }).click()
+  const note = dc.getByRole('status').filter({ hasText: 'Загружен план Датаиста — с 8 ноя' })
+  await note.waitFor()
+  await note.getByRole('button', { name: 'К началу плана' }).click()
+  await dc.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
+  const loaded = Date.now() - t0
+  await dc.getByRole('button', { name: /Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1\/100/ }).first().waitFor()
+  const sideNames = await dc.getByRole('complementary', { name: 'Фильтры' }).getByRole('group', { name: 'Каналы' }).locator('.cp-side__name').allTextContents().catch(() => [])
+  const day8 = await dc.locator('.cp-tg__col[data-date="2026-11-08"] .cp-card').count()
+  const wide = await dc.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  await dc.waitForTimeout(400)
+  await dc.screenshot({ path: `${SHOTS}/14-dataist-week.png` })
+  check(
+    day8 === 15 && !wide && loaded < 4000,
+    `план Датаиста из профиля: «К началу плана» — неделя с 8 ноября, в воскресенье ${day8} карточек (новость дня, демо Нейрония, Академия, лайфстайл…), открылся за ${loaded} мс`,
+    `план Датаиста: карточек 8 ноября ${day8}, страница шире ${wide}, ${loaded} мс, каналы ${sideNames.join(', ')}`,
+  )
+  await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio', { name: /Месяц/ }).click().catch(() => {})
+  await dc.waitForTimeout(600)
+  await dc.screenshot({ path: `${SHOTS}/14-dataist-month.png` })
+  await dc.close()
+}
+// сохранён старый пример — при открытии его сменяет план Датаиста; «Отменить» вернёт прежний
+{
+  const sw = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  await oldSeed(sw)
+  await sw.goto(BASE)
+  await sw.getByRole('heading', { name: 'Главная' }).waitFor()
+  await sw.getByRole('button', { name: 'Профиль' }).click()
+  await sw.getByRole('menuitem', { name: 'Загрузить план Датаиста' }).click()
+  await sw.getByRole('status').filter({ hasText: 'Загружен план Датаиста — с 25 окт' }).waitFor()
+  await sw.waitForTimeout(1200) // сохранение — с задержкой
+  await sw.unroute('**/seed.json')
+  await sw.reload()
+  const swapped = sw.getByRole('status').filter({ hasText: 'прежний пример заменён' })
+  await swapped.waitFor()
+  const text = (await swapped.locator('.cp-toast__msg').textContent()) ?? ''
+  await swapped.getByRole('button', { name: 'К началу плана' }).click()
+  await sw.getByRole('button', { name: /Knowledge Management/ }).first().waitFor()
+  await sw.waitForTimeout(1200)
+  await sw.reload() // заменённый план сохранён: второй раз не меняется и не говорит
+  await sw.getByRole('heading', { name: /./ }).first().waitFor()
+  await sw.waitForTimeout(1500)
+  const again = await sw.getByRole('status').filter({ hasText: 'прежний пример заменён' }).count()
+  check(/^Загружен план Датаиста: 7 каналов, с 8 ноя/.test(text) && !again, `сохранённый старый пример сменился планом Датаиста сам: «${text}»; после перезагрузки — без повтора`, `замена примера: «${text}», повтор ${again}`)
+  await sw.close()
+}
 
 await browser.close()

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { addDays, fromMin, shortDate, toMin, today } from './model/dates'
+import { addDays, dateText, fromMin, shortDate, toMin, today } from './model/dates'
 import { indexByDate, visible, type Filters } from './model/filters'
 import { moveHint, whereText } from './model/hint'
-import { calendarCSV, download, exportJSON, isV1, parsePlan, upgradePlan, webAndMail, type AnyPlan } from './model/io'
+import { calendarCSV, download, exportJSON, isOldExample, isV1, parsePlan, upgradePlan, webAndMail, type AnyPlan } from './model/io'
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
@@ -136,6 +136,7 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
   const [error, setError] = useState('')
   const storage = useRef<PlanStorage | null>(null)
   const [saved, setSaved] = useState<Ctx['saved']>('idle')
+  const [notice, setNotice] = useState<Notice | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -144,10 +145,17 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
         const st = await storageFactory()
         storage.current = st
         const stored = (await st.load().catch(() => null)) as AnyPlan | null
-        // с чистого листа: без сохранённого плана — пустой; план Датаиста — примером из меню профиля
+        // с чистого листа: без сохранённого плана — пустой; план Датаиста — из меню профиля
         const plan = stored ? await upgrade(stored, seedUrl) : initialPlan ? webAndMail(initialPlan) : emptyPlan(today())
+        // сохранён старый пример — его сменил план Датаиста (календарь на год): ставим его, «Отменить» вернёт прежний
+        const fresh = stored && isOldExample(plan) ? await fetchSeed(seedUrl).then((s) => (s.example ? s : null), () => null) : null
         if (!alive) return
         dispatch({ type: 'init', plan })
+        if (fresh) {
+          dispatch({ type: 'replace', plan: fresh })
+          if (st.persistent) st.save(fresh).catch(() => {})
+          setNotice({ msg: `Загружен план Датаиста: ${fresh.channels.length} каналов, с ${dateText(fresh.start, today())} — прежний пример заменён`, start: fresh.start })
+        }
         setSaved(st.persistent ? 'idle' : 'memory')
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e))
@@ -196,7 +204,13 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
       </div>
     )
   }
-  return <Workspace plan={state.plan} dispatch={dispatch} canUndo={state.past.length > 0} canRedo={state.future.length > 0} saved={saved} seedUrl={seedUrl} />
+  return <Workspace plan={state.plan} dispatch={dispatch} canUndo={state.past.length > 0} canRedo={state.future.length > 0} saved={saved} seedUrl={seedUrl} notice={notice} />
+}
+
+/** Что сказать при открытии: план заменён — с какого дня он начинается (туда — кнопкой в тосте). */
+interface Notice {
+  msg: string
+  start: ISODate
 }
 
 interface WorkspaceProps {
@@ -206,9 +220,10 @@ interface WorkspaceProps {
   canRedo: boolean
   saved: Ctx['saved']
   seedUrl: string
+  notice?: Notice | null
 }
 
-function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: WorkspaceProps) {
+function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }: WorkspaceProps) {
   // SMM — это календарь: неделя по часам или дорожками или месяц, как оставили; дашборда нет
   const [mode, setModeState] = useState<Mode>(readMode)
   const [span, setSpanState] = useState<Span>(readSpan)
@@ -307,6 +322,11 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
     const o = typeof opts === 'boolean' ? { undo: opts } : opts ?? {}
     setToast((t) => ({ msg, ...o, n: (t?.n ?? 0) + 1 }))
   }, [])
+  // план заменили при открытии — сказать об этом: «К началу плана» и «Отменить»
+  useEffect(() => {
+    if (notice) toast(notice.msg, { undo: true, actions: [{ label: 'К началу плана', run: () => (setSection('calendar'), jumpTo(notice.start)) }] })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notice])
   useEffect(() => {
     if (!toastState) return
     const t = setTimeout(() => setToast(null), toastState.actions?.length ? 9000 : 5000)
@@ -466,6 +486,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
       framed={framed}
       onHelp={() => { setMenu(false); setSheet({ kind: 'help' }) }}
       onPeriod={() => { setMenu(false); setSheet({ kind: 'period' }) }}
+      onStart={(d) => { setSection('calendar'); jumpTo(d) }}
     />
   )
 
@@ -608,7 +629,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   )
 }
 
-function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPeriod }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; framed: boolean; onHelp: () => void; onPeriod: () => void }) {
+function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPeriod, onStart }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; framed: boolean; onHelp: () => void; onPeriod: () => void; onStart: (d: ISODate) => void }) {
   const { plan, dispatch, toast, saved, openSettings } = usePlan()
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
@@ -671,15 +692,16 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPerio
         className="cp-menu__item"
         onClick={async () => {
           try {
-            dispatch({ type: 'replace', plan: await fetchSeed(seedUrl) })
-            toast('Загружен план Датаиста — пример', true)
+            const seed = await fetchSeed(seedUrl)
+            dispatch({ type: 'replace', plan: seed })
+            toast(`Загружен план Датаиста — с ${dateText(seed.start, today())}`, { undo: true, actions: [{ label: 'К началу плана', run: () => onStart(seed.start) }] })
           } catch (err) {
             toast(err instanceof Error ? err.message : 'Не удалось загрузить план')
           }
           onClose()
         }}
       >
-        <Icon name="upload" size={18} /> Загрузить план Датаиста (пример)
+        <Icon name="upload" size={18} /> Загрузить план Датаиста
       </button>
       <button
         type="button"

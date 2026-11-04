@@ -966,7 +966,7 @@ def write_xlsx(rubrics, week_lines, plan, calendar):
 
 # ---------------------------------------------------------------- данные для приложения
 
-APP_SEED = ROOT / 'app' / 'public' / 'seed.json'
+APP_SEED = ROOT / 'app' / 'src' / 'test' / 'seed-andre.json'  # старый план — фикстура тестов приложения; план в приложении — календарь Датаиста (app/scripts/dataist-seed.mjs)
 CHANNEL_IDS = {'Neuronium': 'neuronium', 'Andre AIT': 'andre', 'Landao': 'landao', 'Antropolis': 'antropolis'}
 DATAIST_IDS = {'Lab': 'dataist-lab', 'Academy': 'dataist-academy', 'Office': 'dataist-office'}
 

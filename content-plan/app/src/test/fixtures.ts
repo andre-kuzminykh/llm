@@ -3,7 +3,10 @@ import { resolve } from 'node:path'
 import { FULL_VIDEO, SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE, type Item, type Plan, type Rule } from '../model/types'
 
 // тесты запускаются из content-plan/app
-export const seedPath = resolve(process.cwd(), 'public/seed.json')
+// старый план Andre AIT (его пишет ../build.py) — фикстура: на нём держатся тесты модели; план Датаиста в приложении — public/seed.json
+export const seedPath = resolve(process.cwd(), 'src/test/seed-andre.json')
+export const dataistPath = resolve(process.cwd(), 'public/seed.json')
+export const loadDataist = (): Plan => JSON.parse(readFileSync(dataistPath, 'utf-8'))
 export const loadSeed = (): Plan => JSON.parse(readFileSync(seedPath, 'utf-8'))
 
 const rule = (r: Partial<Rule> & Pick<Rule, 'id' | 'name' | 'rubricId'>): Rule => ({

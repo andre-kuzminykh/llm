@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Проверка готового плана по правилам — независимо от того, как его собрал build.py.
 
-Читает app/public/seed.json (план с группами и правилами), out/3_plan.csv, out/4_calendar.csv
+Читает app/src/test/seed-andre.json (план с группами и правилами — его пишет build.py; в приложении он остался фикстурой тестов), out/3_plan.csv, out/4_calendar.csv
 и исходник source/main.csv и проверяет то, о чём договорились: каналы и их старт, площадки,
 сетку FULL по дням недели, лёгкую субботу, лимиты в день, что выходит вместе с FULL,
 нумерацию, уроки, время и типы контента, названия и что из исходника ничего не потерялось.
@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SEED = json.loads((ROOT / 'app' / 'public' / 'seed.json').read_text(encoding='utf-8'))
+SEED = json.loads((ROOT / 'app' / 'src' / 'test' / 'seed-andre.json').read_text(encoding='utf-8'))
 PLAN = list(csv.DictReader((ROOT / 'out' / '3_plan.csv').open(encoding='utf-8')))
 CAL = list(csv.DictReader((ROOT / 'out' / '4_calendar.csv').open(encoding='utf-8')))
 SRC = list(csv.DictReader((ROOT / 'source' / 'main.csv').open(encoding='utf-8')))
