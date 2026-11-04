@@ -149,9 +149,48 @@ try {
     return out
   }
 
-  /** Телефон в окне «Neuronium» (T-CP-070): внизу «Главная, Календарь, Настройки» — шестерёнкой, без человечка. */
-  const phone = async (hostPort, appPort, shot) => {
-    const page = await browser.newPage({ viewport: { width: 406, height: 860 } })
+  /** Что на телефоне видно в документе SMM (выполняется во фрейме): где строка разделов, не меньше ли 44 px кнопки, не
+   *  наезжают ли друг на друга, не обрезаны ли подписи и страница вбок, контраст подписей, и нет ли навигации под страницей. */
+  const stripGeometry = () => {
+    const box = (e) => e.getBoundingClientRect()
+    const nav = document.querySelector('nav[aria-label="Разделы"]')
+    const buttons = [...nav.querySelectorAll('button')]
+    const boxes = buttons.map(box)
+    const lum = (c) => {
+      const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => {
+        const x = Number(v) / 255
+        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const ratio = (a, b) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((p, q) => q - p)
+      return (hi + 0.05) / (lo + 0.05)
+    }
+    const bg = getComputedStyle(nav).backgroundColor
+    const main = box(document.querySelector('main'))
+    return {
+      top: Math.round(box(nav).top),
+      height: Math.round(box(nav).height),
+      smallest: Math.round(Math.min(...boxes.map((b) => Math.min(b.width, b.height)))),
+      crossing: boxes.some((a, i) => boxes.some((b, j) => j > i && a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5)),
+      clipped: buttons.some((b) => {
+        const label = b.querySelector('span')
+        return !!label && label.scrollWidth > label.clientWidth + 0.5
+      }),
+      outside: boxes.some((b) => b.left < -0.5 || b.right > innerWidth + 0.5),
+      wide: document.documentElement.scrollWidth > innerWidth,
+      contrast: Math.round(Math.min(...buttons.slice(0, 2).map((b) => ratio(getComputedStyle(b).color, bg))) * 10) / 10,
+      below: [...document.querySelectorAll('nav')].filter((n) => box(n).top >= main.bottom - 1).length, // навигация ниже страницы
+      bottomBar: document.querySelectorAll('.cp-tabs, nav.nr-rail').length,
+      dark: document.documentElement.classList.contains('dark'),
+    }
+  }
+
+  /** Телефон в окне «Neuronium» (T-CP-070, NFR-CP-009): внизу у SMM панели нет; «Главная», «Календарь» и «Настройки» —
+   *  вверху, в шапке (шестерёнкой, без человечка); меню раскрывается под строкой. Тема — светлая или тёмная. */
+  const phone = async (hostPort, appPort, shot, colorScheme = 'light') => {
+    const page = await browser.newPage({ viewport: { width: 406, height: 860 }, colorScheme })
     await page.goto(`http://localhost:${hostPort}/?app=${appPort}&w=390&h=844`)
     const inside = page.frameLocator('#f')
     const tabs = inside.getByRole('navigation', { name: 'Разделы' })
@@ -160,10 +199,28 @@ try {
       await page.close()
       return { shown }
     }
+    const frame = await (await page.$('#f')).contentFrame()
     const button = tabs.getByRole('button', { name: 'Настройки' })
-    const out = { shown, tabs: (await tabs.getByRole('button').allTextContents()).join('|'), people: await inside.locator(PERSON).count(), avatar: await inside.locator('.cp-avatar').count() }
+    const out = {
+      shown,
+      tabs: (await tabs.getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') ?? b.textContent.trim()))).join('|'),
+      people: await inside.locator(PERSON).count(),
+      avatar: await inside.locator('.cp-avatar').count(),
+      ...(await frame.evaluate(stripGeometry)),
+    }
+    // раздел переключается из шапки: календарь и обратно на главную
+    await tabs.getByRole('button', { name: 'Календарь' }).click()
+    out.calendar = await inside.getByRole('grid', { name: 'Неделя по времени' }).waitFor({ timeout: 4000 }).then(() => true, () => false)
+    await tabs.getByRole('button', { name: 'Главная' }).click()
+    out.home = await inside.getByRole('heading', { name: 'Главная' }).waitFor({ timeout: 4000 }).then(() => true, () => false)
     if (await button.count()) {
       Object.assign(out, await settingsMenu(inside, button))
+      const bar = await frame.evaluate(() => document.querySelector('nav[aria-label="Разделы"]').getBoundingClientRect().bottom)
+      const menu = await frame.evaluate(() => {
+        const b = document.querySelector('[role="menu"]').getBoundingClientRect()
+        return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }
+      })
+      out.menuUnder = menu.top >= bar && menu.left >= 0 && menu.right <= 390 && menu.bottom <= 844 // под строкой и целиком в окне
       if (shot) await page.screenshot({ path: join(SHOTS, shot) })
     }
     await page.close()
@@ -208,12 +265,30 @@ try {
     '«Настройки» шестерёнкой — внизу колонки разделов, меню — справа от неё (настройки на месте, «Скоро» нет); человечка во фрейме нет',
     `настройки во фрейме: ${JSON.stringify(left)}`,
   )
-  // T-CP-070, телефон: внизу «Главная, Календарь, Настройки» — шестерёнкой, человечка и кружка нет
+  // T-CP-070, телефон: внизу у SMM панели нет (она одна, у Neuronium); «Главная, Календарь, Настройки» — вверху, в шапке:
+  // шестерёнкой, человечка и кружка нет, меню то же и раскрывается под строкой
   const small = await phone(nr.port, appOn.port, 'nr-launch-frame-phone.png')
   check(
-    small.tabs === 'Главная|Календарь|Настройки' && small.gear && small.people === 0 && small.avatar === 0 && small.peopleOpen === 0 && small.note === 0 && small.settings === 1,
-    'телефон во фрейме: внизу «Главная, Календарь, Настройки» — шестерёнкой, человечка нет, меню то же',
+    small.tabs === 'Главная|Календарь|Настройки' && small.gear && small.people === 0 && small.avatar === 0 && small.peopleOpen === 0 && small.note === 0 && small.settings === 1 && small.menuUnder,
+    'телефон во фрейме: «Главная, Календарь, Настройки» — вверху, в шапке; шестерёнкой, человечка нет, меню то же и под строкой',
     `телефон во фрейме: ${JSON.stringify(small)}`,
+  )
+  check(
+    small.top === 0 && small.bottomBar === 0 && small.below === 0 && small.calendar && small.home,
+    'телефон во фрейме: внизу у SMM панели нет (она одна, у Neuronium); «Главная» и «Календарь» в шапке переключают разделы',
+    `телефон во фрейме, панель: ${JSON.stringify(small)}`,
+  )
+  // NFR-CP-009: кнопки не меньше 44 px, не наезжают друг на друга, подписи целы, страница вбок не едет, контраст подписей ≥ 4,5
+  check(
+    small.smallest >= 44 && !small.crossing && !small.clipped && !small.outside && !small.wide && small.contrast >= 4.5 && !small.dark,
+    `телефон во фрейме, светлая тема: кнопки от 44 px, без наложений и обрезанных подписей, контраст ${small.contrast}`,
+    `телефон во фрейме, размеры: ${JSON.stringify(small)}`,
+  )
+  const night = await phone(nr.port, appOn.port, 'nr-launch-frame-phone-dark.png', 'dark')
+  check(
+    night.tabs === 'Главная|Календарь|Настройки' && night.dark && night.smallest >= 44 && !night.crossing && !night.clipped && !night.outside && !night.wide && night.contrast >= 4.5 && night.bottomBar === 0 && night.below === 0 && night.menuUnder,
+    `телефон во фрейме, тёмная тема: то же — кнопки от 44 px, без наложений, внизу ничего, контраст ${night.contrast}`,
+    `телефон во фрейме, тёмная тема: ${JSON.stringify(night)}`,
   )
   // чужой сайт — браузер не показывает
   const no = await host(evil.port, appOn.port)

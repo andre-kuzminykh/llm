@@ -771,12 +771,15 @@ await top.waitFor()
 await top.getByRole('searchbox', { name: 'Поиск по плану' }).fill('Агент продаж')
 check(await page.getByRole('region', { name: 'Найдено' }).getByRole('button', { name: /Агент продаж/ }).count(), 'правки пережили перезагрузку', 'правки потерялись')
 
-// телефон: внизу Календарь и Профиль; фильтры — за кнопкой; вид — меню, в нём лента по дням; поиск — значком
+// телефон: внизу Главная, Календарь и Профиль; фильтры — за кнопкой; вид — меню, в нём лента по дням; поиск — значком
 const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 await phone.goto(BASE)
 await phone.getByRole('heading', { name: 'Главная' }).waitFor()
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
 check(tabs.join('|') === 'Главная|Календарь|Профиль', 'телефон: внизу Главная, Календарь и Профиль', `телефон: внизу ${tabs.join(', ')}`)
+// на своём адресе панель разделов — по-прежнему внизу, строки разделов в шапке (она только в окне Neuronium) нет (FR-CP-070)
+const bar = await phone.locator('nav.cp-tabs').boundingBox()
+check(bar && bar.y + bar.height > 843 && !(await phone.locator('.cp-topnav').count()), 'телефон на своём адресе: панель разделов — внизу, как была, строки разделов в шапке нет', `телефон, панель разделов: ${JSON.stringify(bar)}`)
 // на телефоне фильтры главной — за кнопкой; на демо плитки по две, ничего не вылезает вбок
 await phone.getByRole('switch', { name: 'Демо' }).click()
 await phone.getByRole('region', { name: 'Аналитика' }).waitFor()

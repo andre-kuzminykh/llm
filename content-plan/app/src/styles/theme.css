@@ -813,6 +813,29 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-menu__head { display: flex; align-items: center; gap: 10px; padding: 6px 8px 10px; margin-bottom: 2px; border-bottom: 1px solid var(--nr-sep-soft); }
 .cp-menu__head > span:last-child { display: flex; flex-direction: column; min-width: 0; font-size: var(--nr-fs-md); }
 .cp-menu__head + .cp-menu__note { padding-top: 4px; }
+/* телефон в окне Neuronium (FR-CP-070, NFR-CP-009): внизу у SMM панели нет — она одна, у Neuronium; «Главная», «Календарь» и
+   «Настройки» — вверху, в шапке, строкой над датой и фильтрами. Цель нажатия — не меньше 44 px, подписи целиком, оба цвета */
+@media (max-width: 600px) {
+  .cp-framed { --cp-topnav-h: 45px; }
+  .cp-framed.nr-app { flex-direction: column; } /* строка разделов — первой, страница под ней */
+  .cp-topnav { position: relative; flex: none; display: flex; align-items: stretch; height: var(--cp-topnav-h); padding: 0 6px 0 10px;
+    background: var(--nr-canvas); border-bottom: 1px solid var(--nr-sep-soft); }
+  .cp-topnav__tab, .cp-topnav__gear { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
+    min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--nr-text-3); cursor: pointer;
+    font: var(--nr-fw-medium) var(--nr-fs-base)/1 var(--nr-font); white-space: nowrap; }
+  .cp-topnav__tab { gap: 6px; padding: 0 10px; }
+  .cp-topnav__tab[aria-current='page'] { color: var(--nr-accent-text); }
+  .cp-topnav__tab[aria-current='page']::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px;
+    border-radius: 2px; background: var(--nr-accent); }
+  .cp-topnav__gear { width: 48px; margin-left: auto; border-radius: 12px; }
+  .cp-topnav__gear[aria-expanded='true'] { background: var(--nr-fill-2); color: var(--nr-text); }
+  /* меню то же, что «Профиль», но раскрывается вниз от строки, а не вверх от нижней панели */
+  .cp-topnav .cp-menu { top: calc(100% + 6px); bottom: auto; max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px); overflow-y: auto; overscroll-behavior: contain; }
+  /* внизу у SMM ничего нет: фильтры — от строки до низа окна, выбранное — у нижнего края */
+  .cp-framed .cp-side { top: var(--cp-topnav-h); bottom: 0; }
+  .cp-framed .cp-selbar { bottom: 12px; }
+  .cp-framed.cp-has-sel .cp-toast { bottom: 96px; } /* над «Выбрано: N» в две строки: 12 + 76 + зазор */
+}
 .cp-switch { gap: 6px; background: var(--nr-fill-2); color: var(--nr-text); }
 @media (hover: hover) { .cp-switch:hover { background: var(--nr-fill); } }
 .cp-fab {

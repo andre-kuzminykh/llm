@@ -7,6 +7,7 @@ import { LateBar } from './LateBar'
 import { activeFilters, FilterChips } from './Sidebar'
 import { usePlan, type Mode, type Span } from './ctx'
 import { Icon } from './Icon'
+import { profileName } from './frame'
 import { useMedia } from './theme'
 
 // о сохранении шапка молчит, пока всё в порядке
@@ -51,7 +52,7 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
       <div className="cp-top__right">
       {!sideOpen && <FilterChips />}
       {SAVED[saved] && (
-        <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню профиля' : undefined}>
+        <span className="cp-saved cp-saved--warn" role="status" title={saved === 'memory' ? `Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню «${profileName()}»` : undefined}>
           {SAVED[saved]}
         </span>
       )}

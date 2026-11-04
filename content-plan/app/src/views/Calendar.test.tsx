@@ -183,14 +183,14 @@ describe('T-CP-069 FR-CP-069 NFR-CP-008 одно меню отделов вну�
     await userEvent.click(within(nav).getByRole('button', { name: 'Профиль' }))
     expect(within(screen.getByRole('menu', { name: 'Профиль' })).getByText(/^Скоро: Главное, HR, Рынок/)).toBeInTheDocument()
   })
-  it('телефон в окне Neuronium: отделов нет ни внизу, ни в меню', async () => {
+  it('телефон в окне Neuronium: отделов нет ни в шапке, ни внизу, ни в меню', async () => {
     inNeuronium()
     onPhone()
     renderApp()
     await ready()
     expect(screen.queryByRole('navigation', { name: 'Отделы' })).toBeNull()
     expect(screen.queryByText('Nr')).toBeNull()
-    // внизу — два раздела SMM и его меню (что на третьей вкладке — FR-CP-070), значков отделов нет
+    // в шапке — два раздела SMM и его меню (что за третьей кнопкой — FR-CP-070), значков отделов нет
     const tabs = screen.getByRole('navigation', { name: 'Разделы' })
     expect(within(tabs).getAllByRole('button')).toHaveLength(3)
     expect(within(tabs).queryAllByRole('button', { name: /— скоро$|— контент-план$/ })).toHaveLength(0)
@@ -214,7 +214,7 @@ const MENU_ITEMS = [
   'Очистить всё',
 ]
 
-describe('T-CP-070 FR-CP-070 меню профиля в окне Neuronium — «Настройки» шестерёнкой внизу колонки разделов', () => {
+describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neuronium — «Настройки» шестерёнкой: внизу колонки разделов, на телефоне — в шапке', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
@@ -223,6 +223,9 @@ describe('T-CP-070 FR-CP-070 меню профиля в окне Neuronium — �
     inNeuronium()
     renderApp()
     await ready()
+    // на компьютере строки разделов в шапке нет: колонка слева, как была
+    expect(document.querySelector('.cp-topnav')).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Разделы' })).toBeNull()
     const items = within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button')
     expect(items.map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — аналитика и лента', 'Календарь контента', 'Настройки'])
     const settings = items[2]
@@ -264,26 +267,89 @@ describe('T-CP-070 FR-CP-070 меню профиля в окне Neuronium — �
     await userEvent.click(screen.getByRole('menuitem', { name: 'Как пользоваться' }))
     expect(screen.getByRole('complementary', { name: 'Как пользоваться' })).toBeInTheDocument()
   })
-  it('телефон в окне Neuronium: внизу «Главная, Календарь, Настройки» — шестерёнкой, без кружка-человечка; меню то же', async () => {
+  it('телефон в окне Neuronium: внизу у SMM панели нет — она одна, у Neuronium; «Главная», «Календарь» и «Настройки» — вверху, в шапке', async () => {
     inNeuronium()
     onPhone()
     renderApp()
     await ready()
-    const tabs = screen.getByRole('navigation', { name: 'Разделы' })
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Настройки'])
-    const settings = within(tabs).getByRole('button', { name: 'Настройки' })
-    expect(settings).toHaveClass('cp-tab')
+    // нижней панели у SMM нет: ни вкладок внизу, ни рейла
+    expect(document.querySelector('.cp-tabs')).toBeNull()
+    expect(document.querySelector('.nr-rail')).toBeNull()
+    // раздел и меню — одной строкой над шапкой календаря: в окне она раньше всего остального, под ней — страница
+    const app = document.querySelector('.nr-app') as HTMLElement
+    const main = screen.getByRole('main')
+    const nav = screen.getByRole('navigation', { name: 'Разделы' })
+    expect(nav).toHaveClass('cp-topnav')
+    expect(app.firstElementChild).toBe(nav)
+    expect(nav.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // ниже страницы навигации нет — внизу окна ничего, панель у Neuronium
+    const below = [...document.querySelectorAll('nav')].filter((n) => !main.contains(n) && main.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(below).toEqual([])
+    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Главная', 'Календарь', 'Настройки'])
+    expect(within(nav).queryByRole('button', { name: 'Профиль' })).toBeNull()
+  })
+  it('телефон в окне Neuronium: «Главная» и «Календарь» в шапке переключают разделы, выбранный отмечен', async () => {
+    inNeuronium()
+    onPhone()
+    renderApp()
+    await ready()
+    const nav = screen.getByRole('navigation', { name: 'Разделы' })
+    expect(within(nav).getByRole('button', { name: 'Календарь' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('button', { name: 'Главная' })).not.toHaveAttribute('aria-current')
+    await userEvent.click(within(nav).getByRole('button', { name: 'Главная' }))
+    expect(await screen.findByRole('heading', { name: 'Главная' })).toBeInTheDocument()
+    expect(screen.queryByRole('grid', { name: 'Неделя по времени' })).toBeNull()
+    expect(within(nav).getByRole('button', { name: 'Главная' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('button', { name: 'Календарь' })).not.toHaveAttribute('aria-current')
+    expect(localStorage.getItem('cp:section')).toBe(JSON.stringify('home'))
+    await userEvent.click(within(nav).getByRole('button', { name: 'Календарь' }))
+    await ready()
+    expect(within(nav).getByRole('button', { name: 'Календарь' })).toHaveAttribute('aria-current', 'page')
+    expect(localStorage.getItem('cp:section')).toBe(JSON.stringify('calendar'))
+    // фильтры и шапка страницы — на месте, под строкой разделов
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Фильтры' })).toBeInTheDocument()
+  })
+  it('телефон в окне Neuronium: «Настройки» — шестерёнкой в той же строке, без кружка-человечка; меню то же и раскрывается под ней', async () => {
+    inNeuronium()
+    onPhone()
+    renderApp()
+    await ready()
+    const nav = screen.getByRole('navigation', { name: 'Разделы' })
+    const settings = within(nav).getByRole('button', { name: 'Настройки' })
+    expect(settings).toHaveClass('cp-topnav__gear')
+    expect(settings).toHaveAttribute('title', 'Настройки')
+    // шестерёнка, а не человечек: кружок аккаунта — у Neuronium, входа у SMM нет
     expect(settings.querySelector('svg')!.innerHTML).toBe(glyph('settings'))
     expect(settings.querySelector('.cp-avatar')).toBeNull()
     expect(people()).toBe(0)
+    expect(settings).toHaveAttribute('aria-expanded', 'false')
     await userEvent.click(settings)
     expect(settings).toHaveAttribute('aria-expanded', 'true')
     const menu = screen.getByRole('menu', { name: 'Настройки' })
+    expect(nav).toContainElement(menu) // раскрывается от строки разделов, под ней
     expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent?.trim())).toEqual(MENU_ITEMS)
     expect(within(menu).getByRole('radiogroup', { name: 'Тема' })).toBeInTheDocument()
+    expect(within(menu).queryByText(/^Скоро:/)).toBeNull()
     expect(people()).toBe(0)
+    // повторное нажатие закрывает, Esc — тоже
+    await userEvent.click(settings)
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(settings).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(settings)
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('menu', { name: 'Настройки' })).toBeNull()
+    // пункт меню открывает лист справа; строка разделов остаётся — раздел меняется и при открытом листе
+    await userEvent.click(settings)
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Как пользоваться' }))
+    expect(screen.getByRole('complementary', { name: 'Как пользоваться' })).toBeInTheDocument()
+    expect(screen.queryByRole('menu')).toBeNull()
+    await userEvent.click(within(nav).getByRole('button', { name: 'Главная' }))
+    expect(screen.queryByRole('complementary', { name: 'Как пользоваться' })).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Главная' })).toBeInTheDocument()
+    // «Настройки: соцсети и конкуренты» — тот же лист, что на компьютере
+    await userEvent.click(settings)
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Настройки: соцсети и конкуренты' }))
+    expect(screen.getByRole('complementary', { name: 'Настройки' })).toBeInTheDocument()
   })
   it('на своём адресе — «Профиль», как раньше: кружок-человечек внизу панели отделов и третьей вкладкой на телефоне, меню «Профиль»', async () => {
     renderApp()
@@ -305,6 +371,12 @@ describe('T-CP-070 FR-CP-070 меню профиля в окне Neuronium — �
     await ready()
     const tabs = screen.getByRole('navigation', { name: 'Разделы' })
     expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Профиль'])
+    // та же нижняя панель, что была: рейл-вкладки первым в оболочке (внизу её ставит CSS), строки в шапке нет
+    expect(tabs).toHaveClass('nr-rail', 'cp-tabs')
+    expect(tabs).not.toHaveClass('cp-topnav')
+    expect(document.querySelector('.nr-app')!.firstElementChild).toBe(tabs)
+    expect(document.querySelector('.nr-app')).not.toHaveClass('cp-framed')
+    expect(document.querySelector('.cp-topnav')).toBeNull()
     const profile = within(tabs).getByRole('button', { name: 'Профиль' })
     expect(profile.querySelector('.cp-avatar.cp-avatar--sm svg')!.innerHTML).toBe(glyph('user'))
     expect(screen.queryByRole('button', { name: 'Настройки' })).toBeNull()
@@ -318,6 +390,50 @@ describe('T-CP-070 FR-CP-070 меню профиля в окне Neuronium — �
     expect(screen.getByText(/— в настройках/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Подключить соцсети' }))
     expect(screen.getByRole('complementary', { name: 'Настройки' })).toBeInTheDocument()
+  })
+})
+
+describe('T-CP-070 FR-CP-070 подсказки называют меню так, как оно зовётся в этом окне: «Профиль» на своём адресе, «Настройки» в окне Neuronium', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+  /** «Как пользоваться» — из меню профиля (на своём адресе — внизу панели отделов, в окне — «Настройки» в колонке разделов). */
+  const openHelp = async (button: HTMLElement) => {
+    await userEvent.click(button)
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Как пользоваться' }))
+    return screen.getByRole('complementary', { name: 'Как пользоваться' })
+  }
+  it('на своём адресе: справка и подсказка «Без сохранения» говорят «Профиль» — не «меню профиля»', async () => {
+    renderApp()
+    await ready()
+    const help = await openHelp(within(screen.getByRole('navigation', { name: 'Отделы' })).getByRole('button', { name: 'Профиль' }))
+    expect(help.textContent).toContain('меню «Профиль» → «Настройки: соцсети и конкуренты»')
+    expect(help.textContent).toContain('«Перенести период (отпуск)» — в меню «Профиль»')
+    expect(help.textContent).not.toMatch(/меню профиля|внизу слева/)
+    expect(help.textContent).not.toContain('меню «Настройки»')
+    // хранилище недоступно (память) — предупреждение в шапке и то же слово в подсказке к нему
+    expect(screen.getByText('Без сохранения')).toHaveAttribute('title', 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню «Профиль»')
+  })
+  it('в окне Neuronium: «Настройки» — и в справке, и в подсказке «Без сохранения»; слова «профиль» нет нигде', async () => {
+    inNeuronium()
+    renderApp()
+    await ready()
+    const help = await openHelp(within(screen.getByRole('navigation', { name: 'SMM' })).getByRole('button', { name: 'Настройки' }))
+    expect(help.textContent).toContain('меню «Настройки» → «Настройки: соцсети и конкуренты»')
+    expect(help.textContent).toContain('«Перенести период (отпуск)» — в меню «Настройки»')
+    expect(help.textContent).not.toMatch(/[Пп]рофил|внизу слева/)
+    expect(screen.getByText('Без сохранения')).toHaveAttribute('title', 'Хранилище браузера недоступно: правки живут до перезагрузки — выгрузите JSON в меню «Настройки»')
+    expect(document.body.textContent).not.toMatch(/[Пп]рофил/)
+  })
+  it('телефон в окне Neuronium: то же слово — «Настройки», меню — в шапке', async () => {
+    inNeuronium()
+    onPhone()
+    renderApp()
+    await ready()
+    const help = await openHelp(within(screen.getByRole('navigation', { name: 'Разделы' })).getByRole('button', { name: 'Настройки' }))
+    expect(help.textContent).toContain('меню «Настройки» → «Настройки: соцсети и конкуренты»')
+    expect(help.textContent).not.toMatch(/[Пп]рофил/)
   })
 })
 

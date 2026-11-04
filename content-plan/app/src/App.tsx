@@ -15,7 +15,7 @@ import { PlanCtx, usePlan, type Ctx, type Drag, type HomeState, type Mode, type 
 import { Icon } from './ui/Icon'
 import { SelectionBar } from './ui/SelectionBar'
 import { DEFAULT_FILTERS, Sidebar } from './ui/Sidebar'
-import { inFrame } from './ui/frame'
+import { inFrame, profileName } from './ui/frame'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
 import { HomeSide } from './views/HomeSide'
@@ -82,7 +82,8 @@ const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
 
 /** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная первой (графики и лента — моя и
  *  конкурентов), календарь контента второй; остальные появятся позже. В окне Neuronium отделы — у него, а меню
- *  профиля — «Настройками» внизу этой колонки (FR-CP-069, FR-CP-070). */
+ *  профиля — «Настройками» внизу этой колонки; на телефоне в окне внизу у SMM панели нет (она у Neuronium), разделы и
+ *  «Настройки» — вверху, в шапке (FR-CP-069, FR-CP-070). */
 const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
   { id: 'home', label: 'Главная', full: 'Главная — аналитика и лента', icon: 'home' },
   { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
@@ -471,7 +472,23 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
   return (
     <PlanCtx.Provider value={ctx}>
       <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}${framed ? ' cp-framed' : ''}`}>
-        {phone ? (
+        {phone && framed ? (
+          /* телефон в окне Neuronium: внизу панель одна — у Neuronium (Files · Chats · Agents), у SMM внизу ничего нет;
+             «Главная», «Календарь» и «Настройки» — вверху, в шапке, строкой над датой и фильтрами. «Настройки»
+             шестерёнкой: кружок-человечек — аккаунт Neuronium, входа у SMM нет (FR-CP-070, NFR-CP-009) */
+          <nav className="cp-topnav" aria-label="Разделы">
+            {SECTIONS.map((s) => (
+              <button key={s.id} type="button" className="cp-topnav__tab" aria-current={section === s.id ? 'page' : undefined} onClick={() => setSection(s.id)}>
+                <Icon name={s.icon} size={20} />
+                <span>{s.label}</span>
+              </button>
+            ))}
+            <button type="button" className="cp-topnav__gear" aria-label="Настройки" title="Настройки" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+              <Icon name="settings" size={22} />
+            </button>
+            {profileMenu}
+          </nav>
+        ) : phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
             {SECTIONS.map((s) => (
               <button key={s.id} type="button" className="cp-tab" aria-current={section === s.id ? 'page' : undefined} onClick={() => setSection(s.id)}>
@@ -479,18 +496,10 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
                 <span>{s.label}</span>
               </button>
             ))}
-            {/* в окне Neuronium — «Настройки» шестерёнкой: кружок-человечек — аккаунт, а входа у SMM нет (FR-CP-070) */}
-            {framed ? (
-              <button type="button" className="cp-tab" aria-label="Настройки" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-                <Icon name="settings" size={22} />
-                <span>Настройки</span>
-              </button>
-            ) : (
-              <button type="button" className="cp-tab" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-                <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
-                <span>Профиль</span>
-              </button>
-            )}
+            <button type="button" className="cp-tab" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+              <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
+              <span>Профиль</span>
+            </button>
             {profileMenu}
           </nav>
         ) : framed ? null : (
@@ -604,7 +613,7 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPerio
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
   // в окне Neuronium меню то же, но зовётся «Настройки» и без кружка-человечка: аккаунт — у Neuronium (FR-CP-070)
-  const name = framed ? 'Настройки' : 'Профиль'
+  const name = profileName(framed)
   return (
     <div className="cp-menu nr-glass" role="menu" aria-label={name}>
       <div className="cp-menu__head">

@@ -9,3 +9,9 @@ export function inFrame(win: Window = window): boolean {
     return true
   }
 }
+
+/** Как зовётся меню профиля: на своём адресе — «Профиль» (кружок аккаунта), в окне Neuronium — «Настройки» (шестерёнка:
+ *  аккаунт там у Neuronium, FR-CP-070). Слово выбирается здесь, по тому же условию, — подсказки берут его отсюда. */
+export function profileName(framed: boolean = inFrame()): 'Профиль' | 'Настройки' {
+  return framed ? 'Настройки' : 'Профиль'
+}
