@@ -63,24 +63,26 @@ const readMode = (): Mode => {
   }
 }
 
-/** Отделы Neuronium на левой панели — как в nr (F20): SMM — это приложение, остальные пока не подключены. */
+/** Отделы Neuronium на левой панели — как в nr (F20): SMM — это приложение, остальные пока не подключены. Имена —
+ *  владельца, 04.11.2026 («да, переименуй, старые перенаправь»): Главное, Рынок, Система (раньше Менеджмент, Маркетинг,
+ *  Инжиниринг); id прежние (FR-CP-028). */
 const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
-  { id: 'management', label: 'Менеджмент', icon: 'briefcase' },
+  { id: 'management', label: 'Главное', icon: 'briefcase' },
   { id: 'hr', label: 'HR', icon: 'people' },
-  { id: 'marketing', label: 'Маркетинг', icon: 'megaphone' },
+  { id: 'marketing', label: 'Рынок', icon: 'megaphone' },
   { id: 'smm', label: 'SMM', icon: 'hash' },
   { id: 'sales', label: 'Продажи', icon: 'trending' },
   { id: 'support', label: 'Поддержка', icon: 'lifebuoy' },
   { id: 'analytics', label: 'Аналитика', icon: 'chart' },
   { id: 'design', label: 'Дизайн', icon: 'palette' },
   { id: 'development', label: 'Разработка', icon: 'code' },
-  { id: 'engineering', label: 'Инжиниринг', icon: 'wrench' },
+  { id: 'engineering', label: 'Система', icon: 'wrench' },
 ]
 const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
 
 /** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная первой (графики и лента — моя и
- *  конкурентов), календарь контента второй; остальные появятся позже. В окне Neuronium отделы — у него, а профиль —
- *  внизу этой колонки (FR-CP-069, FR-CP-070). */
+ *  конкурентов), календарь контента второй; остальные появятся позже. В окне Neuronium отделы — у него, а меню
+ *  профиля — «Настройками» внизу этой колонки (FR-CP-069, FR-CP-070). */
 const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
   { id: 'home', label: 'Главная', full: 'Главная — аналитика и лента', icon: 'home' },
   { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
@@ -477,10 +479,18 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
                 <span>{s.label}</span>
               </button>
             ))}
-            <button type="button" className="cp-tab" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-              <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
-              <span>Профиль</span>
-            </button>
+            {/* в окне Neuronium — «Настройки» шестерёнкой: кружок-человечек — аккаунт, а входа у SMM нет (FR-CP-070) */}
+            {framed ? (
+              <button type="button" className="cp-tab" aria-label="Настройки" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+                <Icon name="settings" size={22} />
+                <span>Настройки</span>
+              </button>
+            ) : (
+              <button type="button" className="cp-tab" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+                <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
+                <span>Профиль</span>
+              </button>
+            )}
             {profileMenu}
           </nav>
         ) : framed ? null : (
@@ -515,11 +525,12 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl }: Workspa
                 <span aria-hidden="true">{s.label}</span>
               </button>
             ))}
-            {/* в окне Neuronium панели отделов нет — профиль внизу этой колонки, как её разделы; кружок аккаунта — у Neuronium */}
+            {/* в окне Neuronium панели отделов нет — меню профиля внизу этой колонки, как её разделы, «Настройками» с
+                шестерёнкой: кружок аккаунта рядом — у Neuronium, входа у SMM нет (FR-CP-070) */}
             {framed && (
-              <button type="button" className="cp-sub__item cp-sub__profile" aria-label="Профиль" aria-expanded={menu} title="Профиль" onClick={() => setMenu((m) => !m)}>
-                <Icon name="user" size={20} />
-                <span aria-hidden="true">Профиль</span>
+              <button type="button" className="cp-sub__item cp-sub__profile" aria-label="Настройки" aria-expanded={menu} title="Настройки" onClick={() => setMenu((m) => !m)}>
+                <Icon name="settings" size={20} />
+                <span aria-hidden="true">Настройки</span>
               </button>
             )}
             {framed && profileMenu}
@@ -592,12 +603,18 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPerio
   const { plan, dispatch, toast, saved, openSettings } = usePlan()
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
+  // в окне Neuronium меню то же, но зовётся «Настройки» и без кружка-человечка: аккаунт — у Neuronium (FR-CP-070)
+  const name = framed ? 'Настройки' : 'Профиль'
   return (
-    <div className="cp-menu nr-glass" role="menu" aria-label="Профиль">
+    <div className="cp-menu nr-glass" role="menu" aria-label={name}>
       <div className="cp-menu__head">
-        <span className="cp-avatar" aria-hidden="true"><Icon name="user" size={18} /></span>
+        {framed ? (
+          <span className="cp-menu__glyph" aria-hidden="true"><Icon name="settings" size={18} /></span>
+        ) : (
+          <span className="cp-avatar" aria-hidden="true"><Icon name="user" size={18} /></span>
+        )}
         <span>
-          <b>Профиль</b>
+          <b>{name}</b>
           <span className="cp-muted">SMM · контент-план</span>
         </span>
       </div>

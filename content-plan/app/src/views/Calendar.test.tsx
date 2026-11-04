@@ -1,11 +1,21 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { smallPlan } from '../test/fixtures'
 import { renderApp } from '../test/renderApp'
+import { Icon } from '../ui/Icon'
 
 const day = (date: string) => document.querySelector(`[data-date="${date}"]`) as HTMLElement
 const ready = () => screen.findByRole('grid', { name: 'Неделя по времени' })
 const side = () => screen.getByRole('complementary', { name: 'Фильтры' })
+/** Рисунок значка из src/ui/Icon.tsx (содержимое svg) — по нему видно, какой значок стоит на кнопке. */
+const glyph = (name: string) => {
+  const box = document.createElement('div') // вне страницы: страница не меняется
+  box.innerHTML = renderToStaticMarkup(<Icon name={name} />)
+  return box.querySelector('svg')!.innerHTML
+}
+/** Сколько на странице значков-человечков — как в кружке аккаунта. */
+const people = () => [...document.querySelectorAll('svg')].filter((s) => s.innerHTML === glyph('user')).length
 
 describe('T-CP-001 FR-CP-001 календарь — неделя', () => {
   it('в дне — все единицы контента; фильтры слева убирают лишнее', async () => {
@@ -82,6 +92,19 @@ describe('T-CP-028 FR-CP-028 оболочка: отделы, панель сле
     await userEvent.click(within(nav).getByRole('button', { name: 'Профиль' }))
     expect(screen.getByRole('menuitem', { name: 'Перенести период (отпуск)…' })).toBeInTheDocument()
   })
+  it('отделы — новыми именами (04.11.2026: «да, переименуй, старые перенаправь»): Главное, Рынок, Система; «Разработка» и остальные — как были', async () => {
+    renderApp()
+    await ready()
+    const nav = screen.getByRole('navigation', { name: 'Отделы' })
+    const names = ['Главное — скоро', 'HR — скоро', 'Рынок — скоро', 'SMM — контент-план', 'Продажи — скоро', 'Поддержка — скоро', 'Аналитика — скоро', 'Дизайн — скоро', 'Разработка — скоро', 'Система — скоро', 'Профиль']
+    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(names)
+    // подписи при наведении — те же имена
+    expect([...nav.querySelectorAll('.cp-rail-tip')].map((t) => t.textContent)).toEqual(names)
+    // «Скоро: …» в меню профиля — новыми именами; старых имён нет нигде
+    await userEvent.click(within(nav).getByRole('button', { name: 'Профиль' }))
+    expect(within(screen.getByRole('menu', { name: 'Профиль' })).getByText('Скоро: Главное, HR, Рынок, Продажи, Поддержка, Аналитика, Дизайн, Разработка, Система')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/Менеджмент|Маркетинг|Инжиниринг/)
+  })
   it('фильтры сворачиваются и разворачиваются; свёрнутые — метками в шапке и числом на кнопке; помнится', async () => {
     renderApp()
     await ready()
@@ -142,11 +165,11 @@ describe('T-CP-069 FR-CP-069 NFR-CP-008 одно меню отделов вну�
     expect(within(smm).getByRole('button', { name: 'Календарь контента' })).toHaveAttribute('aria-current', 'page')
     expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Фильтры' })).toHaveAttribute('aria-expanded', 'true')
     expect(within(side()).getByRole('button', { name: 'Andre AIT' })).toBeInTheDocument()
-    // в меню профиля нет строки «Скоро: …» с отделами — они у Neuronium
-    await userEvent.click(within(smm).getByRole('button', { name: 'Профиль' }))
-    const menu = screen.getByRole('menu', { name: 'Профиль' })
+    // в меню профиля («Настройки» в окне, FR-CP-070) нет строки «Скоро: …» с отделами — они у Neuronium
+    await userEvent.click(within(smm).getByRole('button', { name: 'Настройки' }))
+    const menu = screen.getByRole('menu', { name: 'Настройки' })
     expect(within(menu).queryByText(/^Скоро:/)).toBeNull()
-    expect(menu.textContent).not.toMatch(/Менеджмент|Инжиниринг/)
+    expect(menu.textContent).not.toMatch(/Главное|Рынок|Система|Менеджмент|Маркетинг|Инжиниринг/)
   })
   it('на своём адресе — как раньше: Nr, десять отделов, профиль внизу панели, «Скоро» в меню', async () => {
     renderApp()
@@ -158,70 +181,135 @@ describe('T-CP-069 FR-CP-069 NFR-CP-008 одно меню отделов вну�
     // в колонке разделов — только «Главная» и «Календарь»: профиль — внизу панели отделов
     expect(within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь'])
     await userEvent.click(within(nav).getByRole('button', { name: 'Профиль' }))
-    expect(within(screen.getByRole('menu', { name: 'Профиль' })).getByText(/^Скоро: Менеджмент, HR, Маркетинг/)).toBeInTheDocument()
+    expect(within(screen.getByRole('menu', { name: 'Профиль' })).getByText(/^Скоро: Главное, HR, Рынок/)).toBeInTheDocument()
   })
-  it('телефон в окне Neuronium: внизу «Главная, Календарь, Профиль», отделов нет ни внизу, ни в меню профиля', async () => {
+  it('телефон в окне Neuronium: отделов нет ни внизу, ни в меню', async () => {
     inNeuronium()
     onPhone()
     renderApp()
     await ready()
     expect(screen.queryByRole('navigation', { name: 'Отделы' })).toBeNull()
     expect(screen.queryByText('Nr')).toBeNull()
+    // внизу — два раздела SMM и его меню (что на третьей вкладке — FR-CP-070), значков отделов нет
     const tabs = screen.getByRole('navigation', { name: 'Разделы' })
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Профиль'])
-    await userEvent.click(within(tabs).getByRole('button', { name: 'Профиль' }))
-    const menu = screen.getByRole('menu', { name: 'Профиль' })
+    expect(within(tabs).getAllByRole('button')).toHaveLength(3)
+    expect(within(tabs).queryAllByRole('button', { name: /— скоро$|— контент-план$/ })).toHaveLength(0)
+    await userEvent.click(within(tabs).getAllByRole('button')[2])
+    const menu = screen.getByRole('menu')
     expect(within(menu).queryByText(/^Скоро:/)).toBeNull()
+    expect(menu.textContent).not.toMatch(/Главное|Рынок|Система|Менеджмент|Маркетинг|Инжиниринг/)
     expect(within(menu).getByRole('menuitem', { name: 'Настройки: соцсети и конкуренты' })).toBeInTheDocument()
   })
 })
 
-describe('T-CP-070 FR-CP-070 профиль в окне Neuronium — внизу колонки разделов', () => {
+/** Меню профиля — одно и то же на своём адресе и в окне Neuronium. */
+const MENU_ITEMS = [
+  'Настройки: соцсети и конкуренты',
+  'Как пользоваться',
+  'Перенести период (отпуск)…',
+  'Выгрузить JSON',
+  'Календарь для таблицы (CSV)',
+  'Загрузить JSON',
+  'Загрузить план Датаиста (пример)',
+  'Очистить всё',
+]
+
+describe('T-CP-070 FR-CP-070 меню профиля в окне Neuronium — «Настройки» шестерёнкой внизу колонки разделов', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
-  it('«Профиль» — последним в колонке, серым значком с подписью; меню то же: настройки, как пользоваться, отпуск, данные, тема', async () => {
+  it('«Настройки» — последними в колонке, серой шестерёнкой с подписью, человечка нет; меню то же: настройки, как пользоваться, отпуск, данные, тема', async () => {
     inNeuronium()
     renderApp()
     await ready()
     const items = within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button')
-    expect(items.map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — аналитика и лента', 'Календарь контента', 'Профиль'])
-    const profile = items[2]
-    expect(profile).toHaveClass('cp-sub__item')
-    expect(profile).toHaveTextContent('Профиль')
-    expect(profile.querySelector('.cp-avatar')).toBeNull() // кружок аккаунта рядом — у Neuronium
-    expect(profile).toHaveAttribute('aria-expanded', 'false')
-    await userEvent.click(profile)
-    expect(profile).toHaveAttribute('aria-expanded', 'true')
-    const menu = screen.getByRole('menu', { name: 'Профиль' })
-    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent?.trim())).toEqual([
-      'Настройки: соцсети и конкуренты',
-      'Как пользоваться',
-      'Перенести период (отпуск)…',
-      'Выгрузить JSON',
-      'Календарь для таблицы (CSV)',
-      'Загрузить JSON',
-      'Загрузить план Датаиста (пример)',
-      'Очистить всё',
-    ])
+    expect(items.map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — аналитика и лента', 'Календарь контента', 'Настройки'])
+    const settings = items[2]
+    expect(settings).toHaveClass('cp-sub__item')
+    expect(settings).toHaveTextContent('Настройки')
+    expect(settings).toHaveAttribute('title', 'Настройки')
+    // шестерёнка, а не человечек: кружок аккаунта рядом — у Neuronium, входа у SMM нет
+    expect(settings.querySelector('svg')!.innerHTML).toBe(glyph('settings'))
+    expect(settings.querySelector('.cp-avatar')).toBeNull()
+    expect(people()).toBe(0)
+    expect(screen.queryByRole('button', { name: 'Профиль' })).toBeNull()
+    expect(settings).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(settings)
+    expect(settings).toHaveAttribute('aria-expanded', 'true')
+    const menu = screen.getByRole('menu', { name: 'Настройки' })
+    // шапка меню — тоже «Настройки» шестерёнкой: человечка нет и в открытом меню
+    const head = menu.querySelector('.cp-menu__head') as HTMLElement
+    expect(within(head).getByText('Настройки')).toBeInTheDocument()
+    expect(within(head).getByText('SMM · контент-план')).toBeInTheDocument()
+    expect(head.querySelector('svg')!.innerHTML).toBe(glyph('settings'))
+    expect(head.querySelector('.cp-avatar')).toBeNull()
+    expect(people()).toBe(0)
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent?.trim())).toEqual(MENU_ITEMS)
     // тема — здесь же
     const theme = within(menu).getByRole('radiogroup', { name: 'Тема' })
     await userEvent.click(within(theme).getByRole('radio', { name: 'Тёмная' }))
     expect(document.documentElement).toHaveClass('dark')
     await userEvent.click(within(theme).getByRole('radio', { name: 'Авто' }))
     expect(document.documentElement).not.toHaveClass('dark')
-    // Esc закрывает; «Настройки» и «Как пользоваться» открываются панелью справа
+    // Esc закрывает; «Настройки: соцсети и конкуренты» и «Как пользоваться» открываются панелью справа
     await userEvent.keyboard('{Escape}')
-    expect(screen.queryByRole('menu', { name: 'Профиль' })).toBeNull()
-    expect(profile).toHaveAttribute('aria-expanded', 'false')
-    await userEvent.click(profile)
+    expect(screen.queryByRole('menu', { name: 'Настройки' })).toBeNull()
+    expect(settings).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(settings)
     await userEvent.click(screen.getByRole('menuitem', { name: 'Настройки: соцсети и конкуренты' }))
     expect(screen.getByRole('complementary', { name: 'Настройки' })).toBeInTheDocument()
-    expect(screen.queryByRole('menu', { name: 'Профиль' })).toBeNull()
-    await userEvent.click(profile)
+    expect(screen.queryByRole('menu', { name: 'Настройки' })).toBeNull()
+    await userEvent.click(settings)
     await userEvent.click(screen.getByRole('menuitem', { name: 'Как пользоваться' }))
     expect(screen.getByRole('complementary', { name: 'Как пользоваться' })).toBeInTheDocument()
+  })
+  it('телефон в окне Neuronium: внизу «Главная, Календарь, Настройки» — шестерёнкой, без кружка-человечка; меню то же', async () => {
+    inNeuronium()
+    onPhone()
+    renderApp()
+    await ready()
+    const tabs = screen.getByRole('navigation', { name: 'Разделы' })
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Настройки'])
+    const settings = within(tabs).getByRole('button', { name: 'Настройки' })
+    expect(settings).toHaveClass('cp-tab')
+    expect(settings.querySelector('svg')!.innerHTML).toBe(glyph('settings'))
+    expect(settings.querySelector('.cp-avatar')).toBeNull()
+    expect(people()).toBe(0)
+    await userEvent.click(settings)
+    expect(settings).toHaveAttribute('aria-expanded', 'true')
+    const menu = screen.getByRole('menu', { name: 'Настройки' })
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent?.trim())).toEqual(MENU_ITEMS)
+    expect(within(menu).getByRole('radiogroup', { name: 'Тема' })).toBeInTheDocument()
+    expect(people()).toBe(0)
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('menu', { name: 'Настройки' })).toBeNull()
+  })
+  it('на своём адресе — «Профиль», как раньше: кружок-человечек внизу панели отделов и третьей вкладкой на телефоне, меню «Профиль»', async () => {
+    renderApp()
+    await ready()
+    const profile = within(screen.getByRole('navigation', { name: 'Отделы' })).getByRole('button', { name: 'Профиль' })
+    expect(profile).toHaveClass('nr-rail-item', 'cp-rail-account')
+    expect(profile.querySelector('.cp-avatar svg')!.innerHTML).toBe(glyph('user'))
+    expect(screen.queryByRole('button', { name: 'Настройки' })).toBeNull()
+    await userEvent.click(profile)
+    const menu = screen.getByRole('menu', { name: 'Профиль' })
+    const head = menu.querySelector('.cp-menu__head') as HTMLElement
+    expect(within(head).getByText('Профиль')).toBeInTheDocument()
+    expect(head.querySelector('.cp-avatar svg')!.innerHTML).toBe(glyph('user'))
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent?.trim())).toEqual(MENU_ITEMS)
+  })
+  it('на своём адресе на телефоне — внизу «Главная, Календарь, Профиль» с кружком, как раньше', async () => {
+    onPhone()
+    renderApp()
+    await ready()
+    const tabs = screen.getByRole('navigation', { name: 'Разделы' })
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Профиль'])
+    const profile = within(tabs).getByRole('button', { name: 'Профиль' })
+    expect(profile.querySelector('.cp-avatar.cp-avatar--sm svg')!.innerHTML).toBe(glyph('user'))
+    expect(screen.queryByRole('button', { name: 'Настройки' })).toBeNull()
+    await userEvent.click(profile)
+    expect(within(screen.getByRole('menu', { name: 'Профиль' })).getAllByRole('menuitem').map((m) => m.textContent?.trim())).toEqual(MENU_ITEMS)
   })
   it('«Подключить соцсети — в настройках» на главной открывает настройки и в окне Neuronium', async () => {
     inNeuronium()

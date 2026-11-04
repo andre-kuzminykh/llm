@@ -66,7 +66,7 @@ const browser = await chromium.launch({ executablePath: CHROME })
 try {
   // «Neuronium» и чужой сайт — страницы с фреймом SMM (/?app=порт); адрес «Neuronium» — в NR_HOST_ORIGINS
   const hostHtml = (url) =>
-    `<!doctype html><title>host</title><iframe id="f" src="http://127.0.0.1:${Number(url.searchParams.get('app'))}/" style="width:1200px;height:760px;border:0"></iframe>`
+    `<!doctype html><title>host</title><iframe id="f" src="http://127.0.0.1:${Number(url.searchParams.get('app'))}/" style="width:${Number(url.searchParams.get('w')) || 1200}px;height:${Number(url.searchParams.get('h')) || 760}px;border:0"></iframe>`
   const nr = await serve({ page: hostHtml })
   const evil = await serve({ page: hostHtml })
   servers.push(nr.server, evil.server)
@@ -108,8 +108,25 @@ try {
   const launch = await (await fetch(`http://127.0.0.1:${appOn.port}/nr-launch.json`)).json()
   check(launch.frame === true, '/nr-launch.json отдаётся рядом с приложением', `/nr-launch.json: ${JSON.stringify(launch)}`)
 
-  /** Что SMM рисует слева во фрейме (T-CP-069, T-CP-070): панель отделов, знак Nr, «— скоро»; «Профиль» внизу колонки
-   *  разделов и его меню — справа от неё, без строки «Скоро: …». */
+  /** Значок-человечек — кружок аккаунта (`user` из src/ui/Icon.tsx); во фрейме он только у Neuronium (T-CP-070). */
+  const PERSON = 'svg circle[cx="12"][cy="8.5"][r="3.5"]'
+  /** Меню профиля во фрейме — «Настройки»: шестерёнка на кнопке — тот же значок, что у «Настройки: соцсети и
+   *  конкуренты» в меню; человечка нет и в открытом меню; строки «Скоро: …» нет. */
+  const settingsMenu = async (inside, button) => {
+    await button.click()
+    const menu = inside.getByRole('menu', { name: 'Настройки' })
+    await menu.waitFor({ timeout: 4000 })
+    const item = menu.getByRole('menuitem', { name: 'Настройки: соцсети и конкуренты' })
+    return {
+      settings: await item.count(),
+      gear: (await button.locator('svg').innerHTML()) === (await item.locator('svg').innerHTML()),
+      peopleOpen: await inside.locator(PERSON).count(),
+      note: await menu.getByText(/^Скоро:/).count(),
+    }
+  }
+
+  /** Что SMM рисует слева во фрейме (T-CP-069, T-CP-070): панель отделов, знак Nr, «— скоро»; «Настройки» внизу колонки
+   *  разделов и меню — справа от неё. */
   const shell = async (page, inside, shot) => {
     const smm = inside.getByRole('navigation', { name: 'SMM' })
     const out = {
@@ -117,21 +134,39 @@ try {
       brand: await inside.locator('.nr-rail-brand').count(),
       soon: await inside.getByRole('button', { name: /— скоро$/ }).count(),
       items: await smm.getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label'))),
+      people: await inside.locator(PERSON).count(),
     }
     const col = await smm.boundingBox()
-    const profile = smm.getByRole('button', { name: 'Профиль' })
-    if (!(await profile.count())) return out
-    const btn = await profile.boundingBox()
-    await profile.click()
-    const menu = inside.getByRole('menu', { name: 'Профиль' })
-    await menu.waitFor({ timeout: 4000 })
-    const box = await menu.boundingBox()
+    const button = smm.getByRole('button', { name: 'Настройки' })
+    if (!(await button.count())) return out
+    const btn = await button.boundingBox()
+    Object.assign(out, await settingsMenu(inside, button))
+    const box = await inside.getByRole('menu', { name: 'Настройки' }).boundingBox()
     out.foot = Math.round(col.y + col.height - (btn.y + btn.height)) // от низа кнопки до низа колонки, px
     out.beside = Math.round(box.x - (col.x + col.width)) // меню справа от колонки, px
-    out.note = await menu.getByText(/^Скоро:/).count()
-    out.settings = await menu.getByRole('menuitem', { name: 'Настройки: соцсети и конкуренты' }).count()
     if (shot) await page.screenshot({ path: join(SHOTS, shot) })
     await page.keyboard.press('Escape')
+    return out
+  }
+
+  /** Телефон в окне «Neuronium» (T-CP-070): внизу «Главная, Календарь, Настройки» — шестерёнкой, без человечка. */
+  const phone = async (hostPort, appPort, shot) => {
+    const page = await browser.newPage({ viewport: { width: 406, height: 860 } })
+    await page.goto(`http://localhost:${hostPort}/?app=${appPort}&w=390&h=844`)
+    const inside = page.frameLocator('#f')
+    const tabs = inside.getByRole('navigation', { name: 'Разделы' })
+    const shown = await tabs.waitFor({ timeout: 8000 }).then(() => true, () => false)
+    if (!shown) {
+      await page.close()
+      return { shown }
+    }
+    const button = tabs.getByRole('button', { name: 'Настройки' })
+    const out = { shown, tabs: (await tabs.getByRole('button').allTextContents()).join('|'), people: await inside.locator(PERSON).count(), avatar: await inside.locator('.cp-avatar').count() }
+    if (await button.count()) {
+      Object.assign(out, await settingsMenu(inside, button))
+      if (shot) await page.screenshot({ path: join(SHOTS, shot) })
+    }
+    await page.close()
     return out
   }
 
@@ -166,11 +201,19 @@ try {
     'во фрейме своей панели отделов у SMM нет: ни Nr, ни отделов; «Главная» и «Календарь» на месте',
     `слева во фрейме: ${JSON.stringify(left)}`,
   )
-  // T-CP-070: «Профиль» — внизу колонки разделов, меню — справа от неё, без «Скоро: …»
+  // T-CP-070: меню профиля — «Настройки» шестерёнкой внизу колонки разделов, меню — справа от неё, без «Скоро: …»;
+  // значка-человечка у SMM во фрейме нет ни в колонке, ни в меню — кружок аккаунта только у Neuronium
   check(
-    left.items?.at(-1) === 'Профиль' && left.foot >= 0 && left.foot <= 24 && left.beside >= 0 && left.beside <= 16 && left.note === 0 && left.settings === 1,
-    '«Профиль» — внизу колонки разделов, меню — справа от неё (настройки на месте, «Скоро» нет)',
-    `профиль во фрейме: ${JSON.stringify(left)}`,
+    left.items?.at(-1) === 'Настройки' && left.gear && left.people === 0 && left.peopleOpen === 0 && left.foot >= 0 && left.foot <= 24 && left.beside >= 0 && left.beside <= 16 && left.note === 0 && left.settings === 1,
+    '«Настройки» шестерёнкой — внизу колонки разделов, меню — справа от неё (настройки на месте, «Скоро» нет); человечка во фрейме нет',
+    `настройки во фрейме: ${JSON.stringify(left)}`,
+  )
+  // T-CP-070, телефон: внизу «Главная, Календарь, Настройки» — шестерёнкой, человечка и кружка нет
+  const small = await phone(nr.port, appOn.port, 'nr-launch-frame-phone.png')
+  check(
+    small.tabs === 'Главная|Календарь|Настройки' && small.gear && small.people === 0 && small.avatar === 0 && small.peopleOpen === 0 && small.note === 0 && small.settings === 1,
+    'телефон во фрейме: внизу «Главная, Календарь, Настройки» — шестерёнкой, человечка нет, меню то же',
+    `телефон во фрейме: ${JSON.stringify(small)}`,
   )
   // чужой сайт — браузер не показывает
   const no = await host(evil.port, appOn.port)

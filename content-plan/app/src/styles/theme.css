@@ -282,8 +282,8 @@ select.nr-field {
   transition: background-color var(--nr-dur-1) var(--nr-ease), color var(--nr-dur-1) var(--nr-ease); }
 @media (hover: hover) { .cp-sub__item:hover { background: var(--nr-fill-2); color: var(--nr-text); } }
 .cp-sub__item[aria-current='page'] { background: var(--nr-accent-soft); color: var(--nr-accent-text); }
-/* в окне Neuronium (FR-CP-069, FR-CP-070): панели отделов нет — её ширина 0; профиль — внизу колонки разделов,
-   её же значком и подписью; меню — справа от колонки */
+/* в окне Neuronium (FR-CP-069, FR-CP-070): панели отделов нет — её ширина 0; меню профиля — «Настройки» внизу колонки
+   разделов, её же серым значком (шестерёнкой) и подписью; меню — справа от колонки */
 .cp-framed { --nr-rail-w: 0px; }
 .cp-sub__profile { margin-top: auto; }
 .cp-sub__item[aria-expanded='true'] { background: var(--nr-fill-2); color: var(--nr-text); }
@@ -808,6 +808,8 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-rail-account { margin-top: 4px; }
 .cp-avatar { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--nr-accent); color: #fff; }
 .cp-avatar--sm { width: 24px; height: 24px; }
+/* в окне Neuronium шапка меню — «Настройки»: серая шестерёнка на месте кружка, цветной кружок — аккаунт Neuronium (FR-CP-070) */
+.cp-menu__glyph { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--nr-fill-2); color: var(--nr-text-2); }
 .cp-menu__head { display: flex; align-items: center; gap: 10px; padding: 6px 8px 10px; margin-bottom: 2px; border-bottom: 1px solid var(--nr-sep-soft); }
 .cp-menu__head > span:last-child { display: flex; flex-direction: column; min-width: 0; font-size: var(--nr-fs-md); }
 .cp-menu__head + .cp-menu__note { padding-top: 4px; }
