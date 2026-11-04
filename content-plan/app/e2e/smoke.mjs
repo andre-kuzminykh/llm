@@ -5,7 +5,7 @@
 // дорожки и перенос в них, панель дня, ▶ и задачу, черновики во вкладке «+», периодичность рубрики и планирование недели,
 // рубрику с подсказками, «+», «Неделя / Месяц», «Наверстать», «Как пользоваться», тёмную тему, сохранение и телефон.
 // Скриншоты — в e2e/shots (или в $SHOTS).
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
@@ -836,34 +836,63 @@ await phone.getByRole('button', { name: 'Фильтры' }).click()
 await phone.mouse.click(370, 400)
 check(!(await phone.locator('.cp-side').count()), 'тап мимо закрывает фильтры', 'тап мимо фильтров их не закрыл')
 
-// план Датаиста — календарь со страницы (public/seed.json): из профиля; неделя с 8 ноября и месяц
+// план Датаиста — календарь со страницы (public/seed.json): открывается сам, с первой полной недели; из профиля — снова
 {
   const dc = await browser.newPage({ viewport: { width: 1440, height: 900 } })
   dc.on('pageerror', (e) => fail(`ошибка на странице: ${e.message}`))
+  const t0 = Date.now()
   await dc.goto(BASE)
   await dc.getByRole('heading', { name: 'Главная' }).waitFor()
-  await dc.getByRole('button', { name: 'Профиль' }).click()
-  const t0 = Date.now()
-  await dc.getByRole('menuitem', { name: 'Загрузить план Датаиста' }).click()
-  const note = dc.getByRole('status').filter({ hasText: 'Загружен план Датаиста — с 8 ноя' })
-  await note.waitFor()
-  await note.getByRole('button', { name: 'К началу плана' }).click()
+  const soon = dc.getByRole('region', { name: 'Ожидается' })
+  await soon.getByRole('article').first().waitFor()
+  const homeCards = await soon.getByRole('article').count()
+  await dc.screenshot({ path: `${SHOTS}/14-dataist-home.png` })
+  await dc.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: /Календарь/ }).click()
   await dc.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
-  const loaded = Date.now() - t0
-  await dc.getByRole('button', { name: /Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1\/100/ }).first().waitFor()
-  const sideNames = await dc.getByRole('complementary', { name: 'Фильтры' }).getByRole('group', { name: 'Каналы' }).locator('.cp-side__name').allTextContents().catch(() => [])
-  const day8 = await dc.locator('.cp-tg__col[data-date="2026-11-08"] .cp-card').count()
+  await dc.getByRole('button', { name: /Note Taking · 100 ИИ-сотрудников за 100 дней · 2\/100/ }).first().waitFor()
+  const opened = Date.now() - t0
+  const week = (await dc.locator('.cp-top').first().innerText()).match(/\d+–\d+ \S+ \d{4}/)?.[0]
+  const weekCards = await dc.locator('.cp-tg__col .cp-card').count()
   const wide = await dc.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
   await dc.waitForTimeout(400)
   await dc.screenshot({ path: `${SHOTS}/14-dataist-week.png` })
   check(
-    day8 === 15 && !wide && loaded < 4000,
-    `план Датаиста из профиля: «К началу плана» — неделя с 8 ноября, в воскресенье ${day8} карточек (новость дня, демо Нейрония, Академия, лайфстайл…), открылся за ${loaded} мс`,
-    `план Датаиста: карточек 8 ноября ${day8}, страница шире ${wide}, ${loaded} мс, каналы ${sideNames.join(', ')}`,
+    homeCards > 0 && week === '9–15 ноя 2026' && weekCards > 60 && !wide && opened < 6000,
+    `план Датаиста открывается сам: на главной — «Ожидается», в календаре — неделя ${week} (${weekCards} карточек), за ${opened} мс`,
+    `план Датаиста сам: на главной ${homeCards}, неделя «${week}», карточек ${weekCards}, шире ${wide}, ${opened} мс`,
   )
-  await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio', { name: /Месяц/ }).click().catch(() => {})
+  // из профиля — снова, «К началу плана» — неделя с 8 ноября
+  await dc.getByRole('button', { name: 'Профиль' }).click()
+  await dc.getByRole('menuitem', { name: 'Загрузить план Датаиста' }).click()
+  const note = dc.getByRole('status').filter({ hasText: 'Загружен план Датаиста — с 8 ноя' })
+  await note.waitFor()
+  await note.getByRole('button', { name: 'К началу плана' }).click()
+  await dc.getByRole('button', { name: /Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1\/100/ }).first().waitFor()
+  const day8 = await dc.locator('.cp-tg__col[data-date="2026-11-08"] .cp-card').count()
+  check(day8 === 15, `из профиля: «К началу плана» — неделя с 8 ноября, в воскресенье ${day8} карточек (новость дня, демо Нейрония, Академия, лайфстайл…)`, `из профиля: карточек 8 ноября ${day8}`)
+  await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio').nth(1).click()
   await dc.waitForTimeout(600)
   await dc.screenshot({ path: `${SHOTS}/14-dataist-month.png` })
+  // до плана Датаиста в браузере был свой план (под прежним ключом) — план Датаиста открывается, прежний — «Вернуть прежний»
+  await dc.evaluate(async (old) => {
+    const db = await new Promise((ok, no) => {
+      const r = indexedDB.open('content-plan', 1)
+      r.onsuccess = () => ok(r.result)
+      r.onerror = () => no(r.error)
+    })
+    const st = db.transaction('state', 'readwrite').objectStore('state')
+    st.put(JSON.parse(old), 'plan-2')
+    st.delete('plan-3')
+    await new Promise((ok) => (st.transaction.oncomplete = ok))
+  }, readFileSync(OLD_SEED, 'utf8'))
+  await dc.reload()
+  const kept = dc.getByRole('status').filter({ hasText: 'прежний план не стёрт' })
+  await kept.waitFor()
+  const keptText = (await kept.locator('.cp-toast__msg').textContent()) ?? ''
+  await kept.getByRole('button', { name: 'Вернуть прежний' }).click()
+  await dc.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: /Календарь/ }).click().catch(() => {})
+  const sideOld = await dc.getByRole('complementary', { name: 'Фильтры' }).getByText('Andre AIT').count()
+  check(/^Открыт план Датаиста: 7 каналов, с 8 ноя — прежний план не стёрт$/.test(keptText) && sideOld > 0, `был свой план — открылся план Датаиста («${keptText}»), «Вернуть прежний» вернул свой`, `прежний план: «${keptText}», Andre AIT ${sideOld}`)
   await dc.close()
 }
 // сохранён старый пример — при открытии его сменяет план Датаиста; «Отменить» вернёт прежний

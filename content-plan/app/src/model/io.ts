@@ -137,6 +137,8 @@ export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
 /** Любая версия → текущая. Для старых нужен новый исходный план: из него берутся новые поля правил. */
 /** Старый пример (план Andre AIT из ../build.py) — его меняет план Датаиста: метки примера у старого нет, формат FULL Демо — есть. */
 export const isOldExample = (p: Plan) => !p.example && p.rules.some((r) => r.id === 'f_demo')
+/** Пустой план, сохранённый до плана Датаиста: ни каналов, ни материалов; очищенный руками («Очистить всё») помечен и не считается. */
+export const isBlankPlan = (p: Plan) => !p.example && !p.items.length && !p.channels.length
 
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
   if (isV1(p)) return webAndMail(splitDataist(renameAndFormats(migrateV1(p, await seed()))))

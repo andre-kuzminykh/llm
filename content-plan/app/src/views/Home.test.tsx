@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../App'
 import { memoryStorage } from '../model/storage'
+import { emptyPlan } from '../model/types'
 import { renderApp } from '../test/renderApp'
 
 const smm = () => screen.getByRole('navigation', { name: 'SMM' })
@@ -17,7 +18,8 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
   })
 
   it('два пункта меню; «Подключите соцсети» ведёт в настройки; в календаре «+» сразу форма — новый канал прямо в ней', async () => {
-    render(<App storage={async () => memoryStorage()} />)
+    // чистый лист — как после «Очистить всё» (без сохранённого плана программа открывает план Датаиста, FR-CP-071)
+    render(<App storage={async () => memoryStorage()} initialPlan={emptyPlan('2026-11-03')} />)
     await screen.findByRole('navigation', { name: 'SMM' })
     expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь'])
     expect(within(smm()).getByRole('button', { name: /^Главная/ })).toHaveAttribute('aria-current', 'page')

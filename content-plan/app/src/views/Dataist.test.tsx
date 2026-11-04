@@ -1,26 +1,83 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../App'
-import { memoryStorage } from '../model/storage'
-import type { Plan } from '../model/types'
+import { memoryStorage, type PlanStorage } from '../model/storage'
+import { emptyPlan, type Plan } from '../model/types'
 import { loadDataist, smallPlan } from '../test/fixtures'
 
 const dataist = loadDataist()
 
-/** Приложение с уже сохранённым планом; исходный план (seed.json) — календарь Датаиста. */
-async function open(stored: Plan | null, seed: Plan = dataist) {
+/** Хранилище, которое сохраняет правки (как IndexedDB браузера). */
+const keeping = (): PlanStorage => ({ ...memoryStorage(), persistent: true })
+
+/** Приложение с уже сохранённым планом (или без него); исходный план (seed.json) — календарь Датаиста. Сегодня — 4 ноября 2026. */
+async function open(stored: Plan | null, seed: Plan = dataist, storage: PlanStorage = memoryStorage()) {
   localStorage.clear()
   localStorage.setItem('cp:section', JSON.stringify('calendar'))
   localStorage.setItem('cp:anchor', JSON.stringify('2026-10-26'))
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(seed))))
-  const storage = memoryStorage()
   if (stored) await storage.save(stored)
-  render(<App storage={async () => storage} />)
+  const view = render(<App storage={async () => storage} />)
   await screen.findByRole('grid', { name: 'Неделя по времени' })
-  return { storage }
+  return { storage, view }
+}
+const profile = async (item: string) => {
+  await userEvent.click(screen.getByRole('button', { name: 'Профиль' }))
+  await userEvent.click(screen.getByRole('menuitem', { name: item }))
 }
 
 describe('T-CP-071 FR-CP-071 план Датаиста: календарь со страницы — в приложении', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-04T10:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('ничего не сохранено — сразу план Датаиста, без кнопок: календарь — с первой полной недели плана (9–15 ноября)', async () => {
+    await open(null)
+    expect(await screen.findAllByRole('button', { name: /Note Taking · 100 ИИ-сотрудников за 100 дней · 2\/100/ })).not.toHaveLength(0)
+    expect(screen.getAllByText(/9–15 ноя 2026/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
+  })
+
+  it('«Очистить всё» — пусто и после перезагрузки; план Датаиста — снова из профиля, «К началу плана» — к 8 ноября', async () => {
+    const storage = keeping()
+    const { view } = await open(null, dataist, storage)
+    await profile('Очистить всё')
+    await waitFor(async () => expect((await storage.load())?.example).toBe('cleared'))
+    view.unmount()
+    await open(null, dataist, storage)
+    expect(screen.queryAllByRole('button', { name: /100 ИИ-сотрудников/ })).toHaveLength(0)
+    expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
+    await profile('Загрузить план Датаиста')
+    const note = await screen.findByText(/^Загружен план Датаиста — с 8 ноя/)
+    await userEvent.click(within(note.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'К началу плана' }))
+    expect(await screen.findAllByRole('button', { name: /Knowledge Management/ })).not.toHaveLength(0)
+  })
+
+  it('до плана Датаиста в браузере был свой план — открывается план Датаиста, прежний не стёрт: «Вернуть прежний» ставит его', async () => {
+    const storage: PlanStorage = { ...keeping(), previous: async () => smallPlan() }
+    await open(null, dataist, storage)
+    const note = await screen.findByText(/^Открыт план Датаиста: 7 каналов, с 8 ноя — прежний план не стёрт$/)
+    expect(await screen.findAllByRole('button', { name: /Note Taking/ })).not.toHaveLength(0)
+    await waitFor(async () => expect((await storage.load())?.example).toBe('dataist-calendar'))
+    await userEvent.click(within(note.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'Вернуть прежний' }))
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
+    await waitFor(() => expect(within(side).getAllByText('Andre AIT').length).toBeGreaterThan(0))
+    expect(within(side).queryByText('Нейроний')).toBeNull()
+  })
+
+  it('сохранён пустой план (ещё до плана Датаиста) — встаёт план Датаиста; мои соцсети остаются', async () => {
+    const blank: Plan = { ...emptyPlan('2026-11-03'), analytics: { competitors: [], accounts: [{ id: 'a1', name: 'Мой блог', platform: 'Telegram', handle: '@blog' }] } }
+    const storage = keeping()
+    await open(blank, dataist, storage)
+    await screen.findByText(/^Загружен план Датаиста: 7 каналов, с 8 ноя$/)
+    expect(await screen.findAllByRole('button', { name: /Note Taking/ })).not.toHaveLength(0)
+    const kept = await storage.load()
+    expect([kept?.example, kept?.analytics?.accounts?.map((a) => a.name)]).toEqual(['dataist-calendar', ['Мой блог']])
+  })
   it('сохранён старый пример — открывается план Датаиста; «К началу плана» — 8 ноября, «Отменить» вернёт прежний', async () => {
     await open(smallPlan()) // старый пример: формат FULL Демо, метки плана Датаиста нет
     const note = await screen.findByText(/Загружен план Датаиста: 7 каналов, с 8 ноя.* — прежний пример заменён/)
@@ -49,15 +106,5 @@ describe('T-CP-071 FR-CP-071 план Датаиста: календарь со 
     const { storage } = await open(smallPlan(), smallPlan())
     expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
     expect((await storage.load())?.rules.some((r) => r.id === 'f_demo')).toBe(true)
-  })
-
-  it('с чистого листа — пусто; «Загрузить план Датаиста» в профиле ставит календарь, «К началу плана» — к 8 ноября', async () => {
-    await open(null)
-    expect(screen.queryAllByRole('button', { name: /Knowledge Management/ })).toHaveLength(0)
-    await userEvent.click(screen.getByRole('button', { name: 'Профиль' }))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Загрузить план Датаиста' }))
-    const note = await screen.findByText(/^Загружен план Датаиста — с 8 ноя/)
-    await userEvent.click(within(note.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'К началу плана' }))
-    expect(await screen.findAllByRole('button', { name: /Knowledge Management/ })).not.toHaveLength(0)
   })
 })

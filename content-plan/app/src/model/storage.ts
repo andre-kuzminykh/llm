@@ -7,6 +7,8 @@ export interface PlanStorage {
   load(): Promise<Plan | null>
   save(plan: Plan): Promise<void>
   clear(): Promise<void>
+  /** План, сохранённый до плана Датаиста (под прежним ключом): его можно вернуть кнопкой в тосте. */
+  previous?(): Promise<Plan | null>
 }
 
 export function memoryStorage(): PlanStorage {
@@ -25,9 +27,10 @@ export function memoryStorage(): PlanStorage {
 
 const DB = 'content-plan'
 const STORE = 'state'
-// чистый лист: прежний план (с контентом Датаиста) остался под ключом «plan» — программа его больше не открывает;
-// вернуть пример можно из меню профиля («Загрузить план Датаиста»)
-const KEY = 'plan-2'
+// «plan» — первый план (старый пример), «plan-2» — с чистого листа (пример — из профиля), «plan-3» — с плана Датаиста:
+// он открывается у всех сам, а сохранённое под «plan-2» не стирается — его вернёт «Вернуть прежний» в тосте
+const KEY = 'plan-3'
+const PREV = 'plan-2'
 
 function request<T>(r: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
@@ -50,6 +53,7 @@ export async function idbStorage(idb: IDBFactory): Promise<PlanStorage> {
     clear: async () => {
       await request(tx('readwrite').delete(KEY))
     },
+    previous: async () => ((await request(tx('readonly').get(PREV))) as Plan | undefined) ?? null,
   }
 }
 
