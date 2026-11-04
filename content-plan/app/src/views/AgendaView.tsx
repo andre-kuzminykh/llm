@@ -93,8 +93,9 @@ export function AgendaView() {
 }
 
 function AgendaDay({ date }: { date: ISODate }) {
-  const { unitsOn, openDay } = usePlan()
-  const units = unitsOn(date)
+  const { cardsOn, openDay } = usePlan()
+  // каждая публикация — своей карточкой целиком, как в календаре Датаиста
+  const units = cardsOn(date)
   return (
     <section className={`cp-agenda__day${weekday(date) === SAT ? ' cp-agenda__day--rest' : ''}`} data-day={date} data-drop={date} aria-label={dayTitle(date)}>
       <button type="button" className={`cp-agenda__head${date === today() ? ' cp-agenda__head--today' : ''}`} onClick={() => openDay(date)} aria-label={`Открыть день ${date}`}>
@@ -102,7 +103,7 @@ function AgendaDay({ date }: { date: ISODate }) {
       </button>
       <div className="cp-list">
         {units.map((u) => (
-          <UnitCard key={u.key} unit={u} variant="compact" />
+          <UnitCard key={u.key} unit={u} variant="post" />
         ))}
         {units.length === 0 && <span className="cp-hint">Пусто</span>}
       </div>

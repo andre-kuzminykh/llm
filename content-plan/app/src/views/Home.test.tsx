@@ -12,6 +12,8 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-03T10:00:00'))
     localStorage.clear()
+    localStorage.setItem('cp:span-2', 'week') // календарь открывается месяцем (FR-CP-072) — тут проверяем неделю
+    localStorage.setItem('cp:week-mode', 'time')
   })
   afterEach(() => {
     vi.useRealTimers()

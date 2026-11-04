@@ -2,7 +2,7 @@
 import { useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from 'react'
 import { addDays, daysBetween } from '../model/dates'
 import { whereText } from '../model/hint'
-import { colorOf, FORMAT_ICON, GRAY, isHome, isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
+import { colorOf, FORMAT_ICON, FORMAT_SHORT, GRAY, isHome, isSlot, shownTitle, STATUSES, statusOf, titleIsFormat, type Plan, type Status } from '../model/types'
 import { platformTypes, timeText, type Unit } from '../model/units'
 import { usePlan, type Drag } from './ctx'
 import { grabCard } from './drag'
@@ -158,7 +158,7 @@ export function TaskButton({ unit }: { unit: Unit }) {
   )
 }
 
-export type CardVariant = 'mini' | 'compact' | 'line' | 'chip' | 'full'
+export type CardVariant = 'mini' | 'compact' | 'line' | 'chip' | 'full' | 'post'
 
 /** Главный канал плана — у кого больше всего форматов (Офис Датаиста): его имя в строках не повторяется. */
 export const mainChannelId = (plan: Plan) =>
@@ -166,7 +166,9 @@ export const mainChannelId = (plan: Plan) =>
 
 /** Карточка материала — тихая строка: полоска слева — цвет канала, рубрика словом, тема.
  *  chip — строка «24/7» над шкалой (время, рубрика, тема одной строкой), compact — шкала времени и лента, line — дорожки недели (время и тема),
- *  full — панель дня: под темой площадки и что на каждой выходит. ▶ в углу — задача. */
+ *  full — панель дня: под темой площадки и что на каждой выходит;
+ *  post — публикация целиком, как в календаре Датаиста (месяц, лента на телефоне): время и канал, рубрика, название без
+ *  обрезки, внизу формат и все площадки. ▶ в углу — задача. */
 export function UnitCard({ unit, variant = 'compact', style, showTime = true, narrow = false, icons = variant === 'compact' || variant === 'line', iconRoom, when, onGrab, className, children }: {
   unit: Unit
   variant?: CardVariant
@@ -221,6 +223,13 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
     .filter(Boolean)
     .join(' ')
   const line = variant === 'line' || variant === 'chip'
+  const post = variant === 'post'
+  // подпись публикации: рубрика и формат рубрики; формат словами («Короткое видео») — внизу, тут не повторяется;
+  // своя подпись календаря в заметке («Короткое демо · Management») — вместо формата
+  const noteLine = head.note?.split('\n')[0] ?? ''
+  const generic = !format || format === FORMAT_SHORT[head.format] || format === 'Статья'
+  const caption = [rubric?.name, rule && noteLine.startsWith(`${rule.name} · `) ? noteLine : generic ? '' : format].filter(Boolean).join(' · ')
+  const channelName = channels.get(unit.channelId)?.name
   // растянутая на шкале карточка — с концом: «12:00–13:30»
   const time = when ?? (unit.end && !unit.stream && variant === 'compact' ? `${unit.time}–${unit.end}` : timeText(unit))
   return (
@@ -258,9 +267,28 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
         }}
         aria-pressed={picked || undefined}
         aria-label={`${label ? `${label}: ` : ''}${title}${showTime ? `, ${timeText(unit)}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}${picked ? ', выбрано' : ''}`}
-        title={variant === 'full' ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
+        title={variant === 'full' || post ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
       >
-        {line ? (
+        {post ? (
+          <>
+            <span className="cp-card__head">
+              {showTime && <span className="cp-card__time">{time}</span>}
+              {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
+              {bad && <span className="cp-card__bad" aria-hidden="true" />}
+              {channelName && <span className="cp-card__ch">{channelName}</span>}
+            </span>
+            {caption && <span className="cp-card__cap">{caption}</span>}
+            <span className="cp-card__title">{title}</span>
+            <span className="cp-card__foot" aria-hidden="true">
+              <span className="cp-card__kind">{FORMAT_SHORT[head.format] ?? head.format}</span>
+              <span className="cp-card__plats">
+                {where.map(({ platform }) => (
+                  <PlatformIcon key={platform} platform={platform} size={12} />
+                ))}
+              </span>
+            </span>
+          </>
+        ) : line ? (
           <>
             <span className="cp-card__rub">
               {showTime && <span className="cp-card__time">{time}</span>}

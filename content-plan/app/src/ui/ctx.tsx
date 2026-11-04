@@ -43,6 +43,8 @@ export interface Ctx {
   byDate: Map<ISODate, Item[]>
   /** Карточки дня с учётом фильтров. */
   unitsOn: (date: ISODate) => Unit[]
+  /** Каждая публикация дня — своей карточкой (месяц, лента на телефоне). */
+  cardsOn: (date: ISODate) => Unit[]
   violations: Violation[]
   violByDate: Map<ISODate, Violation[]>
   badIds: Set<string>

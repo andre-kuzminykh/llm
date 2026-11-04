@@ -269,15 +269,16 @@ describe('T-CP-046 FR-CP-046 «Неделя / Месяц»: в месяце в �
     await userEvent.click(within(toggle()).getByRole('radio', { name: 'Месяц' }))
     expect(within(toggle()).getByRole('radio', { name: 'Месяц' })).toHaveAttribute('aria-checked', 'true')
     expect(within(toggle()).getByRole('radio', { name: 'Неделя' })).toHaveAttribute('aria-checked', 'false')
-    expect(localStorage.getItem('cp:span')).toBe('month')
+    expect(localStorage.getItem('cp:span-2')).toBe('month')
     const month = screen.getByRole('grid', { name: 'Месяц: Октябрь 2026' })
     // вид недели (время, каналы…) в месяце не нужен
     expect(screen.queryByRole('radiogroup', { name: 'Вид календаря' })).toBeNull()
-    // 26 октября: тезис, FULL с тизером и анонсом (одна карточка), анонс Andre AIT — все видны
+    // 26 октября: тезис, FULL, анонс Andre AIT — все видны; в месяце каждая публикация — своей карточкой (FR-CP-072):
+    // анонс Andre AIT — пост в LinkedIn и строка рассылки — две карточки
     const day = month.querySelector('[data-date="2026-10-26"]') as HTMLElement
     expect(within(day).getByRole('button', { name: /^Тезисы · Тезис дня: Я устал от хайпа вокруг ИИ/ })).toBeInTheDocument()
     expect(within(day).getByRole('button', { name: /^Демо · FULL: Стратегия/ })).toBeInTheDocument()
-    expect(within(day).getByRole('button', { name: /^Демо · Анонс от Andre AIT: Стратегия/ })).toBeInTheDocument()
+    expect(within(day).getAllByRole('button', { name: /^Демо · Анонс от Andre AIT: Стратегия/ })).toHaveLength(2)
     // пустое место дня — новый контент на этот день
     fireEvent.click(month.querySelector('[data-date="2026-10-30"]') as HTMLElement)
     expect(within(screen.getByRole('complementary', { name: 'Новый контент' })).getByLabelText('Дата')).toHaveValue('2026-10-30')
@@ -289,7 +290,7 @@ describe('T-CP-046 FR-CP-046 «Неделя / Месяц»: в месяце в �
     expect(screen.getByRole('grid', { name: 'Неделя по времени' })).toBeInTheDocument()
   })
   it('карточку переносят на другой день месяца', async () => {
-    renderApp(undefined, { 'cp:span': 'month' })
+    renderApp(undefined, { 'cp:span-2': 'month' })
     const month = await screen.findByRole('grid', { name: 'Месяц: Октябрь 2026' })
     const thesis = within(month.querySelector('[data-date="2026-10-26"]') as HTMLElement).getByRole('button', { name: /^Тезисы · Тезис дня/ }).closest('.cp-card') as HTMLElement
     const target = month.querySelector('[data-date="2026-10-29"]') as HTMLElement

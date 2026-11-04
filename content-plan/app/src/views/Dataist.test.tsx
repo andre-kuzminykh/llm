@@ -11,14 +11,18 @@ const dataist = loadDataist()
 const keeping = (): PlanStorage => ({ ...memoryStorage(), persistent: true })
 
 /** Приложение с уже сохранённым планом (или без него); исходный план (seed.json) — календарь Датаиста. Сегодня — 4 ноября 2026. */
-async function open(stored: Plan | null, seed: Plan = dataist, storage: PlanStorage = memoryStorage()) {
+async function open(stored: Plan | null, seed: Plan = dataist, storage: PlanStorage = memoryStorage(), month = false) {
   localStorage.clear()
   localStorage.setItem('cp:section', JSON.stringify('calendar'))
   localStorage.setItem('cp:anchor', JSON.stringify('2026-10-26'))
+  if (!month) {
+    localStorage.setItem('cp:span-2', 'week')
+    localStorage.setItem('cp:week-mode', 'time')
+  }
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(seed))))
   if (stored) await storage.save(stored)
   const view = render(<App storage={async () => storage} />)
-  await screen.findByRole('grid', { name: 'Неделя по времени' })
+  await screen.findByRole('grid', { name: month ? /^Месяц: / : 'Неделя по времени' })
   return { storage, view }
 }
 const profile = async (item: string) => {
@@ -40,6 +44,27 @@ describe('T-CP-071 FR-CP-071 план Датаиста: календарь со 
     expect(await screen.findAllByRole('button', { name: /Note Taking · 100 ИИ-сотрудников за 100 дней · 2\/100/ })).not.toHaveLength(0)
     expect(screen.getAllByText(/9–15 ноя 2026/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
+  })
+
+  it('календарь открывается месяцем: каждая публикация — своей карточкой целиком, как в календаре Датаиста', async () => {
+    await open(null, dataist, memoryStorage(), true)
+    const month = await screen.findByRole('grid', { name: 'Месяц: Ноябрь 2026' })
+    const day8 = month.querySelector('[data-date="2026-11-08"]') as HTMLElement
+    // 18 публикаций 8 ноября — 18 карточек: ничего не сходится в одну (короткое и пост лайфстайла — порознь)
+    expect(day8.querySelectorAll('.cp-card')).toHaveLength(dataist.items.filter((it) => it.date === '2026-11-08').length)
+    expect(day8.querySelectorAll('.cp-card')).toHaveLength(18)
+    expect(within(day8).getAllByRole('button', { name: /: ИИ-компания, 2\d:00/ })).toHaveLength(2)
+    // карточка — как в календаре: время и канал, рубрика (с отделом демо), название целиком, формат словами и площадки
+    const demo = within(day8).getByRole('button', { name: /^Демо · Короткое демо: Knowledge Management/ }).closest('.cp-card') as HTMLElement
+    expect(demo).toHaveClass('cp-card--post')
+    expect(demo.querySelector('.cp-card__time')).toHaveTextContent('12:00')
+    expect(demo.querySelector('.cp-card__ch')).toHaveTextContent('Нейроний')
+    expect(demo.querySelector('.cp-card__cap')).toHaveTextContent('Демо · Короткое демо · Management')
+    expect(demo.querySelector('.cp-card__title')).toHaveTextContent('Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1/100')
+    expect(demo.querySelector('.cp-card__kind')).toHaveTextContent('Короткое видео')
+    expect([...demo.querySelectorAll('.cp-card__plats .cp-pi')].map((x) => x.getAttribute('title'))).toEqual(['YouTube', 'Instagram', 'TikTok'])
+    const article = within(day8).getByRole('button', { name: /^Исследования · Статья: Нужна тема/ }).closest('.cp-card') as HTMLElement
+    expect([article.querySelector('.cp-card__cap')?.textContent, article.querySelector('.cp-card__kind')?.textContent]).toEqual(['Исследования', 'Страница на сайте'])
   })
 
   it('«Очистить всё» — пусто и после перезагрузки; план Датаиста — снова из профиля, «К началу плана» — к 8 ноября', async () => {

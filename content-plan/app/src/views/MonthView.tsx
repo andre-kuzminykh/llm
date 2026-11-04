@@ -1,5 +1,6 @@
-// Месяц: недели строками, в каждом дне — все его карточки по времени (ничего не прячется: строка растёт по самому
-// полному дню). Карточку переносят на другой день как в неделе, щелчок по пустому месту дня — новый контент на этот день.
+// Месяц — как календарь Датаиста: недели строками, в каждом дне — все публикации по времени, каждая своей карточкой
+// целиком (время, канал, рубрика, название, формат, площадки); ничего не прячется и не обрезается — строка растёт по самому
+// полному дню, узкое окно листается вбок. Карточку переносят на другой день как в неделе, щелчок по пустому месту дня — новый контент на этот день.
 // Стрелки — соседний месяц, заголовок — перейти к дате. «Неделя / Месяц» — переключатель в шапке.
 import { MONTHS, WEEKDAYS, addDays, mondayOf, SAT, today, weekday } from '../model/dates'
 import { type ISODate } from '../model/types'
@@ -63,9 +64,9 @@ export function MonthView() {
 
 /** День месяца: число (открыть день) и все карточки; пустое место — новый контент на этот день. */
 function MonthDay({ date, out }: { date: ISODate; out: boolean }) {
-  const { unitsOn, dropOn, openNew, openDay, violByDate } = usePlan()
+  const { cardsOn, dropOn, openNew, openDay, violByDate } = usePlan()
   const drop = useDrop((d) => dropOn(date, d))
-  const units = unitsOn(date)
+  const units = cardsOn(date)
   const viol = violByDate.get(date)?.length ?? 0
   const t = today()
   const cls = ['cp-month__day', out && 'cp-month__day--out', weekday(date) === SAT && 'cp-month__day--rest', date === t && 'cp-month__day--today', drop.over && 'cp-month__day--drop']
@@ -89,7 +90,7 @@ function MonthDay({ date, out }: { date: ISODate; out: boolean }) {
         {units.length > 0 && <span className="cp-month__n" aria-hidden="true">{units.length}</span>}
       </span>
       {units.map((u) => (
-        <UnitCard key={u.key} unit={u} variant="line" icons={false} />
+        <UnitCard key={u.key} unit={u} variant="post" />
       ))}
     </div>
   )

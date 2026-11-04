@@ -410,6 +410,24 @@ body.cp-grabbing, body.cp-grabbing * { cursor: grabbing !important; }
 /* строка дорожки: время и рубрика — мелко, под ними тема, внизу значки */
 .cp-card--line .cp-card__time { order: -1; margin: 0; color: var(--nr-text-3); }
 .cp-card--line .cp-rub { font-weight: var(--nr-fw-medium); color: var(--nr-text-3); }
+/* публикация целиком — как в календаре Датаиста (месяц, лента на телефоне): сверху время и канал, рубрика, название без
+   обрезки, внизу за чертой — формат словами и все площадки; ▶ — в правом нижнем углу */
+.cp-card--post { border-radius: 8px; }
+.cp-card--post .cp-card__open { gap: 3px; padding: 7px 9px 6px 9px; font-size: 12.5px; line-height: 1.35; }
+.cp-card__head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.cp-card--post .cp-card__time { margin: 0; font-size: 11.5px; font-weight: var(--nr-fw-semibold); color: var(--nr-text); }
+.cp-card__head .cp-card__bad { align-self: center; }
+.cp-card__ch { margin-left: auto; min-width: 0; font-size: 10.5px; line-height: 1.25; text-align: right; overflow-wrap: anywhere; color: color-mix(in srgb, var(--cp-c, var(--nr-text-3)) 72%, var(--nr-text)); }
+.cp-card__cap { font-size: 11px; color: var(--nr-text-3); overflow-wrap: anywhere; }
+.cp-card--post .cp-card__title { display: block; overflow: visible; -webkit-line-clamp: none; font-weight: var(--nr-fw-semibold); overflow-wrap: anywhere; hyphens: auto; }
+.cp-card--post.cp-card--slot .cp-card__title { font-size: 11.5px; }
+.cp-card__foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-height: 18px; margin-top: 3px; padding: 4px 18px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--cp-c, var(--nr-text-3)) 20%, transparent);
+}
+.cp-card__kind { flex: none; font-size: 10.5px; color: var(--nr-text-3); }
+.cp-card__plats { margin-left: auto; display: flex; gap: 3px; color: var(--nr-text-3); } /* площадки — одной строкой; тесно — строкой ниже */
+
 /* снизу в ряд: формат (первым, чуть темнее), черта, площадки — куда выходит */
 .cp-card__icons { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 3px; margin-top: 1px; color: var(--nr-text-3); line-height: 12px; }
 .cp-card__f { display: inline-grid; place-items: center; flex: none; color: var(--nr-text-2); }
@@ -572,7 +590,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-agenda__day--rest .cp-agenda__head { background: transparent; }
 .cp-agenda__head--today { color: var(--nr-accent-text); }
 .cp-agenda .cp-card__open { padding: 5px 34px 6px 10px; font-size: var(--nr-fs-md); }
-.cp-agenda .cp-list { gap: 2px; }
+.cp-agenda .cp-list { gap: 6px; }
 .cp-agenda .cp-task-btn { bottom: 6px; right: 6px; }
 
 /* фильтр статуса — словами */
@@ -1064,13 +1082,14 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-lane__fill { border-bottom: 0; }
 
 /* ── месяц: недели строками, в дне — все карточки одной строкой каждая; строка растёт по самому полному дню ── */
-.cp-month { display: flex; flex-direction: column; min-width: 0; padding-bottom: 72px; }
+/* месяц публикациями: дни не уже ~140 px — узкое окно листается вбок, карточки не сжимаются в нечитаемое */
+.cp-month { display: flex; flex-direction: column; min-width: 1000px; padding-bottom: 72px; }
 .cp-month__head { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--nr-bg); border-bottom: 1px solid var(--nr-sep-soft); }
 .cp-month__wd { padding: 8px 8px 6px; font-size: var(--nr-fs-xs); font-weight: var(--nr-fw-medium); color: var(--nr-text-3); }
 .cp-month__wd--rest { color: var(--nr-text-3); opacity: 0.7; }
 .cp-month__week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cp-month__day {
-  position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 112px; padding: 4px 4px 24px;
+  position: relative; display: flex; flex-direction: column; gap: 5px; min-width: 0; min-height: 112px; padding: 4px 4px 24px;
   border-bottom: 1px solid var(--nr-sep-soft); border-left: 1px solid var(--nr-sep-soft); cursor: cell;
 }
 .cp-month__day:first-child { border-left: 0; }

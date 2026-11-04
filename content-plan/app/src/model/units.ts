@@ -43,10 +43,6 @@ export function unitsOf(items: Item[], rules: Map<string, Rule>, channelOrder: s
     if (list) list.push(it)
     else byKey.set(key, [it])
   }
-  const order = (cid: string) => {
-    const i = channelOrder.indexOf(cid)
-    return i < 0 ? 99 : i
-  }
   const out: Unit[] = []
   for (const [key, list] of byKey) {
     const sorted = [...list].sort((a, b) => Number(!!a.derive) - Number(!!b.derive) || a.rank - b.rank)
@@ -54,8 +50,26 @@ export function unitsOf(items: Item[], rules: Map<string, Rule>, channelOrder: s
     const rule = rules.get(head.ruleId)
     out.push({ key, head, items: sorted, channelId: head.channelId, date: head.date, time: timeOf(head, rule), end: head.end, stream: !!rule?.stream })
   }
-  // поток — как событие на весь день: первым
-  return out.sort((a, b) => Number(b.stream) - Number(a.stream) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || order(a.channelId) - order(b.channelId) || a.head.rank - b.head.rank)
+  return out.sort(byTime(channelOrder))
+}
+
+/** Порядок карточек дня: поток — как событие на весь день, первым; дальше по времени, каналу и рангу. */
+const byTime = (channelOrder: string[]) => {
+  const order = (cid: string) => {
+    const i = channelOrder.indexOf(cid)
+    return i < 0 ? 99 : i
+  }
+  return (a: Unit, b: Unit) => Number(b.stream) - Number(a.stream) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || order(a.channelId) - order(b.channelId) || a.head.rank - b.head.rank
+}
+
+/** Каждая публикация — своя карточка (месяц и лента — как в календаре Датаиста): ничего не сходится в одну и не прячется. */
+export function cardsOf(items: Item[], rules: Map<string, Rule>, channelOrder: string[] = []): Unit[] {
+  return items
+    .map((it): Unit => {
+      const rule = rules.get(it.ruleId)
+      return { key: it.id, head: it, items: [it], channelId: it.channelId, date: it.date, time: timeOf(it, rule), end: it.end, stream: !!rule?.stream }
+    })
+    .sort(byTime(channelOrder))
 }
 
 /** Площадки карточки в порядке плана и что на каждой выходит: YouTube → FULL, Тизер · Shorts. */

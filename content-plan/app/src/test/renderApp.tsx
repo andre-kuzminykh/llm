@@ -9,6 +9,9 @@ export function renderApp(plan = smallPlan(), prefs: Record<string, string> = {}
   localStorage.setItem('cp:anchor', JSON.stringify('2026-10-26'))
   // главная — первый экран; тесты календаря открывают календарь (свой раздел — через prefs)
   localStorage.setItem('cp:section', JSON.stringify('calendar'))
+  // тесты недели: календарь сам открывается месяцем (FR-CP-072) — здесь неделя и шкала времени, если тест не сказал иначе
+  localStorage.setItem('cp:span-2', 'week')
+  localStorage.setItem('cp:week-mode', 'time')
   for (const [k, v] of Object.entries(prefs)) localStorage.setItem(k, v)
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(plan))))
   const storage = memoryStorage()

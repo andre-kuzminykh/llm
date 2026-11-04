@@ -7,7 +7,7 @@ import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
 import { emptyPlan, isHome, labelOf, MAIL, OLD_MAIL, timeOf, type ISODate, type Item, type Plan } from './model/types'
-import { unitsOf, type Unit } from './model/units'
+import { cardsOf, unitsOf, type Unit } from './model/units'
 import { NO_HOME_FILTERS } from './model/overview'
 import { Seg } from './ui/bits'
 import type { Source } from './model/social'
@@ -47,17 +47,21 @@ const backOf = (s: Sheet): Back | undefined =>
   !s || s.kind === 'help' || s.kind === 'settings' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
 
 const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
+// календарь — как календарь Датаиста: открывается месяцем, где видна каждая публикация; неделю выбирают сами
+// (ключ новый: прежний выбор «неделя» больше не держит)
+const SPAN_KEY = 'cp:span-2'
 const readSpan = (): Span => {
   try {
-    return localStorage.getItem('cp:span') === 'month' ? 'month' : 'week'
+    return localStorage.getItem(SPAN_KEY) === 'week' ? 'week' : 'month'
   } catch {
-    return 'week'
+    return 'month'
   }
 }
 const readMode = (): Mode => {
   try {
     const m = localStorage.getItem('cp:week-mode') as Mode
-    return MODES.includes(m) ? m : 'time'
+    // ничего не выбрано: на телефоне — лента по дням (каждая публикация целиком), на компьютере — шкала времени
+    return MODES.includes(m) ? m : 'feed'
   } catch {
     return 'time'
   }
@@ -300,7 +304,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
   const setSpan = (s: Span) => {
     setSpanState(s)
     try {
-      localStorage.setItem('cp:span', s)
+      localStorage.setItem(SPAN_KEY, s)
     } catch {
       /* период проживёт до перезагрузки */
     }
@@ -336,6 +340,15 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
     if (!u) {
       u = unitsOf((byDate.get(date) ?? []).filter((it) => visible(it, filters)), rules, channelOrder)
       unitCache.set(date, u)
+    }
+    return u
+  }
+  const cardCache = useMemo(() => new Map<ISODate, Unit[]>(), [plan, filters]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cardsOn = (date: ISODate) => {
+    let u = cardCache.get(date)
+    if (!u) {
+      u = cardsOf((byDate.get(date) ?? []).filter((it) => visible(it, filters)), rules, channelOrder)
+      cardCache.set(date, u)
     }
     return u
   }
@@ -446,6 +459,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
     canRedo,
     byDate,
     unitsOn,
+    cardsOn,
     violations,
     violByDate,
     badIds,

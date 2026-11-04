@@ -210,7 +210,8 @@ try {
     }
     // раздел переключается из шапки: календарь и обратно на главную
     await tabs.getByRole('button', { name: 'Календарь' }).click()
-    out.calendar = await inside.getByRole('grid', { name: 'Неделя по времени' }).waitFor({ timeout: 4000 }).then(() => true, () => false)
+    // на телефоне календарь открывается лентой по дням (FR-CP-072), неделя по шкале — если её выбрали
+    out.calendar = await inside.locator('[aria-label="Лента по дням"], [aria-label="Неделя по времени"]').first().waitFor({ timeout: 4000 }).then(() => true, () => false)
     await tabs.getByRole('button', { name: 'Главная' }).click()
     out.home = await inside.getByRole('heading', { name: 'Главная' }).waitFor({ timeout: 4000 }).then(() => true, () => false)
     if (await button.count()) {
