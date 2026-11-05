@@ -871,6 +871,8 @@ check(!(await phone.locator('.cp-side').count()), 'тап мимо закрыв�
   // ничего не обрезано: название и подпись целиком, площадки — все, без «+N»
   const cut = await mGrid.locator('.cp-card--post').evaluateAll((cs) => cs.filter((c) => [...c.querySelectorAll('.cp-card__title, .cp-card__cap, .cp-card__ch')].some((x) => x.scrollHeight > x.clientHeight + 1 || x.scrollWidth > x.clientWidth + 1)).length)
   const more = await mGrid.locator('.cp-card__more').count()
+  // «видео» на карточке — один раз: формат словами только внизу, в подписи его нет («Обучение 1», а не «Обучение · Видео 1»)
+  const twice = await mGrid.locator('.cp-card__cap').filter({ hasText: /видео/i }).count()
   const demo = await mGrid.locator('[data-date="2026-11-08"] .cp-card--post').filter({ hasText: 'Knowledge Management' }).evaluate((c) => ({
     time: c.querySelector('.cp-card__time')?.textContent, ch: c.querySelector('.cp-card__ch')?.textContent, cap: c.querySelector('.cp-card__cap')?.textContent,
     kind: c.querySelector('.cp-card__kind')?.textContent, plats: c.querySelectorAll('.cp-card__plats .cp-pi').length,
@@ -884,9 +886,9 @@ check(!(await phone.locator('.cp-side').count()), 'тап мимо закрыв�
   await mGrid.locator('[data-date="2026-11-11"]').scrollIntoViewIfNeeded()
   await dc.screenshot({ path: `${SHOTS}/14-dataist-month-2.png` })
   check(
-    homeCards > 0 && posts === 18 && allPosts > 400 && !cut && !more && !wide && opened < 8000 && JSON.stringify(demo) === JSON.stringify({ time: '12:00', ch: 'Нейроний', cap: 'Демо · Короткое демо · Management', kind: 'Короткое видео', plats: 3 }),
-    `план Датаиста открывается сам: на главной — «Ожидается»; календарь — месяцем, каждая публикация своей карточкой целиком (8 ноября — ${posts}, в месяце — ${allPosts}; время, канал, рубрика, название, формат, площадки; обрезанных нет), за ${opened} мс`,
-    `месяц публикациями: на главной ${homeCards}, 8 ноября ${posts}, всего ${allPosts}, обрезано ${cut}, «+N» ${more}, шире ${wide}, ${opened} мс, демо ${JSON.stringify(demo)}`,
+    homeCards > 0 && posts === 18 && allPosts > 400 && !cut && !more && !twice && !wide && opened < 8000 && JSON.stringify(demo) === JSON.stringify({ time: '12:00', ch: 'Нейроний', cap: 'Демо · Короткое демо · Management', kind: 'Короткое видео', plats: 3 }),
+    `план Датаиста открывается сам: на главной — «Ожидается»; календарь — месяцем, каждая публикация своей карточкой целиком (8 ноября — ${posts}, в месяце — ${allPosts}; время, канал, рубрика, название, формат, площадки; обрезанных нет, «видео» дважды — нигде), за ${opened} мс`,
+    `месяц публикациями: на главной ${homeCards}, 8 ноября ${posts}, всего ${allPosts}, обрезано ${cut}, «+N» ${more}, «видео» дважды ${twice}, шире ${wide}, ${opened} мс, демо ${JSON.stringify(demo)}`,
   )
   // неделя — по-прежнему переключателем
   await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio', { name: 'Неделя' }).click()

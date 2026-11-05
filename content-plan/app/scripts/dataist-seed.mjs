@@ -52,7 +52,7 @@ function ruleName(cards, themeName, format) {
   const labels = new Set(cards.map((c) => c.rubric))
   const only = labels.size === 1 ? [...labels][0] : ''
   const n = only.match(new RegExp(`^${themeName} (\\d+)$`))
-  if (n) return `Видео ${n[1]}` // «Обучение 2» → «Обучение · Видео 2»
+  if (n) return only // «Обучение 2» — как в календаре; подпись карточки — одно «Обучение 2», формат словами — внизу
   if (/^Короткое демо · /.test(cards[0].rubric)) return 'Короткое демо'
   if (!only || only === themeName || themeName.startsWith(only) || only.startsWith(themeName)) return FORMAT_SHORT[format]
   return only

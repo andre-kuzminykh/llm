@@ -143,10 +143,19 @@ export const isBlankPlan = (p: Plan) => !p.example && !p.items.length && !p.chan
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
   if (isV1(p)) return webAndMail(splitDataist(renameAndFormats(migrateV1(p, await seed()))))
   if (isV2(p)) return webAndMail(splitDataist(renameAndFormats(migrateV2(p, await seed()))))
-  return freeToLive(webAndMail(splitDataist(renameAndFormats(await addStreams(p, seed)))), seed)
+  return freeToLive(learningNames(webAndMail(splitDataist(renameAndFormats(await addStreams(p, seed))))), seed)
 }
 
 const FREE_RULE = 'dc-short-free-live'
+
+/** План Датаиста до 05.11: четыре видео Академии назывались «Видео 1…4» — на карточке «видео» выходило дважды
+ *  («Обучение · Видео 1» и «Короткое видео»); теперь — «Обучение 1…4», как в календаре. */
+function learningNames(p: Plan): Plan {
+  if (p.example !== 'dataist-calendar') return p
+  const old = (r: Rule) => /^dc-short-education-\d-academy$/.test(r.id) && /^Видео \d$/.test(r.name)
+  if (!p.rules.some(old)) return p
+  return { ...p, rules: p.rules.map((r) => (old(r) ? { ...r, name: r.name.replace('Видео', 'Обучение') } : r)) }
+}
 
 /** План Датаиста, сохранённый до правки владельца (05.11): «Свободное» было без канала и в 11:00 — теперь Датаист Live
  *  и ситуативно (без часа, сверху дня). Формат берётся из исходного плана; свои правки остальных материалов не трогаются. */

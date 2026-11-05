@@ -186,6 +186,7 @@ export function labelOf(rubric: Rubric | undefined, rule: Rule | undefined) {
   const f = rule?.name
   if (!r) return f ?? ''
   if (!f || f === r) return r
+  if (f.startsWith(`${r} `)) return f // «Обучение 1», а не «Обучение · Обучение 1"
   return `${r} · ${f}`
 }
 

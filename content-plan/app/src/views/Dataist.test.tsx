@@ -63,6 +63,10 @@ describe('T-CP-071 FR-CP-071 план Датаиста: календарь со 
     expect(demo.querySelector('.cp-card__title')).toHaveTextContent('Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1/100')
     expect(demo.querySelector('.cp-card__kind')).toHaveTextContent('Короткое видео')
     expect([...demo.querySelectorAll('.cp-card__plats .cp-pi')].map((x) => x.getAttribute('title'))).toEqual(['YouTube', 'Instagram', 'TikTok'])
+    // видео Академии — «Обучение 1», формат словами — только внизу; «видео» дважды нет ни на одной карточке
+    const lesson = within(day8).getByRole('button', { name: /^Обучение 1: ИИ инженер/ }).closest('.cp-card') as HTMLElement
+    expect([lesson.querySelector('.cp-card__cap')?.textContent, lesson.querySelector('.cp-card__kind')?.textContent]).toEqual(['Обучение 1', 'Короткое видео'])
+    expect([...month.querySelectorAll('.cp-card__cap')].filter((c) => /видео/i.test(c.textContent ?? ''))).toHaveLength(0)
     const article = within(day8).getByRole('button', { name: /^Исследования · Статья: Нужна тема/ }).closest('.cp-card') as HTMLElement
     expect([article.querySelector('.cp-card__cap')?.textContent, article.querySelector('.cp-card__kind')?.textContent]).toEqual(['Исследования', 'Страница на сайте'])
   })
@@ -109,7 +113,7 @@ describe('T-CP-071 FR-CP-071 план Датаиста: календарь со 
     const bar = note.closest('[role="status"]') as HTMLElement
     await userEvent.click(within(bar).getByRole('button', { name: 'К началу плана' }))
     expect(await screen.findAllByRole('button', { name: /Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1\/100/ })).not.toHaveLength(0)
-    expect(screen.getAllByRole('button', { name: /^Обучение · Видео 1: ИИ инженер по автоматизации · Лекция 4 из 8/ }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /^Обучение 1: ИИ инженер по автоматизации · Лекция 4 из 8/ }).length).toBeGreaterThan(0)
     // каналы плана — в фильтрах слева
     const side = screen.getByRole('complementary', { name: 'Фильтры' })
     for (const name of ['Датаист Live', 'Лаборатория Датаиста', 'Академия Датаиста', 'Нейроний', 'Ландао', 'Антрополис']) expect(within(side).getAllByText(name).length).toBeGreaterThan(0)

@@ -51,8 +51,8 @@ describe('T-CP-071 FR-CP-071 план Датаиста — календарь с
     expect(lines).toContain('09:00 live Новость дня: …')
     expect(lines).not.toContain('11:00 — : …')
     expect(lines).toContain('12:00 neuron Короткое демо: Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1/100')
-    expect(lines).toContain('16:00 academy Видео 1: ИИ инженер по автоматизации · Лекция 4 из 8')
-    expect(lines).toContain('16:45 academy Видео 4: ИИ инженер по автоматизации · Лекция 4 из 8')
+    expect(lines).toContain('16:00 academy Обучение 1: ИИ инженер по автоматизации · Лекция 4 из 8')
+    expect(lines).toContain('16:45 academy Обучение 4: ИИ инженер по автоматизации · Лекция 4 из 8')
     expect(lines).toContain('20:10 live Короткое видео: Моя история')
     expect(day.find((it) => it.channelId === 'neuron').note).toBe('Короткое демо · Management')
     // «Свободное» — Датаист Live, ситуативно: без часа и вне «чужих» правил
@@ -88,11 +88,14 @@ describe('T-CP-071 FR-CP-071 план Датаиста — календарь с
       delete it.allDay
     }
     old.items[0].title = 'Своя правка' // остальное — как было
+    // и видео Академии назывались «Видео 1…4» — «видео» на карточке выходило дважды
+    for (const r of old.rules) if (/^dc-short-education-\d-academy$/.test(r.id)) r.name = r.name.replace('Обучение', 'Видео')
     const up = await upgradePlan(old, async () => seed)
     const free = up.items.filter((it) => it.rubricId === 'free')
     expect(free.every((it) => it.channelId === 'live' && it.ruleId === 'dc-short-free-live' && it.allDay && !it.time && !it.offGrid)).toBe(true)
     expect(up.rules.filter((r) => r.id === 'dc-short-free-live')).toHaveLength(1)
     expect(up.items[0].title).toBe('Своя правка')
+    expect(up.rules.filter((r) => r.id.startsWith('dc-short-education-')).map((r) => r.name)).toEqual(['Обучение 1', 'Обучение 2', 'Обучение 3', 'Обучение 4'])
     expect(checkPlan(up, indexByDate(up))).toEqual([])
   })
 

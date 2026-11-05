@@ -70,10 +70,11 @@ export function PlatformIcon({ platform, size = 14 }: { platform: string; size?:
 }
 
 /** Рубрика — просто названием: «Демо». Формат и время — рядом мелко. */
-export function RubricChip({ name }: { name: string }) {
+/** Рубрика словом; text — если формат рубрики уже начинается с неё («Обучение 1»): одно слово, без повтора. */
+export function RubricChip({ name, text }: { name: string; text?: string }) {
   return (
     <span className="cp-rub" aria-label={`Рубрика: ${name}`}>
-      {name}
+      {text ?? name}
     </span>
   )
 }
@@ -202,7 +203,9 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   // готово и вышло — бледнее сразу; в работе — подсвечена и «дышит»
   const done = head.status === 'ready' || head.status === 'published'
   const st = statusOf(head.status)
-  const label = `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
+  // формат рубрики начинается с самой рубрики («Обучение 1») — подпись одна, без «Обучение · Обучение 1»
+  const fused = !!format && !!rubric && format.startsWith(`${rubric.name} `)
+  const label = fused ? format : `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
   const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
   // форматы карточки: главного материала первым, остальные — по порядку (горизонталь, вертикаль, веб, пост)
   const own = new Set(unit.items.map((it) => it.format))
@@ -228,7 +231,9 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   // своя подпись календаря в заметке («Короткое демо · Management») — вместо формата
   const noteLine = head.note?.split('\n')[0] ?? ''
   const generic = !format || format === FORMAT_SHORT[head.format] || format === 'Статья'
-  const caption = [rubric?.name, rule && noteLine.startsWith(`${rule.name} · `) ? noteLine : generic ? '' : format].filter(Boolean).join(' · ')
+  // формат словами («Короткое видео») — только внизу: в подписи его нет, чтобы «видео» не стояло дважды
+  const special = rule && noteLine.startsWith(`${rule.name} · `) ? noteLine : generic ? '' : format
+  const caption = special && rubric && special.startsWith(`${rubric.name} `) ? special : [rubric?.name, special].filter(Boolean).join(' · ')
   const channelName = channels.get(unit.channelId)?.name
   // растянутая на шкале карточка — с концом: «12:00–13:30»
   const time = when ?? (unit.end && !unit.stream && variant === 'compact' ? `${unit.time}–${unit.end}` : timeText(unit))
@@ -292,7 +297,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
           <>
             <span className="cp-card__rub">
               {showTime && <span className="cp-card__time">{time}</span>}
-              {rubric && <RubricChip name={rubric.name} />}
+              {rubric && <RubricChip name={rubric.name} text={fused ? format : undefined} />}
               {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
             </span>
@@ -301,8 +306,8 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
         ) : (
           <>
             <span className="cp-card__rub">
-              {rubric && <RubricChip name={rubric.name} />}
-              {format && variant !== 'mini' && <span className="cp-card__fmt">{format}</span>}
+              {rubric && <RubricChip name={rubric.name} text={fused ? format : undefined} />}
+              {format && !fused && variant !== 'mini' && <span className="cp-card__fmt">{format}</span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
               {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
               {showTime && <span className="cp-card__time" title={unit.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : unit.allDay ? 'Ситуативно: без часа, сверху дня' : undefined}>{time}</span>}
