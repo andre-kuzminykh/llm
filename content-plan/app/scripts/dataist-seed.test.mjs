@@ -79,6 +79,23 @@ describe('T-CP-071 FR-CP-071 план Датаиста — календарь с
     expect(review[0].note).toBe('Обзор Лаборатории Датаиста за октябрь 2026 года.')
   })
 
+  it('план Датаиста, сохранённый до правки (05.11): «Свободное» само переходит в Датаист Live и становится ситуативным', async () => {
+    const old = JSON.parse(JSON.stringify(seed))
+    old.rules = old.rules.filter((r) => r.id !== 'dc-short-free-live')
+    for (const it of old.items) {
+      if (it.rubricId !== 'free') continue
+      Object.assign(it, { channelId: '', ruleId: '', offGrid: true, time: '11:00' })
+      delete it.allDay
+    }
+    old.items[0].title = 'Своя правка' // остальное — как было
+    const up = await upgradePlan(old, async () => seed)
+    const free = up.items.filter((it) => it.rubricId === 'free')
+    expect(free.every((it) => it.channelId === 'live' && it.ruleId === 'dc-short-free-live' && it.allDay && !it.time && !it.offGrid)).toBe(true)
+    expect(up.rules.filter((r) => r.id === 'dc-short-free-live')).toHaveLength(1)
+    expect(up.items[0].title).toBe('Своя правка')
+    expect(checkPlan(up, indexByDate(up))).toEqual([])
+  })
+
   it('программа открывает план как есть — без переделок — и проверка сетки молчит', async () => {
     const opened = await upgradePlan(seed, async () => seed)
     expect(opened).toBe(seed)
