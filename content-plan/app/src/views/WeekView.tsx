@@ -6,7 +6,7 @@ import { addDays, daysBetween, mondayOf, SAT, shortDate, toMin, today, WEEKDAYS,
 import { whereText } from '../model/hint'
 import { FORMAT_SHORT, FULL_VIDEO, GRAY, realPlatforms, SHORT_VIDEO, shownTitle, type ISODate, type Item, type Plan } from '../model/types'
 import { type Order } from '../model/store'
-import { type Unit } from '../model/units'
+import { onTop, type Unit } from '../model/units'
 import { IconButton, UnitCard, useDrop } from '../ui/bits'
 import { usePlan, type Mode } from '../ui/ctx'
 import { autoScroll, hintBox, HOLD_MS, SLOP, swallowClick } from '../ui/drag'
@@ -109,7 +109,7 @@ export function WeekView() {
     if (mode !== 'time') return 0
     const from = mondayOf(d)
     let first: number | null = null
-    for (let k = 0; k < 7; k++) for (const u of unitsOn(addDays(from, k))) if (!u.stream) first = Math.min(first ?? 24 * 60, toMin(u.time))
+    for (let k = 0; k < 7; k++) for (const u of unitsOn(addDays(from, k))) if (!onTop(u)) first = Math.min(first ?? 24 * 60, toMin(u.time))
     // за полчаса до часа первого материала: подпись этого часа видна целиком
     return Math.max(0, (Math.floor((first ?? 8 * 60) / 60) - 0.5) * HOUR)
   }
@@ -395,23 +395,30 @@ function TimeGrid({ days, count, col, drag, grab }: { days: { date: ISODate; i: 
   }, [])
   const clock = { date: today(), minutes: now.getHours() * 60 + now.getMinutes() }
   const width = GUT + count * col
-  // поток 24/7 (лента Neuronium) — как событие на весь день: строкой над шкалой часов
-  const streams = new Map(days.map(({ date }) => [date, unitsOn(date).filter((u) => u.stream)]))
+  // поток 24/7 (лента Neuronium) и ситуативное — как события «на весь день» в Google Календаре: строкой над шкалой часов
+  const streams = new Map(days.map(({ date }) => [date, unitsOn(date).filter(onTop)]))
+  const allDay = [...streams.values()].some((l) => l.some((u) => u.allDay))
   const rows = Math.max(0, ...[...streams.values()].map((l) => l.length))
   const head = HEAD + (rows ? rows * STREAM_ROW + 4 : 0)
   return (
     <div className="cp-tg" role="grid" aria-label="Неделя по времени" style={{ width, height: head + 24 * HOUR, '--cp-hour': `${HOUR}px` } as CSSProperties}>
       <div className="cp-tg__head" style={{ width, height: head }} role="row">
-        <div className="cp-tg__corner">{rows > 0 && <span className="cp-tg__alllabel" title="Круглосуточно: приходит по вебхуку и выходит сразу">24/7</span>}</div>
+        <div className="cp-tg__corner">
+          {rows > 0 && (
+            <span className="cp-tg__alllabel" title={allDay ? 'Без часа: ситуативное и потоки 24/7' : 'Круглосуточно: приходит по вебхуку и выходит сразу'}>
+              {allDay ? 'весь день' : '24/7'}
+            </span>
+          )}
+        </div>
         {days.map(({ date, i }) => (
           <div key={date} className={`cp-tg__day${weekday(date) === SAT ? ' cp-tg__day--rest' : ''}`} role="columnheader" style={{ left: GUT + i * col, width: col }} data-drop={date}>
             <div className="cp-tg__dayhead">
               <DayHead date={date} />
             </div>
             {rows > 0 && (
-              <div className="cp-tg__allday" aria-label={`Круглосуточно, ${date}`}>
+              <div className="cp-tg__allday" aria-label={`${allDay ? 'Весь день' : 'Круглосуточно'}, ${date}`}>
                 {streams.get(date)!.map((u) => (
-                  <UnitCard key={u.key} unit={u} variant="chip" />
+                  <UnitCard key={u.key} unit={u} variant="chip" showTime={!u.allDay} className={u.allDay ? 'cp-card--allday' : undefined} />
                 ))}
               </div>
             )}
@@ -441,7 +448,7 @@ function TimeColumn({ date, left, width, now, drag, grab }: { date: ISODate; lef
   const drop = useDrop((d, e) => dropOn(date, d, at(e.clientY, e.currentTarget as HTMLElement)))
   // пересекающиеся по времени — рядом, по колонкам; все видны
   const placed = layoutBlocks(
-    unitsOn(date).filter((u) => !u.stream),
+    unitsOn(date).filter((u) => !onTop(u)),
     (u) => blockGeometry(u.time, u.end),
   )
   // справа у карточек — полоса пустого места, как в Google Календаре: щёлкнуть туда — ещё один материал на тот же час

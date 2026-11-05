@@ -3,7 +3,7 @@
 // других каналов — свои карточки. Так же в одну карточку сходятся пост и шортс исследования дня.
 import { addDays, daysBetween } from './dates'
 import { AUTO_RULES } from './filters'
-import { isSlot, STREAM_TIME, timeOf, typeOf, type ISODate, type Item, type Rule, type Status } from './types'
+import { ALL_DAY, isSlot, STREAM_TIME, timeOf, typeOf, type ISODate, type Item, type Rule, type Status } from './types'
 
 export interface Unit {
   key: string
@@ -14,10 +14,13 @@ export interface Unit {
   time: string
   end?: string // конец на шкале времени, если карточку растянули; без него — час
   stream: boolean // поток 24/7 по вебхуку: в дне — первым, на шкале времени — над часами
+  allDay?: boolean // ситуативно: без часа — сверху дня, следом за потоком, на шкале времени — строкой над часами
 }
 
 /** Время карточки для подписи: «12:00» или «24/7» у потока. */
-export const timeText = (u: Pick<Unit, 'time' | 'stream'>) => (u.stream ? STREAM_TIME : u.time)
+export const timeText = (u: Pick<Unit, 'time' | 'stream' | 'allDay'>) => (u.stream ? STREAM_TIME : u.allDay ? ALL_DAY : u.time)
+/** Сверху дня, над часами: поток 24/7 и ситуативное. */
+export const onTop = (u: Pick<Unit, 'stream' | 'allDay'>) => u.stream || !!u.allDay
 
 /** Карточки одного дня. Порядок: по времени, затем по каналам и рангу. */
 export function unitsOf(items: Item[], rules: Map<string, Rule>, channelOrder: string[] = []): Unit[] {
@@ -48,7 +51,7 @@ export function unitsOf(items: Item[], rules: Map<string, Rule>, channelOrder: s
     const sorted = [...list].sort((a, b) => Number(!!a.derive) - Number(!!b.derive) || a.rank - b.rank)
     const head = sorted[0]
     const rule = rules.get(head.ruleId)
-    out.push({ key, head, items: sorted, channelId: head.channelId, date: head.date, time: timeOf(head, rule), end: head.end, stream: !!rule?.stream })
+    out.push({ key, head, items: sorted, channelId: head.channelId, date: head.date, time: timeOf(head, rule), end: head.end, stream: !!rule?.stream, allDay: !!head.allDay && !rule?.stream })
   }
   return out.sort(byTime(channelOrder))
 }
@@ -59,7 +62,7 @@ const byTime = (channelOrder: string[]) => {
     const i = channelOrder.indexOf(cid)
     return i < 0 ? 99 : i
   }
-  return (a: Unit, b: Unit) => Number(b.stream) - Number(a.stream) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || order(a.channelId) - order(b.channelId) || a.head.rank - b.head.rank
+  return (a: Unit, b: Unit) => Number(b.stream) - Number(a.stream) || Number(!!b.allDay) - Number(!!a.allDay) || (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) || order(a.channelId) - order(b.channelId) || a.head.rank - b.head.rank
 }
 
 /** Каждая публикация — своя карточка (месяц и лента — как в календаре Датаиста): ничего не сходится в одну и не прячется. */
@@ -67,7 +70,7 @@ export function cardsOf(items: Item[], rules: Map<string, Rule>, channelOrder: s
   return items
     .map((it): Unit => {
       const rule = rules.get(it.ruleId)
-      return { key: it.id, head: it, items: [it], channelId: it.channelId, date: it.date, time: timeOf(it, rule), end: it.end, stream: !!rule?.stream }
+      return { key: it.id, head: it, items: [it], channelId: it.channelId, date: it.date, time: timeOf(it, rule), end: it.end, stream: !!rule?.stream, allDay: !!it.allDay && !rule?.stream }
     })
     .sort(byTime(channelOrder))
 }

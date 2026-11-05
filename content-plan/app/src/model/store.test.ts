@@ -1,3 +1,4 @@
+import { addDays } from './dates'
 import { byId, item, smallPlan } from '../test/fixtures'
 import {
   reorder,
@@ -290,5 +291,17 @@ describe('T-CP-052 FR-CP-052 порядок каналов, рубрик и пл
     expect(reorder(p, 'platforms', 'X', 'YouTube', false).platforms).toEqual(['Web', 'X', 'YouTube', 'Instagram', 'Telegram', 'LinkedIn', 'Mail'])
     expect(reorder(p, 'channels', 'landao', 'dataist', false).channels.map((c) => c.id)).toEqual(['landao', 'dataist', 'andre'])
     expect(reorder(p, 'rubrics', 'tech', 'demo', true)).toBe(p)
+  })
+})
+
+describe('T-CP-073 FR-CP-073 ситуативное на шкале времени', () => {
+  it('поставили на час — у материала время, «весь день» снят; перенос на другой день без часа — остаётся сверху', () => {
+    const p = smallPlan()
+    const it0 = p.items.find((x) => x.date && !x.group)!
+    it0.allDay = true
+    const later = moveItem(p, it0.id, addDays(it0.date!, 1))
+    expect(byId(later, it0.id).allDay).toBe(true)
+    const timed = moveItem(p, it0.id, it0.date!, true, '15:30')
+    expect([byId(timed, it0.id).allDay, byId(timed, it0.id).time]).toEqual([undefined, '15:30'])
   })
 })

@@ -18,6 +18,20 @@ mkdirSync(SHOTS, { recursive: true })
 const OLD_SEED = fileURLToPath(new URL('../src/test/seed-andre.json', import.meta.url))
 const oldSeed = (p) => p.route('**/seed.json', (r) => r.fulfill({ path: OLD_SEED, contentType: 'application/json' }))
 // календарь сам открывается месяцем (FR-CP-072), а проверки ниже начинаются с недели по шкале времени — её и ставим, если не выбрано
+// формат и площадки — плитками одного размера: ширина и высота у всех одни, подписи целиком, площадки — по пять в строку
+const tiles = (form) => form.evaluate((el) => {
+  const fmt = [...el.querySelectorAll('[aria-label="Формат"] > button')]
+  const pl = [...el.querySelectorAll('[aria-label="Площадки"] > button')]
+  const box = (b) => b.getBoundingClientRect()
+  const sizes = [...fmt, ...pl].map((b) => `${Math.round(box(b).width)}×${Math.round(box(b).height)}`)
+  return {
+    n: pl.length,
+    sizes: [...new Set(sizes)],
+    perRow: Math.max(...[...pl.reduce((m, b) => m.set(Math.round(box(b).top), (m.get(Math.round(box(b).top)) ?? 0) + 1), new Map()).values()]),
+    cut: [...el.querySelectorAll('.cp-plat__label, .cp-fmt__label')].filter((x) => x.scrollWidth > x.clientWidth).length,
+    wide: [...el.querySelectorAll('[aria-label="Площадки"], [aria-label="Формат"]')].some((g) => g.scrollWidth > g.clientWidth),
+  }
+})
 const weekFirst = (p) => p.addInitScript(() => {
   if (!localStorage.getItem('cp:span-2')) localStorage.setItem('cp:span-2', 'week')
   if (!localStorage.getItem('cp:week-mode')) localStorage.setItem('cp:week-mode', 'time')
@@ -513,14 +527,10 @@ check(
   'форма: формат — значками «Горизонталь / Вертикаль / Пост / Веб / Рассылка», щёлкнуть один; у FULL — горизонталь',
   `формат в форме не тот: ${fmtLabels}, выбран ${fmtOn}`,
 )
-// площадки — одной строкой, названия целиком, даже у вертикали (их больше всего)
+// формат и площадки — плитками одного размера, даже у вертикали (площадок больше всего)
 await fmtGroup.getByRole('radio', { name: 'Короткое вертикальное видео' }).click()
-const platRow = await form.getByRole('group', { name: 'Площадки' }).evaluate((el) => ({
-  n: el.children.length,
-  rows: new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top))).size,
-  cut: [...el.querySelectorAll('.cp-plat__label')].filter((x) => x.scrollWidth > x.clientWidth).length,
-}))
-check(platRow.n >= 5 && platRow.rows === 1 && !platRow.cut, `площадки в форме — одной строкой (${platRow.n}), названия целиком`, `площадки: ${JSON.stringify(platRow)}`)
+const platRow = await tiles(form)
+check(platRow.n >= 5 && platRow.sizes.length === 1 && platRow.perRow <= 5 && !platRow.cut && !platRow.wide, `форма: формат и площадки (${platRow.n}) — плитками одного размера ${platRow.sizes[0]}, по пять в строку, названия целиком`, `плитки: ${JSON.stringify(platRow)}`)
 // у сайта и письма площадок нет: выбирать нечего
 await fmtGroup.getByRole('radio', { name: 'Страница на сайте' }).click()
 const webPlats = await form.getByRole('group', { name: 'Площадки' }).count()
@@ -563,7 +573,7 @@ await page.keyboard.press('Escape')
   const files = await nf.getByRole('list', { name: 'Файлы' }).getByRole('listitem').count()
   await page.screenshot({ path: `${SHOTS}/5-files.png` })
   check(
-    channels[0] === 'Без канала' && channels.at(-1) === 'Новый канал…' && repeats.join('|') === 'Не повторять|Каждый день|По будням|Каждую неделю|Через неделю|Раз в месяц|Другое…' && daysOn === 1 && hint && custom === 'раз в 3 дня, 4 раза' && !langs && files === 2,
+    channels[0] === 'Без канала' && channels.at(-1) === 'Новый канал…' && repeats.join('|') === 'Не повторять|Ситуативно|Каждый день|По будням|Каждую неделю|Через неделю|Раз в месяц|Другое…' && daysOn === 1 && hint && custom === 'раз в 3 дня, 4 раза' && !langs && files === 2,
     `новый контент: «Без канала», повтор (${hint}; «${custom}»), без языков, файлы в заметке (${files})`,
     `каналы ${channels.join(', ')}; повтор ${repeats.join(', ')} / ${daysOn} / «${hint}» / «${custom}»; языков ${langs}; файлов ${files}`,
   )
@@ -812,17 +822,13 @@ await phone.getByRole('grid', { name: 'Неделя по времени' }).wait
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка в одну строку', `телефон: шапка ${head?.height}px`)
 check(!(await phone.locator('.cp-side').count()), 'телефон: фильтры свёрнуты', 'телефон: фильтры открыты сами')
-// телефон: площадки в форме — тоже одной строкой, названия целиком
+// телефон: формат и площадки — тоже плитками одного размера, названия целиком
 await phone.getByRole('button', { name: 'Новый контент' }).click()
 const phoneForm = phone.getByRole('complementary', { name: 'Новый контент' })
 await phoneForm.getByRole('radio', { name: 'Короткое вертикальное видео' }).click()
-const phoneRow = await phoneForm.getByRole('group', { name: 'Площадки' }).evaluate((el) => ({
-  n: el.children.length,
-  rows: new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top))).size,
-  cut: [...el.querySelectorAll('.cp-plat__label')].filter((x) => x.scrollWidth > x.clientWidth).length,
-  wide: el.scrollWidth > el.clientWidth,
-}))
-check(phoneRow.rows === 1 && !phoneRow.cut && !phoneRow.wide, `телефон: площадки в форме — одной строкой (${phoneRow.n}), названия целиком`, `телефон, площадки: ${JSON.stringify(phoneRow)}`)
+const phoneRow = await tiles(phoneForm)
+await phone.screenshot({ path: `${SHOTS}/13-phone-form.png` })
+check(phoneRow.sizes.length === 1 && phoneRow.perRow <= 5 && !phoneRow.cut && !phoneRow.wide, `телефон: формат и площадки (${phoneRow.n}) — плитками одного размера ${phoneRow.sizes[0]}, названия целиком`, `телефон, плитки: ${JSON.stringify(phoneRow)}`)
 await phoneForm.getByRole('button', { name: 'Закрыть' }).click()
 await phone.getByRole('button', { name: 'Поиск', exact: true }).click()
 await phone.getByRole('searchbox', { name: 'Поиск по плану' }).fill('Landao')
@@ -870,6 +876,9 @@ check(!(await phone.locator('.cp-side').count()), 'тап мимо закрыв�
     kind: c.querySelector('.cp-card__kind')?.textContent, plats: c.querySelectorAll('.cp-card__plats .cp-pi').length,
   }))
   const wide = await dc.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  // «Свободное» — Датаист Live, ситуативно: первым в дне, «Весь день» вместо часа (FR-CP-073)
+  const free8 = await mGrid.locator('[data-date="2026-11-08"] .cp-card--post').first().evaluate((c) => [c.querySelector('.cp-card__time')?.textContent, c.querySelector('.cp-card__ch')?.textContent, c.querySelector('.cp-card__cap')?.textContent].join(' | '))
+  check(free8 === 'Весь день | Датаист Live | Свободное', `«Свободное» — Датаист Live, ситуативно: первым в дне — «${free8}»`, `«Свободное» в месяце: «${free8}»`)
   await dc.waitForTimeout(400)
   await dc.screenshot({ path: `${SHOTS}/14-dataist-month.png` })
   await mGrid.locator('[data-date="2026-11-11"]').scrollIntoViewIfNeeded()
@@ -883,7 +892,12 @@ check(!(await phone.locator('.cp-side').count()), 'тап мимо закрыв�
   await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio', { name: 'Неделя' }).click()
   await dc.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
   const week = (await dc.locator('.cp-top').first().innerText()).match(/\d+–\d+ \S+ \d{4}/)?.[0]
-  check(week === '9–15 ноя 2026', `неделя — переключателем: ${week}`, `неделя: «${week}»`)
+  // ситуативное — сверху, строкой над часами, как «весь день» в Google Календаре; на шкале его нет
+  const tops = await dc.locator('.cp-tg__allday .cp-card--allday').allTextContents()
+  const corner = await dc.locator('.cp-tg__alllabel').textContent().catch(() => '')
+  const inBody = await dc.locator('.cp-tg__body .cp-card').filter({ hasText: 'Свободное' }).count()
+  await dc.screenshot({ path: `${SHOTS}/14-dataist-week.png` })
+  check(week === '9–15 ноя 2026' && tops.length >= 7 && tops.every((t) => t.includes('Свободное')) && corner === 'весь день' && !inBody, `неделя — переключателем (${week}): «Свободное» — сверху, строкой «весь день» над часами (${tops.length}), на шкале его нет`, `неделя: «${week}», сверху ${JSON.stringify(tops)}, подпись «${corner}», на шкале ${inBody}`)
   await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio', { name: 'Месяц' }).click()
   // из профиля — снова, «К началу плана» — к 8 ноября
   await dc.getByRole('button', { name: 'Профиль' }).click()

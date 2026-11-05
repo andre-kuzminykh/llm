@@ -513,6 +513,7 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-tg__allday { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 4px; }
 .cp-tg__allday .cp-card { height: 24px; }
 .cp-tg__allday .cp-rub { display: none; }
+.cp-tg__allday .cp-card--allday .cp-rub { display: inline-flex; } /* ситуативное — с рубрикой: «Свободное · Нужна тема» */
 .cp-tg__alllabel { position: absolute; right: 8px; bottom: 9px; font-size: var(--nr-fs-xs); color: var(--nr-text-3); font-variant-numeric: tabular-nums; }
 .cp-task__stream { color: var(--nr-text-2); font-weight: var(--nr-fw-medium); white-space: nowrap; }
 .cp-tg__day--rest { background: var(--cp-rest); }
@@ -1050,11 +1051,13 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-pills--flush { padding: 0; }
 
 /* формат в форме — значками: горизонталь, вертикаль, веб, пост */
-.cp-fmt { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; } /* пять форматов в ряд, веб — последним */
+/* формат и площадки — плитками одного размера: сетка в пять колонок, одна высота, значок и подпись одинаковые;
+   площадок больше пяти — следующей строкой, теми же плитками */
+.cp-fmt, .cp-plats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
 .cp-fmt .cp-fmt__opt { padding-left: 0; padding-right: 0; }
-.cp-fmt .cp-fmt__label { font-size: 10.5px; }
-/* на телефоне в ряд не влезают: три и два */
-@media (max-width: 480px) { .cp-fmt { grid-template-columns: repeat(3, minmax(0, 1fr)); } .cp-fmt .cp-fmt__label { font-size: var(--nr-fs-xs); } }
+.cp-fmt__opt, .cp-plat { height: 54px; justify-content: center; }
+.cp-fmt .cp-fmt__label, .cp-plat__label { font-size: 10.5px; }
+@media (max-width: 480px) { .cp-fmt .cp-fmt__label, .cp-plat__label { font-size: 9.5px; letter-spacing: -0.01em; } }
 .cp-fmt__opt {
   display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 6px 2px 4px; border: 1px solid var(--nr-sep);
   border-radius: var(--nr-r-sm); background: transparent; color: var(--nr-text-2); cursor: pointer;
@@ -1130,15 +1133,13 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 .cp-done { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; border-radius: 8px; cursor: pointer; font-size: var(--nr-fs-md); font-weight: var(--nr-fw-medium); color: var(--nr-text); }
 @media (hover: hover) { .cp-done:hover { background: var(--nr-fill-3); } }
 .cp-done input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.cp-plats { display: flex; gap: 3px; } /* площадки — одной строкой; плитка шире у длинного названия */
 .cp-plat {
-  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 7px 3px 5px; border: 1px solid var(--nr-sep);
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 7px 3px 5px; border: 1px solid var(--nr-sep);
   border-radius: var(--nr-r-sm); background: transparent; color: var(--nr-text-2); cursor: pointer;
   transition: background-color var(--nr-dur-1) var(--nr-ease), color var(--nr-dur-1) var(--nr-ease);
 }
 @media (hover: hover) { .cp-plat:hover { background: var(--nr-fill-3); color: var(--nr-text); } }
-.cp-plat__label { font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-@media (max-width: 480px) { .cp-plat__label { font-size: 9.5px; letter-spacing: -0.01em; } }
+.cp-plat__label { line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 /* выбранная площадка — заметно: цветом «выбрано», а не серым */
 /* повтор — рядом со временем; дни недели — строкой */
 .cp-repeat__pick { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--nr-fill-2); color: var(--nr-text-2); cursor: pointer; }

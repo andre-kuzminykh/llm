@@ -50,6 +50,7 @@ export interface Rule {
   types: Record<string, string> // что выходит на площадке: YouTube → «FULL», Instagram → «Reels»
   bank?: boolean // темы к формату копятся в банке
   stream?: boolean // поток: выходит по вебхуку круглосуточно, как только пришло (лента Neuronium); своего времени нет
+  allDay?: boolean // ситуативно: новые материалы формата — без часа, сверху дня, как событие «на весь день» в Google Календаре
 }
 
 export type Status = 'planned' | 'progress' | 'paused' | 'ready' | 'published'
@@ -72,6 +73,7 @@ export interface Item {
   origDate?: ISODate
   note?: string
   time?: string // своё время публикации; без него — время формата
+  allDay?: boolean // ситуативно — выйдет, когда будет повод: без часа, сверху дня (строкой над часами, как «весь день» в Google Календаре)
   end?: string // до скольки занимает шкалу времени (растянули нижний край); без него — час
   offGrid?: boolean // разовый, вне сетки: проверка его не трогает
   owner?: string // кто делает
@@ -309,4 +311,6 @@ export function emptyPlan(today: ISODate): Plan {
 export const DEFAULT_TIME = '12:00'
 /** Как подписан поток вместо времени: «24/7». */
 export const STREAM_TIME = '24/7'
+/** Подпись времени у ситуативного: без часа, сверху дня. */
+export const ALL_DAY = 'Весь день'
 export const timeOf = (it: Pick<Item, 'time'>, rule: Rule | undefined) => it.time ?? rule?.time ?? DEFAULT_TIME

@@ -28,12 +28,22 @@ export function moveItem(plan: Plan, id: string, date: ISODate, withGroup = true
   const it = plan.items.find((x) => x.id === id)
   if (!it) return plan
   const shift = time ? toMin(time) - toMin(timeOf(it, ruleOf(plan, it.ruleId))) : 0
-  if (it.date === date && !shift) return plan
+  // ситуативное поставили на час — у него теперь время, сверху дня его больше нет
+  const timed = !!time && !!it.allDay
+  if (it.date === date && !shift && !timed) return plan
   const together = withGroup && it.group && it.date ? (x: Item) => x.group === it.group && x.date === it.date : (x: Item) => x.id === id
   // конец, если карточку растягивали, едет вместе с началом — длительность та же
   const at = (x: Item) =>
     shift ? { time: fromMin(toMin(timeOf(x, ruleOf(plan, x.ruleId))) + shift), ...(x.end ? { end: endAt(toMin(x.end) + shift) } : {}) } : {}
-  return fitRange({ ...plan, items: plan.items.map((x) => (together(x) ? { ...x, date, ...at(x) } : x)) })
+  const place = (x: Item): Item => {
+    const out = { ...x, date, ...at(x) }
+    if (timed && x.allDay) {
+      delete out.allDay
+      out.time = out.time ?? time
+    }
+    return out
+  }
+  return fitRange({ ...plan, items: plan.items.map((x) => (together(x) ? place(x) : x)) })
 }
 
 /** Карточка материала с группой: группа того же дня, а без группы — сам материал. */

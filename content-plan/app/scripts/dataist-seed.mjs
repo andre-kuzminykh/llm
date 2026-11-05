@@ -28,6 +28,11 @@ const TYPES = {
 // цвета — как у каналов в календаре; белая Академия и чёрная Лаборатория — серыми, чтобы карточки читались в обеих темах
 const COLORS = { dataist: '#6e7179', live: '#dc3f43', lab: '#48484e', academy: '#a1a1a6', neuron: '#8f5cd3', landao: '#3e9e6b', antropolis: '#4aa5d8' }
 
+// правки владельца поверх календаря (05.11): «Свободное» — канал Датаист Live, выходит ситуативно — без часа, сверху дня
+const OWNER = { free: { channel: 'live', allDay: true } }
+const channelOf = (c) => c.channel ?? OWNER[c.theme]?.channel ?? null
+const allDayOf = (c) => !!OWNER[c.theme]?.allDay
+
 /** Код страницы до хранения правок — в песочнице; наружу — карточки, события, каналы, темы. */
 export function runCalendar(html) {
   const json = html.match(/<script id="sourceData" type="application\/json">([\s\S]*?)<\/script>/)?.[1]
@@ -67,8 +72,8 @@ export function buildPlan(cal) {
   // формат рубрики в канале = группа карточек календаря в этом канале
   const groups = new Map()
   for (const c of cal.cards) {
-    if (!c.channel) continue // «Свободное» — без канала: разовые, в сетку не входят
-    const key = `${c.channel}|${c.group}`
+    if (!channelOf(c)) continue // без канала — разовые, в сетку не входят
+    const key = `${channelOf(c)}|${c.group}`
     groups.set(key, [...(groups.get(key) ?? []), c])
   }
   const rules = []
@@ -90,13 +95,14 @@ export function buildPlan(cal) {
       platforms,
       days,
       dayNotes: ['', '', '', '', '', '', ''],
-      freq: freqOf(cards, days),
+      freq: allDayOf(cards[0]) ? 'ситуативно' : freqOf(cards, days),
       source: 'календарь Датаиста',
       full: false, // длинных видео в день бывает несколько — «один FULL в день» здесь не правило
       limit: Math.max(...perDay.values()),
       time: mode(cards.map((c) => c.time)),
       types: Object.fromEntries(Object.entries(TYPES[format]).filter(([p]) => platforms.includes(p))),
       stream: false,
+      ...(allDayOf(cards[0]) ? { allDay: true } : {}),
     }
     rules.push(rule)
     for (const c of cards) ruleOf.set(c.id, rule)
@@ -121,7 +127,7 @@ export function buildPlan(cal) {
     const it = {
       id: `dc-${c.id.replace('|', '-')}`,
       date: c.date,
-      channelId: c.channel ?? '',
+      channelId: channelOf(c) ?? '',
       ruleId: rule?.id ?? '',
       rubricId: c.theme,
       title,
@@ -131,7 +137,8 @@ export function buildPlan(cal) {
       source: 'календарь Датаиста',
       rank: 50,
     }
-    if (!rule || c.time !== rule.time) it.time = c.time
+    if (allDayOf(c)) it.allDay = true // ситуативно: без часа, сверху дня
+    else if (!rule || c.time !== rule.time) it.time = c.time
     if (!rule) it.offGrid = true // без канала — разовый, как созданный в форме
     if (note) it.note = note
     return it

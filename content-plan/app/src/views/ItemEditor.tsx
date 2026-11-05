@@ -18,6 +18,8 @@ import { CreateTabs } from './BankView'
 
 /** Канал, который заведётся при сохранении. */
 const NEW_CHANNEL = '__new'
+/** «Ситуативно» в поле «Повтор»: без регулярки и без часа — сверху дня. */
+const SITUATIONAL = 'situational'
 const VIDEO = new Set([FULL_VIDEO, SHORT_VIDEO])
 
 interface Props {
@@ -83,6 +85,8 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const [note, setNote] = useState(base.note ?? '')
   const [files, setFiles] = useState<Attachment[]>(() => filesOf(base))
   const [time, setTime] = useState(base.time ?? '')
+  // ситуативно — без часа, сверху дня (как «весь день» в Google Календаре); у нового — как у формата рубрики
+  const [allDay, setAllDay] = useState<boolean>(() => base.allDay ?? (!existing && !!rules.get(firstRule)?.allDay))
   const [touched, setTouched] = useState(false) // площадки выбрали руками — канал их запомнит
   // повтор рядом со временем: готовые варианты и «Другое…» — окно как в Google Календаре
   const [repeat, setRepeat] = useState<RepeatRule | null>(null)
@@ -291,7 +295,8 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
       files: files.length ? files : undefined,
       images: undefined,
       format,
-      time: time && time !== timeOf({}, ruleNow) ? time : undefined,
+      time: !allDay && time && time !== timeOf({}, ruleNow) ? time : undefined,
+      allDay: allDay || undefined,
       voice: (source || base.voice) && VIDEO.has(format) ? voice : undefined,
       // у материала флаг остаётся как был; новый на «чужой» день, с новым форматом или без сетки — разовый
       offGrid: (existing && !isBank && !free ? existing.offGrid : free ? !!day : offDay || (needRule && !!day)) || undefined,
@@ -325,6 +330,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
         note: patch.note,
         files: patch.files,
         time: patch.time,
+        allDay: patch.allDay,
         offGrid: patch.offGrid,
         voice: patch.voice,
         ref,
@@ -405,25 +411,39 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
               {rule?.stream ? (
                 <span className="cp-task__stream" title="Приходит по вебхуку и выходит сразу">24/7, по вебхуку</span>
               ) : (
-                <PickText type="time" label="Время выхода" value={time || timeOf({}, rule)} text={time || timeOf({}, rule)} onChange={setTime} />
+                // ситуативное — «весь день»; выбрали час — встаёт на шкалу
+                <PickText
+                  type="time"
+                  label="Время выхода"
+                  value={time || timeOf({}, rule)}
+                  text={allDay ? 'весь день' : time || timeOf({}, rule)}
+                  onChange={(t) => {
+                    setTime(t)
+                    setAllDay(false)
+                  }}
+                />
               )}
               {canRepeat && (
                 // повтор — плашкой со стрелками по кругу: каждый день, по будням, по неделям, раз в месяц или «Другое…»
-                <label className={`cp-repeat__pick${repeat ? ' cp-repeat__pick--on' : ''}`} title="Поставить на регулярку">
+                <label className={`cp-repeat__pick${repeat || allDay ? ' cp-repeat__pick--on' : ''}`} title="Поставить на регулярку или ситуативно — без часа, сверху дня">
                   <Icon name="repeat" size={15} />
                   <select
                     className="cp-repeat__sel"
                     aria-label="Повтор"
-                    value={presetNow}
+                    value={allDay ? SITUATIONAL : presetNow}
                     onChange={(e) => {
-                      const v = e.target.value as Preset | 'edit'
+                      const v = e.target.value as Preset | 'edit' | typeof SITUATIONAL
                       if (v === 'edit') return setRepeatOpen(true)
+                      // ситуативно: выйдет, когда будет повод, — без часа и без регулярки
+                      setAllDay(v === SITUATIONAL)
+                      if (v === SITUATIONAL) return setRepeat(null)
                       setRepeat(presetRule(v as Preset, date, v === 'week' || v === 'biweek' ? repeat?.days : undefined))
                     }}
                   >
-                    {PRESETS.filter((p) => p.id !== 'custom').map((p) => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
+                    {PRESETS.filter((p) => p.id !== 'custom').flatMap((p) => [
+                      <option key={p.id} value={p.id}>{p.label}</option>,
+                      ...(p.id === 'none' ? [<option key={SITUATIONAL} value={SITUATIONAL}>Ситуативно</option>] : []),
+                    ])}
                     {presetNow === 'custom' && <option value="custom">{repeatText(repeat, date)}</option>}
                     <option value="edit">Другое…</option>
                   </select>
@@ -526,7 +546,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
           <div className="cp-fmt" role="radiogroup" aria-label="Формат">
             {FORMATS.flatMap((g) => g.items).map((f) => (
               <button key={f} type="button" role="radio" aria-checked={format === f} aria-label={f} title={f} className="cp-fmt__opt" onClick={() => pickFormat(f)}>
-                <Icon name={FORMAT_ICON[f].icon} size={22} />
+                <Icon name={FORMAT_ICON[f].icon} size={20} />
                 <span className="cp-fmt__label">{FORMAT_ICON[f].label}</span>
               </button>
             ))}
@@ -610,7 +630,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
             <div className="cp-plats" role="group" aria-label="Площадки">
               {platformList.map((p) => (
                 <button key={p} type="button" className="cp-plat" aria-pressed={platforms.includes(p)} onClick={() => togglePlatform(p)} title={p}>
-                  <PlatformIcon platform={p} size={18} />
+                  <PlatformIcon platform={p} size={20} />
                   <span className="cp-plat__label">{p}</span>
                 </button>
               ))}

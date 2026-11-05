@@ -267,7 +267,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
         }}
         aria-pressed={picked || undefined}
         aria-label={`${label ? `${label}: ` : ''}${title}${showTime ? `, ${timeText(unit)}` : ''}${st.icon ? ` — ${st.label.toLowerCase()}` : ''}${picked ? ', выбрано' : ''}`}
-        title={variant === 'full' || post ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
+        title={variant === 'full' || post ? undefined : `${label} · ${unit.stream ? 'круглосуточно, по вебхуку' : unit.allDay ? 'ситуативно, весь день' : unit.time}\n${title}\n${platLabel}${bad ? '\nНарушение сетки — см. «Проверку»' : ''}`}
       >
         {post ? (
           <>
@@ -305,7 +305,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
               {format && variant !== 'mini' && <span className="cp-card__fmt">{format}</span>}
               {bad && <span className="cp-card__bad" aria-hidden="true" />}
               {head.trigger && <span className="cp-auto" title="Версия для другой площадки: создаётся автоматически, когда выйдет оригинал"><Icon name="bolt" size={11} /></span>}
-              {showTime && <span className="cp-card__time" title={unit.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : undefined}>{time}</span>}
+              {showTime && <span className="cp-card__time" title={unit.stream ? 'Круглосуточно: приходит по вебхуку и выходит сразу' : unit.allDay ? 'Ситуативно: без часа, сверху дня' : undefined}>{time}</span>}
             </span>
             <span className="cp-card__title">{title}</span>
           </>

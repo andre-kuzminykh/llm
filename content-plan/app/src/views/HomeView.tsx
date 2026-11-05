@@ -304,7 +304,7 @@ function PlanPost({ unit }: { unit: Unit }) {
         <div className="cp-post__who">
           <b>{c?.name ?? 'Без канала'}</b>
           <span className="cp-muted">
-            {published ? 'Вышло' : 'Ожидается'} · {dayTitle(unit.date!)}, {unit.stream ? '24/7' : timeOf(unit.head, rules.get(unit.head.ruleId))}
+            {published ? 'Вышло' : 'Ожидается'} · {dayTitle(unit.date!)}, {unit.stream ? '24/7' : unit.allDay ? 'весь день' : timeOf(unit.head, rules.get(unit.head.ruleId))}
           </span>
         </div>
         <span className="cp-an__badge">из календаря</span>

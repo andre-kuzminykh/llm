@@ -376,6 +376,33 @@ describe('T-CP-054 FR-CP-054 языков в форме нет: контент �
   })
 })
 
+describe('T-CP-073 FR-CP-073 «Ситуативно» — без часа, сверху дня, как «весь день» в Google Календаре', () => {
+  it('в «Повторе» — «Ситуативно»: время — «весь день», карточка — строкой над часами, первой в дне; выбрали час — встаёт на шкалу', async () => {
+    renderApp()
+    await screen.findByRole('grid', { name: 'Неделя по времени' })
+    await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
+    let form = screen.getByRole('complementary', { name: 'Новый контент' })
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'Реакция на новость')
+    const sel = within(form).getByRole('combobox', { name: 'Повтор' })
+    await userEvent.selectOptions(sel, 'Ситуативно')
+    expect(sel).toHaveDisplayValue('Ситуативно')
+    expect(within(form).getByText('весь день')).toBeInTheDocument()
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
+    const onTop = () => screen.queryAllByRole('button', { name: /Реакция на новость/ }).filter((b) => b.classList.contains('cp-card__open') && b.closest('.cp-tg__allday'))
+    expect(onTop()).toHaveLength(1)
+    expect(document.querySelector('.cp-tg__body')?.textContent).not.toContain('Реакция на новость')
+    expect(screen.getAllByText('весь день').length).toBeGreaterThan(0) // подпись строки над часами
+    // открыли — «Ситуативно» стоит; выбрали час — карточка на шкале, сверху её нет
+    await userEvent.click(onTop()[0])
+    form = screen.getByRole('complementary', { name: 'Материал' })
+    expect(within(form).getByRole('combobox', { name: 'Повтор' })).toHaveDisplayValue('Ситуативно')
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Повтор' }), 'Не повторять')
+    await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
+    expect(onTop()).toHaveLength(0)
+    expect(document.querySelector('.cp-tg__body')?.textContent).toContain('Реакция на новость')
+  })
+})
+
 describe('T-CP-055 FR-CP-055 повтор рядом со временем', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -391,7 +418,7 @@ describe('T-CP-055 FR-CP-055 повтор рядом со временем', () 
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
     expect(within(form).getByLabelText('Дата')).toHaveValue('2026-10-28')
     const sel = within(form).getByRole('combobox', { name: 'Повтор' })
-    expect([...(sel as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Не повторять', 'Каждый день', 'По будням', 'Каждую неделю', 'Через неделю', 'Раз в месяц', 'Другое…'])
+    expect([...(sel as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Не повторять', 'Ситуативно', 'Каждый день', 'По будням', 'Каждую неделю', 'Через неделю', 'Раз в месяц', 'Другое…'])
     expect(within(form).queryByRole('group', { name: 'Дни недели' })).toBeNull()
     await userEvent.selectOptions(sel, 'Каждую неделю')
     const days = within(form).getByRole('group', { name: 'Дни недели' })

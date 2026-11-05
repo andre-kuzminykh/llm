@@ -36,7 +36,9 @@ describe('T-CP-071 FR-CP-071 план Датаиста — календарь с
     expect(seed.items).toHaveLength(cal.cards.length)
     for (const c of cal.cards) {
       const it = byId.get(`dc-${c.id.replace('|', '-')}`)
-      expect([it.date, timeOf(it), it.channelId, it.rubricId, it.format]).toEqual([c.date, c.time, c.channel ?? '', c.theme, FORMAT[c.format]])
+      // правка владельца: «Свободное» — в Датаист Live и ситуативно (без часа); остальное — как в календаре
+      const free = c.theme === 'free'
+      expect([it.date, free ? !!it.allDay : timeOf(it), it.channelId, it.rubricId, it.format]).toEqual([c.date, free ? true : c.time, c.channel ?? 'live', c.theme, FORMAT[c.format]])
       expect(it.title).toBe([c.title, c.context].filter(Boolean).join(' · ') || '…')
       expect(it.platforms.length).toBeGreaterThan(0)
     }
@@ -47,14 +49,17 @@ describe('T-CP-071 FR-CP-071 план Датаиста — календарь с
     const line = (it) => `${timeOf(it)} ${it.channelId || '—'} ${rules.get(it.ruleId)?.name ?? ''}: ${it.title}`
     const lines = day.map(line)
     expect(lines).toContain('09:00 live Новость дня: …')
-    expect(lines).toContain('11:00 — : …')
+    expect(lines).not.toContain('11:00 — : …')
     expect(lines).toContain('12:00 neuron Короткое демо: Knowledge Management · 100 ИИ-сотрудников за 100 дней · 1/100')
     expect(lines).toContain('16:00 academy Видео 1: ИИ инженер по автоматизации · Лекция 4 из 8')
     expect(lines).toContain('16:45 academy Видео 4: ИИ инженер по автоматизации · Лекция 4 из 8')
     expect(lines).toContain('20:10 live Короткое видео: Моя история')
     expect(day.find((it) => it.channelId === 'neuron').note).toBe('Короткое демо · Management')
-    const free = day.find((it) => !it.channelId)
-    expect([free.rubricId, free.ruleId, free.offGrid]).toEqual(['free', '', true])
+    // «Свободное» — Датаист Live, ситуативно: без часа и вне «чужих» правил
+    const free = day.find((it) => it.rubricId === 'free')
+    expect([free.channelId, free.ruleId, free.allDay, free.time, free.offGrid]).toEqual(['live', 'dc-short-free-live', true, undefined, undefined])
+    expect(rules.get('dc-short-free-live')).toMatchObject({ allDay: true, freq: 'ситуативно', channel: 'Датаист Live' })
+    expect(day.filter((it) => !it.channelId)).toHaveLength(0)
     // карточки дня: четыре видео Академии — четыре карточки (и лекция целиком в 19:00); короткое и пост лайфстайла с одной темой — одна
     const units = unitsOf(day, rules)
     expect(units.filter((u) => u.channelId === 'academy').map((u) => u.time)).toEqual(['16:00', '16:15', '16:30', '16:45', '19:00'])
@@ -64,6 +69,8 @@ describe('T-CP-071 FR-CP-071 план Датаиста — календарь с
       '20:20 Короткое вертикальное видео + Текст с картинкой',
     ])
     expect(units).toHaveLength(15)
+    // ситуативное — сверху дня, первым
+    expect([units[0].head.rubricId, units[0].allDay]).toEqual(['free', true])
   })
 
   it('среда 11 ноября: обзор Лаборатории за октябрь — коротким и длинным, с подробностями в заметке', () => {

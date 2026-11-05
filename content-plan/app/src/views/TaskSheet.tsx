@@ -32,7 +32,7 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
   const order = plan.channels.map((c) => c.id)
   const unit: Unit =
     (head.date ? unitsOf(byDate.get(head.date) ?? [], rules, order).find((u) => u.items.some((it) => it.id === id)) : undefined) ??
-    { key: head.id, head, items: [head], channelId: head.channelId, date: head.date, time: timeOf(head, rules.get(head.ruleId)), stream: !!rules.get(head.ruleId)?.stream }
+    { key: head.id, head, items: [head], channelId: head.channelId, date: head.date, time: timeOf(head, rules.get(head.ruleId)), stream: !!rules.get(head.ruleId)?.stream, allDay: !!head.allDay }
   const rule = rules.get(head.ruleId)
   const rubric = rubrics.get(head.rubricId ?? '')
   const channel = channels.get(unit.channelId)
@@ -115,7 +115,8 @@ export function TaskSheet({ id, onClose, onBack }: { id: string; onClose: () => 
               {unit.stream ? (
                 <span className="cp-task__stream" title="Приходит по вебхуку и выходит сразу">24/7, по вебхуку</span>
               ) : (
-                <PickText type="time" label="Время выхода" value={unit.time} text={unit.time} onChange={(t) => t && head.date && dispatch({ type: 'move', id: head.id, date: head.date, time: t })} />
+                // ситуативное — «весь день»: выбрали час — встаёт на шкалу
+                <PickText type="time" label="Время выхода" value={unit.time} text={unit.allDay ? 'весь день' : unit.time} onChange={(t) => t && head.date && dispatch({ type: 'move', id: head.id, date: head.date, time: t })} />
               )}
             </>
           )}
