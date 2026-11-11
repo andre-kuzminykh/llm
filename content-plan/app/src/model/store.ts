@@ -145,7 +145,20 @@ export function updateItem(plan: Plan, id: string, patch: Partial<Item>): Plan {
 
 /** Правка из формы: поля, затем дата (с группой или без) — одним шагом истории. */
 export function editItem(plan: Plan, id: string, patch: Partial<Item>, date?: ISODate, withGroup = true): Plan {
-  const next = updateItem(plan, id, patch)
+  let next = updateItem(plan, id, patch)
+  // стал ситуативным или получил час — анонсы его группы туда же: выходят вместе с ним
+  const it = plan.items.find((x) => x.id === id)
+  if (withGroup && it?.group && it.date && 'allDay' in patch && !!patch.allDay !== !!it.allDay) {
+    next = {
+      ...next,
+      items: next.items.map((x) => {
+        if (x.id === id || x.group !== it.group || x.date !== it.date) return x
+        if (patch.allDay) return { ...x, allDay: true, time: undefined }
+        const { allDay: _a, ...rest } = x
+        return rest
+      }),
+    }
+  }
   return date ? moveItem(next, id, date, withGroup) : fitRange(next)
 }
 
@@ -176,7 +189,8 @@ export function createItem(plan: Plan, item: Item, withFamily = true): Plan {
   const head = { ...item, group }
   const copies = family
     .filter((x) => x.ruleId !== item.ruleId || x.derive)
-    .map((x) => ({ ...x, id: newId(), date: item.date, group, status: item.status, source: item.source, origDate: undefined, note: undefined, owner: undefined, due: undefined, done: undefined, offGrid: item.offGrid }))
+    // ситуативный материал — и его анонсы ситуативные: выходят вместе с ним, без своего часа
+    .map((x) => ({ ...x, id: newId(), date: item.date, group, status: item.status, source: item.source, origDate: undefined, note: undefined, owner: undefined, due: undefined, done: undefined, offGrid: item.offGrid, ...(item.allDay ? { allDay: true, time: undefined } : { allDay: undefined }) }))
   return fitRange({ ...plan, items: rederive([...plan.items, head, ...copies], head) })
 }
 

@@ -7,7 +7,9 @@ import vm from 'node:vm'
 
 const SRC = new URL('../../source/dataist-calendar.html', import.meta.url)
 const OUT = new URL('../public/seed.json', import.meta.url)
-export const EXAMPLE = 'dataist-calendar'
+// метка плана: меняется, когда меняется сам план (11.11 — с 15 ноября, Ландао и Антрополис раз в неделю, Нейроний по будням);
+// сохранённый в браузере план со старой меткой программа сменит на новый — «Отменить» вернёт
+export const EXAMPLE = 'dataist-calendar-2'
 
 // форматы и площадки — как в src/model/types.ts
 const FULL_VIDEO = 'Полное горизонтальное видео'
@@ -28,8 +30,18 @@ const TYPES = {
 // цвета — как у каналов в календаре; белая Академия и чёрная Лаборатория — серыми, чтобы карточки читались в обеих темах
 const COLORS = { dataist: '#6e7179', live: '#dc3f43', lab: '#48484e', academy: '#a1a1a6', neuron: '#8f5cd3', landao: '#3e9e6b', antropolis: '#4aa5d8' }
 
-// правки владельца поверх календаря (05.11): «Свободное» — канал Датаист Live, выходит ситуативно — без часа, сверху дня
+// правки владельца поверх календаря:
+// 05.11 — «Свободное» — канал Датаист Live, выходит ситуативно — без часа, сверху дня;
+// 11.11 — всё начинается с 15 ноября (год — по 14 ноября 2027); Нейроний — 5 раз в неделю, Пн–Пт: «100 продуктов» (те 100 демо
+//         по 10 на отдел), дальше «Стартап» и «Мозги для роботов» тем же ритмом; в Датаисте раз в неделю: Сб — Ландао (метаверс
+//         и прочее), Вс — Антрополис — вместо пустого «Тематического», коротким в 13:00 и длинным в 19:00, как темы Датаиста
 const OWNER = { free: { channel: 'live', allDay: true } }
+const PERIOD = { from: 'START=date(2026,10,8),END=date(2027,10,7)', to: 'START=date(2026,10,15),END=date(2027,10,14)' }
+const PRODUCTS = { from: '100 ИИ-сотрудников за 100 дней', to: '100 продуктов' }
+const WEEKLY = [
+  { wd: 6, theme: 'week-landao', name: 'Ландао', what: 'Метаверс, AR/VR, метахьюман и прочее — раз в неделю, по субботам' },
+  { wd: 0, theme: 'week-antropolis', name: 'Антрополис', what: 'Раз в неделю, по воскресеньям' },
+]
 const channelOf = (c) => c.channel ?? OWNER[c.theme]?.channel ?? null
 const allDayOf = (c) => !!OWNER[c.theme]?.allDay
 
@@ -40,9 +52,53 @@ export function runCalendar(html) {
   const cut = code?.indexOf('const STORE_KEY=') ?? -1
   if (!json || !code || cut < 0) throw new Error('Не нашёл в странице данные и код календаря')
   const ctx = vm.createContext({ document: { querySelector: (s) => (s === '#sourceData' ? { textContent: json } : null) } })
-  vm.runInContext(`${code.slice(0, cut)}\n;globalThis.out={cards:BASE_CARDS,events:EVENTS,channels:CHANNELS,themes:THEME_DEFS,start:iso(START),end:iso(END),channelStart:CHANNEL_START};`, ctx)
+  // всё начинается с 15 ноября: и ряды календаря (первый лайфстайл, первый кейс, лекции Академии) — с этого дня
+  const head = code.slice(0, cut)
+  if (!head.includes(PERIOD.from)) throw new Error('В коде календаря не нашёл начало и конец плана')
+  // Нейроний — выпуски по порядку: n-й выпуск, а не n-й день (выходит только по будням)
+  vm.runInContext(`${head.replace(PERIOD.from, PERIOD.to)}\n;globalThis.out={cards:BASE_CARDS,events:EVENTS,channels:CHANNELS,themes:THEME_DEFS,start:iso(START),end:iso(END),channelStart:CHANNEL_START,neuron:Array.from({length:400},(_,i)=>neuronPlans(i))};`, ctx)
   return JSON.parse(JSON.stringify(ctx.out))
 }
+
+const day = (d) => new Date(`${d}T12:00:00Z`).getUTCDay() // Вс = 0
+const clock = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+
+/** Карточки календаря с правками владельца: Нейроний по будням («100 продуктов»), в Датаисте Сб — Ландао, Вс — Антрополис. */
+export function ownerCards(cal) {
+  const out = []
+  let n = 0 // выпуск Нейрония
+  for (const c of cal.cards) {
+    if (c.channel === 'neuron') {
+      if (day(c.date) === 0 || day(c.date) === 6) continue
+      const e = cal.neuron[n++][0] // neuronPlans — список из одного выпуска
+      out.push({
+        ...c,
+        title: e.title,
+        rubric: e.rubric,
+        context: (e.freq || '').replace(PRODUCTS.from, PRODUCTS.to),
+        group: e.employeeDay ? 'short:employee-demo' : 'short:demo',
+        meta: { employeeDay: e.employeeDay || null, challenge: e.challenge ?? null, challengeDay: e.challengeDay || null },
+      })
+      continue
+    }
+    const w = WEEKLY.find((x) => x.wd === day(c.date))
+    if (w && c.id === `${c.date}|thematic-empty`) continue // день занят темой недели
+    out.push(c)
+  }
+  // темы недели в Датаисте: коротким в 13:00 (после других тем дня), длинным в 19:00 (после других длинных)
+  const dates = [...new Set(cal.cards.map((c) => c.date))]
+  for (const date of dates) {
+    const w = WEEKLY.find((x) => x.wd === day(date))
+    if (!w) continue
+    const shorts = cal.cards.filter((c) => c.date === date && /\|thematic-\d+$/.test(c.id)).length
+    const longs = cal.cards.filter((c) => c.date === date && c.format === 'long').length
+    const base = { date, channel: 'dataist', theme: w.theme, title: '', rubric: w.name, context: '', languages: ['RU', 'EN'], meta: {} }
+    out.push({ ...base, id: `${date}|${w.theme}`, time: clock(13, shorts * 15), format: 'short', platforms: ['youtube', 'tiktok', 'instagram', 'shorts'], group: `short:${w.theme}` })
+    out.push({ ...base, id: `${date}|${w.theme}-long`, time: clock(19, longs * 20), format: 'long', platforms: ['youtube'], group: `long:${w.theme}` })
+  }
+  return out
+}
+const ownerThemes = (cal) => [...cal.themes, ...WEEKLY.map((w) => ({ id: w.theme, name: w.name }))]
 
 const weekday = (d) => (new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7 // Пн = 0
 const mode = (xs) => [...xs.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map())].sort((a, b) => b[1] - a[1])[0][0]
@@ -67,45 +123,47 @@ function freqOf(cards, days) {
 }
 
 export function buildPlan(cal) {
-  const themes = new Map(cal.themes.map((t) => [t.id, t.name]))
+  const cards = ownerCards(cal)
+  const themeList = ownerThemes(cal)
+  const themes = new Map(themeList.map((t) => [t.id, t.name]))
   const channelName = new Map(cal.channels.map((c) => [c.id, c.name]))
   // формат рубрики в канале = группа карточек календаря в этом канале
   const groups = new Map()
-  for (const c of cal.cards) {
+  for (const c of cards) {
     if (!channelOf(c)) continue // без канала — разовые, в сетку не входят
     const key = `${channelOf(c)}|${c.group}`
     groups.set(key, [...(groups.get(key) ?? []), c])
   }
   const rules = []
   const ruleOf = new Map()
-  for (const [key, cards] of groups) {
+  for (const [key, list] of groups) {
     const [channel, group] = key.split('|')
-    const format = FORMAT[cards[0].format]
-    const days = [0, 1, 2, 3, 4, 5, 6].map((wd) => cards.some((c) => weekday(c.date) === wd))
-    const perDay = cards.reduce((m, c) => m.set(c.date, (m.get(c.date) ?? 0) + 1), new Map())
-    const platforms = PLATFORMS.filter((p) => cards[0].platforms.some((x) => PLATFORM[x] === p))
+    const format = FORMAT[list[0].format]
+    const days = [0, 1, 2, 3, 4, 5, 6].map((wd) => list.some((c) => weekday(c.date) === wd))
+    const perDay = list.reduce((m, c) => m.set(c.date, (m.get(c.date) ?? 0) + 1), new Map())
+    const platforms = PLATFORMS.filter((p) => list[0].platforms.some((x) => PLATFORM[x] === p))
     const rule = {
       id: `dc-${group.replace(/[^a-z0-9-]/gi, '-')}-${channel}`,
-      rubricId: cards[0].theme,
-      name: ruleName(cards, themes.get(cards[0].theme), format),
+      rubricId: list[0].theme,
+      name: ruleName(list, themes.get(list[0].theme), format),
       channelId: channel,
       channel: channelName.get(channel),
-      what: '',
+      what: WEEKLY.find((w) => w.theme === list[0].theme)?.what ?? '',
       format,
       platforms,
       days,
       dayNotes: ['', '', '', '', '', '', ''],
-      freq: allDayOf(cards[0]) ? 'ситуативно' : freqOf(cards, days),
+      freq: allDayOf(list[0]) ? 'ситуативно' : freqOf(list, days),
       source: 'календарь Датаиста',
       full: false, // длинных видео в день бывает несколько — «один FULL в день» здесь не правило
       limit: Math.max(...perDay.values()),
-      time: mode(cards.map((c) => c.time)),
+      time: mode(list.map((c) => c.time)),
       types: Object.fromEntries(Object.entries(TYPES[format]).filter(([p]) => platforms.includes(p))),
       stream: false,
-      ...(allDayOf(cards[0]) ? { allDay: true } : {}),
+      ...(allDayOf(list[0]) ? { allDay: true } : {}),
     }
     rules.push(rule)
-    for (const c of cards) ruleOf.set(c.id, rule)
+    for (const c of list) ruleOf.set(c.id, rule)
   }
   // события дня — подробности к тематическим и длинным: «Технология: … Связанный кейс: … Авторская мысль: …»
   const events = new Map()
@@ -118,7 +176,7 @@ export function buildPlan(cal) {
     if (lg) return special[+lg[1]]?.details ?? ''
     return ''
   }
-  const items = cal.cards.map((c) => {
+  const items = cards.map((c) => {
     const rule = ruleOf.get(c.id)
     const format = FORMAT[c.format]
     const title = [c.title, c.context].filter(Boolean).join(' · ') || '…'
@@ -159,7 +217,7 @@ export function buildPlan(cal) {
     platforms: PLATFORMS.filter((p) => rules.some((r) => r.channelId === c.id && r.platforms.includes(p))),
     sections: [],
   }))
-  const rubrics = cal.themes.filter((t) => cal.cards.some((c) => c.theme === t.id)).map((t) => ({ id: t.id, name: t.name, what: '' }))
+  const rubrics = themeList.filter((t) => cards.some((c) => c.theme === t.id)).map((t) => ({ id: t.id, name: t.name, what: WEEKLY.find((w) => w.theme === t.id)?.what ?? '' }))
   return { version: 3, example: EXAMPLE, start: cal.start, end: cal.end, platforms: PLATFORMS, channels, rubrics, rules, items }
 }
 

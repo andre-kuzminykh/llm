@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { addDays, dateText, fromMin, shortDate, toMin, today, weekday } from './model/dates'
 import { indexByDate, visible, type Filters } from './model/filters'
 import { moveHint, whereText } from './model/hint'
-import { calendarCSV, download, exportJSON, isBlankPlan, isOldExample, isV1, parsePlan, upgradePlan, webAndMail, type AnyPlan } from './model/io'
+import { calendarCSV, download, exportJSON, isBlankPlan, isOldExample, isStaleDataist, isV1, parsePlan, upgradePlan, webAndMail, type AnyPlan } from './model/io'
 import { checkPlan, type Violation } from './model/rules'
 import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
@@ -160,7 +160,10 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
         // сохранён старый пример или пустой план — их сменил план Датаиста (календарь на год); соцсети и конкуренты — те же;
         // «Отменить» вернёт прежний
         const old = !!stored && isOldExample(plan)
-        const got = stored && (old || isBlankPlan(plan)) ? await seed() : null
+        // план Датаиста прежней версии — сменился: с 15 ноября, Ландао и Антрополис раз в неделю, Нейроний по будням
+        const stale = !!stored && isStaleDataist(plan)
+        const loaded = stored && (old || stale || isBlankPlan(plan)) ? await seed() : null
+        const got = loaded && !(stale && loaded.example === plan.example) ? loaded : null // сервер отдал тот же старый — менять не на что
         const fresh = got && plan.analytics ? { ...got, analytics: plan.analytics } : got
         if (!alive) return
         dispatch({ type: 'init', plan })
@@ -171,7 +174,7 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
         if (fresh) {
           dispatch({ type: 'replace', plan: fresh })
           if (st.persistent) st.save(fresh).catch(() => {})
-          setNotice({ msg: `Загружен план Датаиста: ${fresh.channels.length} каналов, с ${dateText(fresh.start, today())}${old ? ' — прежний пример заменён' : ''}`, start: fresh.start })
+          setNotice({ msg: `${stale ? 'Обновлён' : 'Загружен'} план Датаиста: ${fresh.channels.length} каналов, с ${dateText(fresh.start, today())}${old ? ' — прежний пример заменён' : ''}`, start: fresh.start })
         }
         setSaved(st.persistent ? 'idle' : 'memory')
       } catch (e) {
@@ -227,7 +230,10 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
 /** С какого дня открыть календарь плана: сегодня, если план уже идёт; иначе — его начало, а если оно в выходные —
  *  следующая неделя целиком (8 ноября — воскресенье: открываем 9-го). */
 function openAt(p: Plan, now: ISODate): ISODate {
-  if (now >= p.start && now <= p.end) return now
+  return now >= p.start && now <= p.end ? now : firstWeek(p)
+}
+/** Первая неделя плана целиком: начало в выходные (15 ноября — воскресенье) — со следующего понедельника. */
+function firstWeek(p: Plan): ISODate {
   const wd = weekday(p.start)
   return wd >= 5 ? addDays(p.start, 7 - wd) : p.start
 }
@@ -365,7 +371,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
   // план заменили при открытии — сказать об этом: «К началу плана» и «Отменить»
   useEffect(() => {
     if (!notice) return
-    const start = { label: 'К началу плана', run: () => (setSection('calendar'), jumpTo(openAt(plan, notice.start))) }
+    const start = { label: 'К началу плана', run: () => (setSection('calendar'), jumpTo(firstWeek(plan))) }
     const back = notice.back
     if (back) toast(notice.msg, { actions: [start, { label: 'Вернуть прежний', run: () => dispatch({ type: 'replace', plan: back }) }] })
     else toast(notice.msg, { undo: true, actions: [start] })
@@ -739,7 +745,7 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPerio
           try {
             const seed = await fetchSeed(seedUrl)
             dispatch({ type: 'replace', plan: seed })
-            toast(`Загружен план Датаиста — с ${dateText(seed.start, today())}`, { undo: true, actions: [{ label: 'К началу плана', run: () => onStart(openAt(seed, seed.start)) }] })
+            toast(`Загружен план Датаиста — с ${dateText(seed.start, today())}`, { undo: true, actions: [{ label: 'К началу плана', run: () => onStart(firstWeek(seed)) }] })
           } catch (err) {
             toast(err instanceof Error ? err.message : 'Не удалось загрузить план')
           }

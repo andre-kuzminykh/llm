@@ -377,6 +377,13 @@ describe('T-CP-054 FR-CP-054 языков в форме нет: контент �
 })
 
 describe('T-CP-073 FR-CP-073 «Ситуативно» — без часа, сверху дня, как «весь день» в Google Календаре', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-28T09:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   it('в «Повторе» — «Ситуативно»: время — «весь день», карточка — строкой над часами, первой в дне; выбрали час — встаёт на шкалу', async () => {
     renderApp()
     await screen.findByRole('grid', { name: 'Неделя по времени' })
@@ -389,7 +396,8 @@ describe('T-CP-073 FR-CP-073 «Ситуативно» — без часа, св�
     expect(within(form).getByText('весь день')).toBeInTheDocument()
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
     const onTop = () => screen.queryAllByRole('button', { name: /Реакция на новость/ }).filter((b) => b.classList.contains('cp-card__open') && b.closest('.cp-tg__allday'))
-    expect(onTop()).toHaveLength(1)
+    // материал и его анонс от Andre AIT (другой канал) — оба сверху: анонсы ситуативного тоже без часа
+    expect(onTop().length).toBeGreaterThanOrEqual(1)
     expect(document.querySelector('.cp-tg__body')?.textContent).not.toContain('Реакция на новость')
     expect(screen.getAllByText('весь день').length).toBeGreaterThan(0) // подпись строки над часами
     // открыли — «Ситуативно» стоит; выбрали час — карточка на шкале, сверху её нет

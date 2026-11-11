@@ -1,6 +1,6 @@
 // Выгрузка и загрузка: JSON целиком и CSV-календарь в формате out/4_calendar.csv.
 import { addDays, MONTHS, WEEKDAYS, weekday } from './dates'
-import { formatOf, GRAY, isFormat, lineOf, MAIL, OLD_MAIL, PLACEHOLDER, TEXT_IMAGE, timeOf, WEB_PAGE, type Channel, type ISODate, type Item, type Plan, type Rule } from './types'
+import { DATAIST_EXAMPLE, formatOf, GRAY, isFormat, lineOf, MAIL, OLD_MAIL, PLACEHOLDER, TEXT_IMAGE, timeOf, WEB_PAGE, type Channel, type ISODate, type Item, type Plan, type Rule } from './types'
 
 export const exportJSON = (plan: Plan) => JSON.stringify(plan)
 
@@ -137,6 +137,8 @@ export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
 /** Любая версия → текущая. Для старых нужен новый исходный план: из него берутся новые поля правил. */
 /** Старый пример (план Andre AIT из ../build.py) — его меняет план Датаиста: метки примера у старого нет, формат FULL Демо — есть. */
 export const isOldExample = (p: Plan) => !p.example && p.rules.some((r) => r.id === 'f_demo')
+/** План Датаиста прежней версии (метка старше текущей): его сменит новый — с 15 ноября, Ландао и Антрополис раз в неделю… */
+export const isStaleDataist = (p: Plan) => !!p.example?.startsWith('dataist-calendar') && p.example !== DATAIST_EXAMPLE
 /** Пустой план, сохранённый до плана Датаиста: ни каналов, ни материалов; очищенный руками («Очистить всё») помечен и не считается. */
 export const isBlankPlan = (p: Plan) => !p.example && !p.items.length && !p.channels.length
 
