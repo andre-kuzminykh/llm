@@ -1,6 +1,7 @@
 // Все изменения плана — чистые функции Plan → Plan; reducer добавляет к ним историю
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
 import { addDays, daysBetween, fromMin, toMin, weekday } from './dates'
+import { scheduleRule, unscheduleRule } from './schedule'
 import { FORMAT_HOME, FORMAT_PLATFORMS, isSlot, PLACEHOLDER, rubricKey, rubricName, TEXT_IMAGE, timeOf, type Analytics, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
@@ -499,6 +500,8 @@ export type Action =
   | { type: 'fillSlots'; ruleId: string; from: ISODate }
   | { type: 'createSlots'; ruleId: string; from: ISODate; to: ISODate }
   | { type: 'rule'; id: string; patch: Partial<Rule> }
+  | { type: 'scheduleRule'; rule: Rule; today: ISODate } // поставить или поправить рубрику в расписании (schedule.ts)
+  | { type: 'unscheduleRule'; id: string; today: ISODate }
   | { type: 'addRule'; rubricId: string | null; channelId: string; name: string; id?: string; days?: boolean[]; sectionId?: string; format?: string }
   | { type: 'rubric'; id: string; patch: Partial<Rubric> }
   | { type: 'addRubric'; name: string; what?: string; id?: string }
@@ -542,6 +545,8 @@ function apply(plan: Plan, a: Action): Plan {
     case 'fillSlots': return fillSlots(plan, a.ruleId, a.from)
     case 'createSlots': return createSlots(plan, a.ruleId, a.from, a.to)
     case 'rule': return updateRule(plan, a.id, a.patch)
+    case 'scheduleRule': return scheduleRule(plan, a.rule, a.today)
+    case 'unscheduleRule': return unscheduleRule(plan, a.id, a.today)
     case 'addRule': return addRule(plan, a.rubricId, a.channelId, a.name, a.id, a.days, a.sectionId, a.format)
     case 'rubric': return updateRubric(plan, a.id, a.patch)
     case 'addRubric': return addRubric(plan, a.name, a.what, a.id)

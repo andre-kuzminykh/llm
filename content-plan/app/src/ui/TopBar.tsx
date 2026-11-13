@@ -56,6 +56,11 @@ export function TopBar({ title, children }: { title: ReactNode; children?: React
           {SAVED[saved]}
         </span>
       )}
+      {/* расписание рубрик — рядом с «Неделя / Месяц»: как таблица, по каналам и категориям */}
+      <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-top__sched" onClick={ctx.openSchedule} title="Расписание: рубрики по каналам и категориям, дни и время" aria-label="Расписание">
+        <Icon name="repeat" size={16} />
+        {!phone && <span>Расписание</span>}
+      </button>
       {!phone && <SpanSwitch />}
       </div>
     </header>

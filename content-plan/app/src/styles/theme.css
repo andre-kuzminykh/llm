@@ -1524,3 +1524,43 @@ th[aria-sort='descending'] .cp-ov__sort { color: var(--nr-text); }
 .cp-ov:not(.cp-ov--open) .cp-kpi[aria-pressed='true'] .cp-kpi__delta--down { color: var(--nr-danger); }
 .cp-ov:not(.cp-ov--open) .cp-kpi__box { display: none; }
 .cp-ov:not(.cp-ov--open) .cp-kpi__label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--k); flex: none; }
+
+/* расписание — панелью справа: канал → категория → строки «время · рубрика · когда»; правка строки — на месте */
+.cp-sheet--wide { width: min(560px, 100%); }
+.cp-top__sched { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; white-space: nowrap; }
+.cp-sch { display: grid; gap: 10px; padding: 4px 0 14px; border-bottom: 1px solid var(--nr-sep-soft); }
+.cp-sch__ch { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: var(--nr-fs-base); font-weight: var(--nr-fw-semibold); }
+.cp-sch__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cp-c, var(--nr-text-3)); flex: none; }
+.cp-sch__cat { display: grid; gap: 4px; }
+.cp-sch__cathead { font-size: 11.5px; font-weight: var(--nr-fw-medium); color: var(--nr-text-3); }
+.cp-sch__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cp-sch__line {
+  display: grid; grid-template-columns: 46px minmax(0, 1fr) auto 16px; align-items: center; gap: 10px; width: 100%; min-height: 34px;
+  padding: 4px 8px; border: 0; border-radius: var(--nr-r-sm); background: var(--nr-fill-3); color: var(--nr-text); text-align: left; cursor: pointer; font: inherit;
+}
+@media (hover: hover) { .cp-sch__line:hover { background: var(--nr-fill-2); } }
+.cp-sch__line > .nr-icon { color: var(--nr-text-3); }
+.cp-sch__time { font-variant-numeric: tabular-nums; font-weight: var(--nr-fw-semibold); font-size: var(--nr-fs-sm); }
+.cp-sch__rub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--nr-fs-md); }
+.cp-sch__when { font-size: 12px; color: var(--nr-text-2); white-space: nowrap; }
+.cp-sch__add { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 0; background: transparent; color: var(--nr-text-3); cursor: pointer; font: inherit; font-size: var(--nr-fs-sm); border-radius: var(--nr-r-sm); }
+@media (hover: hover) { .cp-sch__add:hover { color: var(--nr-text); background: var(--nr-fill-3); } }
+.cp-sch__edit { display: grid; gap: 8px; padding: 10px; border-radius: var(--nr-r-md); border: 1px solid var(--nr-accent-line); background: var(--nr-surface); }
+.cp-sch__days, .cp-sch__weeks { display: flex; gap: 3px; }
+.cp-sch__days .cp-repeat__day { flex: 1 1 0; }
+.cp-sch__weeks .cp-repeat__day { width: 40px; flex: none; }
+.cp-sch__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cp-sch__timefield { display: inline-flex; align-items: center; gap: 6px; }
+.cp-sch__timefield .nr-field { width: 110px; height: 32px; padding-top: 0; padding-bottom: 0; }
+.cp-sch__actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.cp-sch__actions .cp-trash { margin-right: auto; }
+@media (max-width: 480px) { .cp-sch__line { grid-template-columns: 42px minmax(0, 1fr) 16px; } .cp-sch__when { grid-column: 2; grid-row: 2; white-space: normal; } }
+
+/* черновик в форме: пока заглушка — каркас по формату; «Перегенерировать» — следующая версия */
+.cp-draft { display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--nr-r-md); background: var(--nr-fill-3); }
+.cp-draft__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.cp-draft__head .nr-btn { display: inline-flex; align-items: center; gap: 6px; }
+.cp-draft__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--nr-fs-sm); line-height: 1.45; color: var(--nr-text); }
+.cp-draft__empty { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cp-draft__empty .nr-btn { display: inline-flex; align-items: center; gap: 6px; }
+.cp-draft__empty .cp-hint { margin: 0; }

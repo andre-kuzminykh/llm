@@ -8,6 +8,7 @@ import { openStorage, type PlanStorage } from './model/storage'
 import { initialState, reducer, type Action } from './model/store'
 import { emptyPlan, isHome, labelOf, MAIL, OLD_MAIL, timeOf, type ISODate, type Item, type Plan } from './model/types'
 import { cardsOf, unitsOf, type Unit } from './model/units'
+import { extendSchedule } from './model/schedule'
 import { NO_HOME_FILTERS } from './model/overview'
 import { Seg } from './ui/bits'
 import type { Source } from './model/social'
@@ -21,6 +22,7 @@ import { AgendaView } from './views/AgendaView'
 import { HomeSide } from './views/HomeSide'
 import { HomeView } from './views/HomeView'
 import { SettingsSheet } from './views/SettingsSheet'
+import { ScheduleSheet } from './views/ScheduleSheet'
 import { DraftsSheet } from './views/BankView'
 import { DayPanel } from './views/DayPanel'
 import { HelpSheet } from './views/HelpSheet'
@@ -37,6 +39,7 @@ type Sheet =
   | { kind: 'item'; id: string; back?: Back }
   | { kind: 'new'; draft: Partial<Item>; back?: Back; source?: Source; preset?: { format: string; count: number } }
   | { kind: 'settings' }
+  | { kind: 'schedule' }
   | { kind: 'task'; id: string; back?: Back }
   | { kind: 'period' }
   | { kind: 'help' }
@@ -44,7 +47,7 @@ type Sheet =
 
 /** Открыли форму или задачу поверх листа — «назад» ведёт к нему. */
 const backOf = (s: Sheet): Back | undefined =>
-  !s || s.kind === 'help' || s.kind === 'settings' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
+  !s || s.kind === 'help' || s.kind === 'settings' || s.kind === 'schedule' ? undefined : s.kind === 'period' ? undefined : s.kind === 'item' || s.kind === 'new' || s.kind === 'task' ? s.back : s
 
 const MODES: Mode[] = ['time', 'channels', 'platforms', 'topics', 'feed']
 // календарь — как календарь Датаиста: открывается месяцем, где видна каждая публикация; неделю выбирают сами
@@ -164,7 +167,10 @@ export function App({ storage: storageFactory = openStorage, seedUrl = 'seed.jso
         const stale = !!stored && isStaleDataist(plan)
         const loaded = stored && (old || stale || isBlankPlan(plan)) ? await seed() : null
         const got = loaded && !(stale && loaded.example === plan.example) ? loaded : null // сервер отдал тот же старый — менять не на что
-        const fresh = got && plan.analytics ? { ...got, analytics: plan.analytics } : got
+        const got2 = got && plan.analytics ? { ...got, analytics: plan.analytics } : got
+        // расписание навсегда: слоты рубрик стоят на год вперёд от сегодня — прошло время, план сам дописал следующие дни
+        plan = extendSchedule(plan)
+        const fresh = got2 && extendSchedule(got2)
         if (!alive) return
         dispatch({ type: 'init', plan })
         if (back) {
@@ -484,6 +490,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
     openNew: (draft) => setSheet((s) => ({ kind: 'new', draft, back: s?.kind === 'drafts' ? undefined : backOf(s) })),
     openRecreate: (source, preset) => setSheet({ kind: 'new', draft: {}, source, preset }),
     openSettings: () => setSheet({ kind: 'settings' }),
+    openSchedule: () => setSheet({ kind: 'schedule' }),
     home,
     // другая вкладка — другие аккаунты: фильтры главной начинаются заново
     setHome: (patch) => setHomeState((h) => ({ ...h, ...patch, ...(patch.tab && patch.tab !== h.tab && !patch.filters ? { filters: NO_HOME_FILTERS } : {}) })),
@@ -638,6 +645,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
           {sheet?.kind === 'task' && <TaskSheet key={sheet.id} id={sheet.id} onClose={back ?? closeSheet} onBack={back} />}
           {sheet?.kind === 'help' && <HelpSheet onClose={closeSheet} />}
           {sheet?.kind === 'settings' && <SettingsSheet onClose={closeSheet} />}
+          {sheet?.kind === 'schedule' && <ScheduleSheet onClose={closeSheet} />}
           {section === 'calendar' && !sheet && !selected.size && (
             <button type="button" className="cp-fab" aria-label="Новый контент" title="Запланировать контент" onClick={() => ctx.openNew({ date: anchor < today() ? today() : anchor })}>
               <Icon name="plus" size={26} />
@@ -681,7 +689,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
 }
 
 function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPeriod, onStart }: { onClose: () => void; seedUrl: string; theme: ThemePref; onTheme: (p: ThemePref) => void; framed: boolean; onHelp: () => void; onPeriod: () => void; onStart: (d: ISODate) => void }) {
-  const { plan, dispatch, toast, saved, openSettings } = usePlan()
+  const { plan, dispatch, toast, saved, openSettings, openSchedule } = usePlan()
   const file = useRef<HTMLInputElement>(null)
   const stamp = today()
   // в окне Neuronium меню то же, но зовётся «Настройки» и без кружка-человечка: аккаунт — у Neuronium (FR-CP-070)
@@ -701,6 +709,9 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPerio
       </div>
       {/* отделы в окне Neuronium — у него: списка «скоро» здесь нет */}
       {!framed && <p className="cp-menu__note">Скоро: {SOON.join(', ')}</p>}
+      <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { openSchedule(); onClose() }}>
+        <Icon name="repeat" size={18} /> Расписание: рубрики по каналам и времени
+      </button>
       <button type="button" role="menuitem" className="cp-menu__item" onClick={() => { openSettings(); onClose() }}>
         <Icon name="settings" size={18} /> Настройки: соцсети и конкуренты
       </button>
@@ -743,7 +754,7 @@ function ProfileMenu({ onClose, seedUrl, theme, onTheme, framed, onHelp, onPerio
         className="cp-menu__item"
         onClick={async () => {
           try {
-            const seed = await fetchSeed(seedUrl)
+            const seed = extendSchedule(await fetchSeed(seedUrl))
             dispatch({ type: 'replace', plan: seed })
             toast(`Загружен план Датаиста — с ${dateText(seed.start, today())}`, { undo: true, actions: [{ label: 'К началу плана', run: () => onStart(firstWeek(seed)) }] })
           } catch (err) {

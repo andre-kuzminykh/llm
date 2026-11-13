@@ -137,48 +137,17 @@ export const isV2 = (p: AnyPlan): p is PlanV2 => p.version === 2
 /** Любая версия → текущая. Для старых нужен новый исходный план: из него берутся новые поля правил. */
 /** Старый пример (план Andre AIT из ../build.py) — его меняет план Датаиста: метки примера у старого нет, формат FULL Демо — есть. */
 export const isOldExample = (p: Plan) => !p.example && p.rules.some((r) => r.id === 'f_demo')
-/** План Датаиста прежней версии (метка старше текущей): его сменит новый — с 15 ноября, Ландао и Антрополис раз в неделю… */
-export const isStaleDataist = (p: Plan) => !!p.example?.startsWith('dataist-calendar') && p.example !== DATAIST_EXAMPLE
+/** План Датаиста прежней версии (метка не та, что сейчас): его сменит новый — расписание из таблицы владельца. */
+export const isStaleDataist = (p: Plan) => !!p.example?.startsWith('dataist-') && p.example !== DATAIST_EXAMPLE
 /** Пустой план, сохранённый до плана Датаиста: ни каналов, ни материалов; очищенный руками («Очистить всё») помечен и не считается. */
 export const isBlankPlan = (p: Plan) => !p.example && !p.items.length && !p.channels.length
 
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
   if (isV1(p)) return webAndMail(splitDataist(renameAndFormats(migrateV1(p, await seed()))))
   if (isV2(p)) return webAndMail(splitDataist(renameAndFormats(migrateV2(p, await seed()))))
-  return freeToLive(learningNames(webAndMail(splitDataist(renameAndFormats(await addStreams(p, seed))))), seed)
+  return webAndMail(splitDataist(renameAndFormats(await addStreams(p, seed))))
 }
 
-const FREE_RULE = 'dc-short-free-live'
-
-/** План Датаиста до 05.11: четыре видео Академии назывались «Видео 1…4» — на карточке «видео» выходило дважды
- *  («Обучение · Видео 1» и «Короткое видео»); теперь — «Обучение 1…4», как в календаре. */
-function learningNames(p: Plan): Plan {
-  if (p.example !== 'dataist-calendar') return p
-  const old = (r: Rule) => /^dc-short-education-\d-academy$/.test(r.id) && /^Видео \d$/.test(r.name)
-  if (!p.rules.some(old)) return p
-  return { ...p, rules: p.rules.map((r) => (old(r) ? { ...r, name: r.name.replace('Видео', 'Обучение') } : r)) }
-}
-
-/** План Датаиста, сохранённый до правки владельца (05.11): «Свободное» было без канала и в 11:00 — теперь Датаист Live
- *  и ситуативно (без часа, сверху дня). Формат берётся из исходного плана; свои правки остальных материалов не трогаются. */
-async function freeToLive(p: Plan, seed: () => Promise<Plan>): Promise<Plan> {
-  if (p.example !== 'dataist-calendar' || p.rules.some((r) => r.id === FREE_RULE)) return p
-  const free = new Set(p.items.filter((it) => it.rubricId === 'free' && !it.channelId && it.id.startsWith('dc-')).map((it) => it.id))
-  if (!free.size) return p
-  let rule: Rule | undefined
-  try {
-    rule = (await seed()).rules.find((r) => r.id === FREE_RULE)
-  } catch {
-    return p // без исходного плана откроем как есть
-  }
-  if (!rule) return p
-  const items = p.items.map((it): Item => {
-    if (!free.has(it.id)) return it
-    const { time: _time, offGrid: _off, ...rest } = it
-    return { ...rest, channelId: rule!.channelId, ruleId: rule!.id, allDay: true }
-  })
-  return { ...p, rules: [...p.rules, rule], items }
-}
 
 // Разделы Dataist теперь называются полностью и по умолчанию серые; «Кабинет» стал «Офисом Датаиста»
 const SECTION_NAMES: Record<string, string> = { Лаборатория: 'Лаборатория Датаиста', Академия: 'Академия Датаиста', Кабинет: 'Офис Датаиста' }

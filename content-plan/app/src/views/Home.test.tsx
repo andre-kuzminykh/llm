@@ -76,8 +76,8 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
   it('демо: плитки метрик, график, разрезы; щелчок по строке — провалиться (фильтр на графики и ленту); топики без «#»', async () => {
     renderApp(undefined, { 'cp:section': '"home"' })
     await screen.findByRole('heading', { name: 'Главная' })
-    // материалы календаря — настоящие, без демо: тезис 28 окт ещё не вышел — «Ожидается»
-    expect(within(screen.getByRole('region', { name: 'Ожидается' })).getAllByRole('article').length).toBeGreaterThan(0)
+    // впереди у плана — только пустые слоты «Нужна тема» (2 и 9 ноября): это не материалы, в ленте их нет (FR-CP-075)
+    expect(screen.queryByRole('region', { name: 'Ожидается' })).toBeNull()
     await userEvent.click(screen.getByRole('switch', { name: 'Демо' }))
     expect(screen.getByRole('note')).toHaveTextContent('Демо: посты, графики и цифры выдуманы')
     const ov = screen.getByRole('region', { name: 'Аналитика' })

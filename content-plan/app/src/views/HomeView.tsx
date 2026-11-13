@@ -10,7 +10,7 @@ import { indexByDate } from '../model/filters'
 import { bucketsOf, tagsOf, type Post } from '../model/metrics'
 import { followersApply, KPIS, postVisible, topicLabel, totals, type Dim, type HomeFilters } from '../model/overview'
 import { sortPosts, SORTS, sourceOfItem, type Sort } from '../model/social'
-import { filesOf, FORMAT_ICON, FORMATS, isHome, isImage, rubricKey, shownTitle, statusOf, timeOf } from '../model/types'
+import { filesOf, FORMAT_ICON, FORMATS, isHome, isImage, isSlot, rubricKey, shownTitle, statusOf, timeOf } from '../model/types'
 import { unitsOf, type Unit } from '../model/units'
 import { PlatformIcon, Switch } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
@@ -209,7 +209,7 @@ function MyFeed({ posts, who }: { posts: Post[]; who: Map<string, Who> }) {
       const d = addDays(t, i)
       for (const u of unitsOf(byDate.get(d) ?? [], rules, order)) {
         if (u.head.status === 'published') done.push(u)
-        else if (d >= t) up.push(u)
+        else if (d >= t && !isSlot(u.head)) up.push(u) // пустой слот расписания («Нужна тема») — не материал: в ленте его нет
       }
     }
     return { upcoming: up, published: done.reverse() }

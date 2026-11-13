@@ -76,6 +76,8 @@ export interface Ctx {
   openRecreate: (source: Source, preset?: { format: string; count: number }) => void
   /** Настройки справа: мои соцсети и конкуренты. */
   openSettings: () => void
+  /** Расписание: рубрики по каналам и категориям — дни, недели цикла, время. */
+  openSchedule: () => void
   home: HomeState
   setHome: (patch: Partial<HomeState>) => void
   /** Раздел СММ: главная (графики и лента), календарь. */

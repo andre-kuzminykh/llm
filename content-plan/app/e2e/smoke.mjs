@@ -14,7 +14,7 @@ const SHOTS = process.env.SHOTS ?? new URL('./shots/', import.meta.url).pathname
 const CHROME = process.env.CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 mkdirSync(SHOTS, { recursive: true })
 // проверки ниже написаны на старом примере (план Andre AIT из ../build.py) — он и отдаётся вместо seed.json;
-// план Датаиста (календарь со страницы) — своими проверками в конце, на настоящем seed.json
+// план Датаиста (расписание из таблицы) — своими проверками в конце, на настоящем seed.json
 const OLD_SEED = fileURLToPath(new URL('../src/test/seed-andre.json', import.meta.url))
 const oldSeed = (p) => p.route('**/seed.json', (r) => r.fulfill({ path: OLD_SEED, contentType: 'application/json' }))
 // календарь сам открывается месяцем (FR-CP-072), а проверки ниже начинаются с недели по шкале времени — её и ставим, если не выбрано
@@ -135,7 +135,7 @@ await page.getByRole('heading', { name: 'Главная' }).waitFor()
   await re.getByRole('combobox', { name: 'Рубрика' }).fill('Нарезки')
   await re.getByRole('option', { name: 'Новая рубрика «Нарезки»' }).click()
   await page.screenshot({ path: `${SHOTS}/0-recreate.png` })
-  await re.getByRole('button', { name: 'Создать' }).click()
+  await re.getByRole('button', { name: 'Создать', exact: true }).click()
   const made = (await toast().textContent()) ?? ''
   await page.getByRole('switch', { name: 'Демо' }).click()
   const soonCards = await page.getByRole('radio', { name: /Моя лента/ }).click().then(() => page.getByRole('region', { name: 'Ожидается' }).getByRole('article').count())
@@ -658,7 +658,7 @@ check(await newForm.getByRole('option', { name: 'Новая рубрика «А�
 await newForm.getByRole('option', { name: 'Новая рубрика «Агенты»' }).click()
 await page.screenshot({ path: `${SHOTS}/5b-new.png` })
 await newForm.getByRole('textbox', { name: 'Тема' }).fill('Агенты в продажах')
-await newForm.getByRole('button', { name: 'Создать' }).click()
+await newForm.getByRole('button', { name: 'Создать', exact: true }).click()
 check(await toast().filter({ hasText: /^Создано на/ }).count(), '«+»: новый контент с новой рубрикой', 'контент не создался')
 check(await side.getByRole('button', { name: 'Агенты', exact: true }).count(), 'новая рубрика — в фильтрах', 'новой рубрики нет в фильтрах')
 await page.keyboard.press('Control+z')
@@ -849,69 +849,74 @@ await phone.getByRole('button', { name: 'Фильтры' }).click()
 await phone.mouse.click(370, 400)
 check(!(await phone.locator('.cp-side').count()), 'тап мимо закрывает фильтры', 'тап мимо фильтров их не закрыл')
 
-// план Датаиста — календарь со страницы (public/seed.json): открывается сам, с первой полной недели; из профиля — снова
+// план Датаиста — расписание из таблицы (public/seed.json): каналы × категории × рубрики × время, контента нет — слоты «Нужна тема»
+const slot = /^Исследование · Короткое видео: Нужна тема/
 {
   const dc = await browser.newPage({ viewport: { width: 1440, height: 900 } })
   dc.on('pageerror', (e) => fail(`ошибка на странице: ${e.message}`))
   const t0 = Date.now()
   await dc.goto(BASE)
   await dc.getByRole('heading', { name: 'Главная' }).waitFor()
-  const soon = dc.getByRole('region', { name: 'Ожидается' })
-  await soon.getByRole('article').first().waitFor()
-  const homeCards = await soon.getByRole('article').count()
+  await dc.waitForTimeout(600)
+  // на главной — пусто: слоты без темы не «ожидаются»
+  const homeCards = await dc.getByRole('region', { name: 'Ожидается' }).count()
   await dc.screenshot({ path: `${SHOTS}/14-dataist-home.png` })
   await dc.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: /Календарь/ }).click()
-  // календарь — месяцем, как календарь Датаиста: каждая публикация — своей карточкой целиком (FR-CP-072)
+  // календарь — месяцем: каждый слот — своей карточкой целиком (FR-CP-072, FR-CP-075)
   const mGrid = dc.getByRole('grid', { name: 'Месяц: Ноябрь 2026' })
   await mGrid.waitFor()
-  await dc.getByRole('button', { name: /^Демо · Короткое демо: Knowledge Management · 100 продуктов · 1\/100/ }).waitFor()
+  await mGrid.locator('[data-date="2026-11-16"] .cp-card--post').first().waitFor()
   const opened = Date.now() - t0
   const posts = await mGrid.locator('[data-date="2026-11-16"] .cp-card--post').count()
   const allPosts = await mGrid.locator('.cp-card--post').count()
-  // ничего не обрезано: название и подпись целиком, площадки — все, без «+N»
   const cut = await mGrid.locator('.cp-card--post').evaluateAll((cs) => cs.filter((c) => [...c.querySelectorAll('.cp-card__title, .cp-card__cap, .cp-card__ch')].some((x) => x.scrollHeight > x.clientHeight + 1 || x.scrollWidth > x.clientWidth + 1)).length)
   const more = await mGrid.locator('.cp-card__more').count()
-  // «видео» на карточке — один раз: формат словами только внизу, в подписи его нет («Обучение 1», а не «Обучение · Видео 1»)
+  // «видео» на карточке — один раз: в подписи только рубрика, формат словами — внизу
   const twice = await mGrid.locator('.cp-card__cap').filter({ hasText: /видео/i }).count()
-  const demo = await mGrid.locator('[data-date="2026-11-16"] .cp-card--post').filter({ hasText: 'Knowledge Management' }).evaluate((c) => ({
-    time: c.querySelector('.cp-card__time')?.textContent, ch: c.querySelector('.cp-card__ch')?.textContent, cap: c.querySelector('.cp-card__cap')?.textContent,
-    kind: c.querySelector('.cp-card__kind')?.textContent, plats: c.querySelectorAll('.cp-card__plats .cp-pi').length,
-  }))
+  const caps = await mGrid.locator('[data-date="2026-11-16"] .cp-card--post').evaluateAll((cs) => cs.map((c) => [c.querySelector('.cp-card__time')?.textContent, c.querySelector('.cp-card__ch')?.textContent, c.querySelector('.cp-card__cap')?.textContent, c.querySelector('.cp-card__kind')?.textContent].join(' | ')))
+  const review = caps.includes('10:00 | Лаборатория Датаиста | Обзор | Полное видео')
+  const review23 = await mGrid.locator('[data-date="2026-11-23"] .cp-card__cap').filter({ hasText: /^Обзор$/ }).count()
   const wide = await dc.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
-  // «Свободное» — Датаист Live, ситуативно: первым в дне, «Весь день» вместо часа (FR-CP-073)
-  const free8 = await mGrid.locator('[data-date="2026-11-16"] .cp-card--post').first().evaluate((c) => [c.querySelector('.cp-card__time')?.textContent, c.querySelector('.cp-card__ch')?.textContent, c.querySelector('.cp-card__cap')?.textContent].join(' | '))
-  check(free8 === 'Весь день | Датаист Live | Свободное', `«Свободное» — Датаист Live, ситуативно: первым в дне — «${free8}»`, `«Свободное» в месяце: «${free8}»`)
   await dc.waitForTimeout(400)
   await dc.screenshot({ path: `${SHOTS}/14-dataist-month.png` })
-  await mGrid.locator('[data-date="2026-11-18"]').scrollIntoViewIfNeeded()
-  await dc.screenshot({ path: `${SHOTS}/14-dataist-month-2.png` })
   check(
-    homeCards > 0 && posts === 14 && allPosts > 300 && !cut && !more && !twice && !wide && opened < 8000 && JSON.stringify(demo) === JSON.stringify({ time: '12:00', ch: 'Нейроний', cap: 'Демо · Короткое демо · Management', kind: 'Короткое видео', plats: 3 }),
-    `план Датаиста открывается сам: на главной — «Ожидается»; календарь — месяцем, каждая публикация своей карточкой целиком (16 ноября — ${posts}, в ноябре — ${allPosts}; время, канал, рубрика, название, формат, площадки; обрезанных нет, «видео» дважды — нигде), за ${opened} мс`,
-    `месяц публикациями: на главной ${homeCards}, 16 ноября ${posts}, всего ${allPosts}, обрезано ${cut}, «+N» ${more}, «видео» дважды ${twice}, шире ${wide}, ${opened} мс, демо ${JSON.stringify(demo)}`,
+    homeCards === 0 && posts === 29 && allPosts > 400 && !cut && !more && !twice && !wide && review && review23 === 0 && opened < 8000,
+    `план Датаиста открывается сам — расписание: на главной пусто; месяц слотами «Нужна тема» (16 ноября — ${posts}, на экране — ${allPosts}); Обзор Лаборатории — Пн I недели (23-го его нет); обрезанных нет, «видео» дважды — нигде, за ${opened} мс`,
+    `расписание месяцем: на главной ${homeCards}, 16 ноября ${posts}, всего ${allPosts}, обрезано ${cut}, «+N» ${more}, «видео» дважды ${twice}, шире ${wide}, Обзор ${review}/${review23}, ${opened} мс`,
   )
-  // неделя — по-прежнему переключателем
+  // «Расписание» в шапке: каналы → категории → «время · рубрика · когда»
+  await dc.getByRole('button', { name: 'Расписание', exact: true }).click()
+  const sch = dc.getByRole('complementary', { name: 'Расписание' })
+  await sch.waitFor()
+  const chans = await sch.locator('section.cp-sch').count()
+  const labLong = await sch.getByRole('group', { name: 'Лаборатория Датаиста: Длинное видео' }).getByRole('button', { name: /поправить$/ }).evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')))
+  const lines = await sch.locator('.cp-sch__line').count()
+  const swide = await sch.evaluate((el) => el.scrollWidth > el.clientWidth)
+  await dc.waitForTimeout(300)
+  await dc.screenshot({ path: `${SHOTS}/14-dataist-schedule.png` })
+  check(
+    chans === 7 && lines === 49 && labLong.join('|') === 'Обзор, Пн · I неделя, 10:00 — поправить|Разработка, Пн · III неделя, 10:00 — поправить' && !swide,
+    `«Расписание» в шапке: 7 каналов, ${lines} строк (рубрика, дни, недели цикла, время), как таблица`,
+    `расписание: каналов ${chans}, строк ${lines}, длинное Лаборатории ${JSON.stringify(labLong)}, шире ${swide}`,
+  )
+  await sch.getByRole('button', { name: 'Закрыть' }).click()
+  // неделя — переключателем
   await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio', { name: 'Неделя' }).click()
   await dc.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
   const week = (await dc.locator('.cp-top').first().innerText()).match(/\d+–\d+ \S+ \d{4}/)?.[0]
-  // ситуативное — сверху, строкой над часами, как «весь день» в Google Календаре; на шкале его нет
-  const tops = await dc.locator('.cp-tg__allday .cp-card--allday').allTextContents()
-  const corner = await dc.locator('.cp-tg__alllabel').textContent().catch(() => '')
-  const inBody = await dc.locator('.cp-tg__body .cp-card').filter({ hasText: 'Свободное' }).count()
+  const inWeek = await dc.locator('.cp-tg__col[data-date="2026-11-16"] .cp-card').count()
   await dc.screenshot({ path: `${SHOTS}/14-dataist-week.png` })
-  check(week === '16–22 ноя 2026' && tops.length >= 7 && tops.every((t) => t.includes('Свободное')) && corner === 'весь день' && !inBody, `неделя — переключателем (${week}): «Свободное» — сверху, строкой «весь день» над часами (${tops.length}), на шкале его нет`, `неделя: «${week}», сверху ${JSON.stringify(tops)}, подпись «${corner}», на шкале ${inBody}`)
+  check(week === '16–22 ноя 2026' && inWeek === 29, `неделя — переключателем (${week}): в понедельник ${inWeek} слотов по часам`, `неделя: «${week}», слотов ${inWeek}`)
   await dc.getByRole('radiogroup', { name: 'Неделя или месяц' }).getByRole('radio', { name: 'Месяц' }).click()
-  // из профиля — снова, «К началу плана» — к первой полной неделе
+  // из профиля — снова, «К началу плана» — к первой неделе
   await dc.getByRole('button', { name: 'Профиль' }).click()
   await dc.getByRole('menuitem', { name: 'Загрузить план Датаиста' }).click()
   const note = dc.getByRole('status').filter({ hasText: 'Загружен план Датаиста — с 15 ноя' })
   await note.waitFor()
   await note.getByRole('button', { name: 'К началу плана' }).click()
-  await dc.getByRole('button', { name: /^Демо · Короткое демо: Knowledge Management · 100 продуктов · 1\/100/ }).waitFor()
-  const day8 = await dc.locator('.cp-month [data-date="2026-11-15"] .cp-card').count()
-  const sun = await dc.locator('.cp-month [data-date="2026-11-15"] .cp-card__cap').allTextContents()
-  const sat = await dc.locator('.cp-month [data-date="2026-11-21"] .cp-card__cap').allTextContents()
-  check(day8 === 18 && sun.filter((c) => c === 'Антрополис').length === 2 && sat.filter((c) => c === 'Ландао').length === 2, `из профиля: «К началу плана» — ноябрь; 15 ноября — ${day8} публикаций, в Датаисте Антрополис (Вс), 21-го — Ландао (Сб)`, `из профиля: 15 ноября ${day8}, Вс ${JSON.stringify(sun)}, Сб ${JSON.stringify(sat)}`)
+  await dc.getByRole('button', { name: slot }).first().waitFor()
+  const day15 = await dc.locator('.cp-month [data-date="2026-11-15"] .cp-card').count()
+  check(day15 === 21, `из профиля: «К началу плана» — ноябрь; 15 ноября (Вс, неделя I) — ${day15} слотов`, `из профиля: 15 ноября ${day15}`)
   // до плана Датаиста в браузере был свой план (под прежним ключом) — план Датаиста открывается, прежний — «Вернуть прежний»
   await dc.evaluate(async (old) => {
     const db = await new Promise((ok, no) => {
@@ -950,7 +955,7 @@ check(!(await phone.locator('.cp-side').count()), 'тап мимо закрыв�
   await swapped.waitFor()
   const text = (await swapped.locator('.cp-toast__msg').textContent()) ?? ''
   await swapped.getByRole('button', { name: 'К началу плана' }).click()
-  await sw.getByRole('button', { name: /Knowledge Management/ }).first().waitFor()
+  await sw.getByRole('button', { name: slot }).first().waitFor()
   await sw.waitForTimeout(1200)
   await sw.reload() // заменённый план сохранён: второй раз не меняется и не говорит
   await sw.getByRole('heading', { name: /./ }).first().waitFor()
@@ -960,7 +965,7 @@ check(!(await phone.locator('.cp-side').count()), 'тап мимо закрыв�
   await sw.close()
 }
 
-// телефон: план Датаиста — лентой по дням, каждая публикация своей карточкой целиком
+// телефон: план Датаиста — лентой по дням, каждый слот своей карточкой целиком
 {
   const dp = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
   await dp.goto(BASE)
@@ -975,7 +980,14 @@ check(!(await phone.locator('.cp-side').count()), 'тап мимо закрыв�
   const pwide = await dp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
   await dp.waitForTimeout(400)
   await dp.screenshot({ path: `${SHOTS}/14-dataist-phone.png` })
-  check(n9 === 14 && !pcut && !pwide, `телефон: план Датаиста — лентой по дням, 16 ноября — ${n9} публикаций целиком, вбок не едет`, `телефон, лента: 16 ноября ${n9}, обрезано ${pcut}, шире ${pwide}`)
+  // «Расписание» на телефоне — значком в шапке, панель во всю ширину
+  await dp.getByRole('button', { name: 'Расписание', exact: true }).click()
+  const psch = dp.getByRole('complementary', { name: 'Расписание' })
+  await psch.waitFor()
+  const pswide = await dp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  await dp.waitForTimeout(300)
+  await dp.screenshot({ path: `${SHOTS}/14-dataist-phone-schedule.png` })
+  check(n9 === 29 && !pcut && !pwide && !pswide, `телефон: план Датаиста — лентой по дням, 16 ноября — ${n9} слотов целиком; «Расписание» — значком, вбок не едет`, `телефон, лента: 16 ноября ${n9}, обрезано ${pcut}, шире ${pwide}/${pswide}`)
   await dp.close()
 }
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../App'
 import { memoryStorage, type PlanStorage } from '../model/storage'
@@ -10,7 +10,7 @@ const dataist = loadDataist()
 /** Хранилище, которое сохраняет правки (как IndexedDB браузера). */
 const keeping = (): PlanStorage => ({ ...memoryStorage(), persistent: true })
 
-/** Приложение с уже сохранённым планом (или без него); исходный план (seed.json) — календарь Датаиста. Сегодня — 4 ноября 2026. */
+/** Приложение с уже сохранённым планом (или без него); исходный план (seed.json) — расписание Датаиста. Сегодня — 4 ноября 2026. */
 async function open(stored: Plan | null, seed: Plan = dataist, storage: PlanStorage = memoryStorage(), month = false) {
   localStorage.clear()
   localStorage.setItem('cp:section', JSON.stringify('calendar'))
@@ -25,12 +25,15 @@ async function open(stored: Plan | null, seed: Plan = dataist, storage: PlanStor
   await screen.findByRole('grid', { name: month ? /^Месяц: / : 'Неделя по времени' })
   return { storage, view }
 }
-const profile = async (item: string) => {
+const profile = async (item: string | RegExp) => {
   await userEvent.click(screen.getByRole('button', { name: 'Профиль' }))
   await userEvent.click(screen.getByRole('menuitem', { name: item }))
 }
+// слот расписания в неделе: «Исследование · Короткое видео: Нужна тема, 09:00»
+const research = /^Исследование · Короткое видео: Нужна тема, 09:00/
+const cardsIn = (el: HTMLElement) => [...el.querySelectorAll('.cp-card')] as HTMLElement[]
 
-describe('T-CP-071 FR-CP-071 план Датаиста: календарь со страницы — в приложении', () => {
+describe('T-CP-075 FR-CP-075 план Датаиста — расписание из таблицы: каналы × категории × рубрики × время, контента нет', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-04T10:00:00'))
@@ -39,36 +42,100 @@ describe('T-CP-071 FR-CP-071 план Датаиста: календарь со 
     vi.useRealTimers()
   })
 
-  it('ничего не сохранено — сразу план Датаиста, без кнопок: календарь — с первой полной недели плана (16–22 ноября)', async () => {
+  it('ничего не сохранено — сразу расписание: неделя 16–22 ноября в слотах «Нужна тема»; каналы — как в таблице', async () => {
     await open(null)
-    expect(await screen.findAllByRole('button', { name: /Knowledge Management · 100 продуктов · 1\/100/ })).not.toHaveLength(0)
+    expect((await screen.findAllByRole('button', { name: research })).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/16–22 ноя 2026/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
+    for (const name of ['Лаборатория Датаиста', 'Академия Датаиста', 'Офис Датаиста', 'Датаист Live', 'Нейроний', 'Ландао', 'Антрополис']) expect(within(side).getAllByText(name).length).toBeGreaterThan(0)
   })
 
-  it('календарь открывается месяцем: каждая публикация — своей карточкой целиком, как в календаре Датаиста', async () => {
+  it('месяц: в понедельник 16 ноября — 29 слотов, каждый своей карточкой; Обзор Лаборатории — только в I неделю', async () => {
     await open(null, dataist, memoryStorage(), true)
     const month = await screen.findByRole('grid', { name: 'Месяц: Ноябрь 2026' })
-    const day8 = month.querySelector('[data-date="2026-11-16"]') as HTMLElement
-    // все публикации 16 ноября — каждая своей карточкой: ничего не сходится в одну (короткое и пост лайфстайла — порознь)
-    expect(day8.querySelectorAll('.cp-card')).toHaveLength(dataist.items.filter((it) => it.date === '2026-11-16').length)
-    expect(day8.querySelectorAll('.cp-card')).toHaveLength(14)
-    expect(within(day8).getAllByRole('button', { name: /: Я устал от хайпа вокруг ИИ, 2\d:00/ })).toHaveLength(2)
-    // карточка — как в календаре: время и канал, рубрика (с отделом демо), название целиком, формат словами и площадки
-    const demo = within(day8).getByRole('button', { name: /^Демо · Короткое демо: Knowledge Management/ }).closest('.cp-card') as HTMLElement
-    expect(demo).toHaveClass('cp-card--post')
-    expect(demo.querySelector('.cp-card__time')).toHaveTextContent('12:00')
-    expect(demo.querySelector('.cp-card__ch')).toHaveTextContent('Нейроний')
-    expect(demo.querySelector('.cp-card__cap')).toHaveTextContent('Демо · Короткое демо · Management')
-    expect(demo.querySelector('.cp-card__title')).toHaveTextContent('Knowledge Management · 100 продуктов · 1/100')
-    expect(demo.querySelector('.cp-card__kind')).toHaveTextContent('Короткое видео')
-    expect([...demo.querySelectorAll('.cp-card__plats .cp-pi')].map((x) => x.getAttribute('title'))).toEqual(['YouTube', 'Instagram', 'TikTok'])
-    // видео Академии — «Обучение 1», формат словами — только внизу; «видео» дважды нет ни на одной карточке
-    const lesson = within(day8).getByRole('button', { name: /^Обучение 1: ИИ инженер/ }).closest('.cp-card') as HTMLElement
-    expect([lesson.querySelector('.cp-card__cap')?.textContent, lesson.querySelector('.cp-card__kind')?.textContent]).toEqual(['Обучение 1', 'Короткое видео'])
+    const day = (d: string) => month.querySelector(`[data-date="${d}"]`) as HTMLElement
+    expect(cardsIn(day('2026-11-16'))).toHaveLength(29)
+    const caps = (d: string) => cardsIn(day(d)).map((c) => `${c.querySelector('.cp-card__time')?.textContent} ${c.querySelector('.cp-card__ch')?.textContent} · ${c.querySelector('.cp-card__cap')?.textContent} · ${c.querySelector('.cp-card__kind')?.textContent}`)
+    expect(caps('2026-11-16')).toContain('10:00 Лаборатория Датаиста · Обзор · Полное видео')
+    expect(caps('2026-11-23').filter((c) => c.includes('Обзор'))).toHaveLength(0)
+    expect(caps('2026-11-30')).toContain('10:00 Лаборатория Датаиста · Разработка · Полное видео')
+    expect(caps('2026-11-16').filter((c) => c.includes('Микроурок'))).toHaveLength(4)
+    // «видео» на карточке — один раз: в подписи только рубрика
     expect([...month.querySelectorAll('.cp-card__cap')].filter((c) => /видео/i.test(c.textContent ?? ''))).toHaveLength(0)
-    const article = within(day8).getByRole('button', { name: /^Исследования · Статья: Нужна тема/ }).closest('.cp-card') as HTMLElement
-    expect([article.querySelector('.cp-card__cap')?.textContent, article.querySelector('.cp-card__kind')?.textContent]).toEqual(['Исследования', 'Страница на сайте'])
+  })
+
+  it('«Расписание» в шапке: канал → категория → «время · рубрика · когда»; поправили время — слоты в календаре сдвинулись', async () => {
+    vi.setSystemTime(new Date('2026-11-16T08:00:00'))
+    await open(null)
+    await userEvent.click(screen.getByRole('button', { name: 'Расписание' }))
+    const sheet = screen.getByRole('complementary', { name: 'Расписание' })
+    expect(sheet).toHaveTextContent('Сейчас — неделя I цикла')
+    const lab = within(sheet).getByRole('region', { name: 'Лаборатория Датаиста' })
+    const longs = within(lab).getByRole('group', { name: 'Лаборатория Датаиста: Длинное видео' })
+    expect(within(longs).getAllByRole('button', { name: /поправить$/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Обзор, Пн · I неделя, 10:00 — поправить',
+      'Разработка, Пн · III неделя, 10:00 — поправить',
+    ])
+    // Исследование в коротком видео — с 09:00 на 09:30
+    const shorts = within(lab).getByRole('group', { name: 'Лаборатория Датаиста: Короткое видео' })
+    await userEvent.click(within(shorts).getByRole('button', { name: 'Исследование, каждый день, 09:00 — поправить' }))
+    const ed = within(shorts).getByRole('group', { name: 'Строка расписания: Исследование' })
+    fireEvent.change(within(ed).getByLabelText('Время'), { target: { value: '09:30' } })
+    await userEvent.click(within(ed).getByRole('button', { name: 'Сохранить' }))
+    expect(screen.getByText(/^Расписание: Исследование — каждый день, 09:30/)).toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Закрыть' }))
+    expect((await screen.findAllByRole('button', { name: /^Исследование · Короткое видео: Нужна тема, 09:30/ })).length).toBeGreaterThan(0)
+  })
+
+  it('добавить рубрику в расписание: новая «Подкаст» — Нейроний, длинное видео, Сб 19:00 — слоты по субботам; убрать — слоты сняты', async () => {
+    vi.setSystemTime(new Date('2026-11-16T08:00:00'))
+    await open(null)
+    await userEvent.click(screen.getByRole('button', { name: 'Расписание' }))
+    const sheet = screen.getByRole('complementary', { name: 'Расписание' })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Добавить рубрику: Нейроний, Длинное видео' }))
+    const ed = within(sheet).getByRole('group', { name: 'Новая строка расписания' })
+    await userEvent.type(within(ed).getByRole('combobox', { name: 'Рубрика' }), 'Подкаст')
+    await userEvent.click(within(ed).getByRole('option', { name: 'Новая рубрика «Подкаст»' }))
+    const days = within(ed).getByRole('group', { name: 'Дни недели' })
+    for (const d of ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']) await userEvent.click(within(days).getByRole('button', { name: d }))
+    fireEvent.change(within(ed).getByLabelText('Время'), { target: { value: '19:00' } })
+    await userEvent.click(within(ed).getByRole('button', { name: 'Добавить' }))
+    expect(screen.getByText(/^Расписание: Подкаст — Сб, 19:00/)).toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Закрыть' }))
+    const podcast = /^Подкаст · Полное видео: Нужна тема, 19:00/
+    expect(await screen.findAllByRole('button', { name: podcast })).toHaveLength(1) // суббота 21-го в этой неделе
+    // убрать из расписания — слоты сняты
+    await userEvent.click(screen.getByRole('button', { name: 'Расписание' }))
+    const sheet2 = screen.getByRole('complementary', { name: 'Расписание' })
+    await userEvent.click(within(sheet2).getByRole('button', { name: 'Подкаст, Сб, 19:00 — поправить' }))
+    await userEvent.click(within(sheet2).getByRole('button', { name: 'Убрать из расписания' }))
+    expect(screen.getByText(/«Подкаст» 19:00 убрана из расписания/)).toBeInTheDocument()
+    await userEvent.click(within(sheet2).getByRole('button', { name: 'Закрыть' }))
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: podcast })).toHaveLength(0))
+  })
+
+  it('слот → тема, заметка → «Создать черновик» (заглушка) → «Перегенерировать» — версия 2; черновик сохраняется с материалом', async () => {
+    vi.setSystemTime(new Date('2026-11-16T08:00:00'))
+    await open(null)
+    await userEvent.click((await screen.findAllByRole('button', { name: research }))[0])
+    let form = screen.getByRole('complementary', { name: 'Материал' })
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать черновик' }))
+    expect(within(form).getByRole('alert')).toHaveTextContent('Сначала впишите тему')
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'ИИ-агенты в бухгалтерии')
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Заметка' }), 'Кейс: закрытие месяца за день')
+    await userEvent.click(within(form).getByRole('button', { name: 'Создать черновик' }))
+    const draft = within(form).getByRole('region', { name: 'Черновик' })
+    expect(draft).toHaveTextContent('Сценарий короткого видео · Исследование')
+    expect(draft).toHaveTextContent('Тема: ИИ-агенты в бухгалтерии')
+    expect(draft).toHaveTextContent('Опора из заметки: Кейс: закрытие месяца за день')
+    expect(draft).toHaveTextContent('Версия 1 · заглушка')
+    await userEvent.click(within(draft).getByRole('button', { name: 'Перегенерировать' }))
+    expect(within(form).getByRole('region', { name: 'Черновик' })).toHaveTextContent('Версия 2 · заглушка')
+    await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
+    await userEvent.click(screen.getAllByRole('button', { name: /^Исследование · Короткое видео: ИИ-агенты в бухгалтерии/ })[0])
+    form = screen.getByRole('complementary', { name: 'Материал' })
+    expect(within(form).getByRole('region', { name: 'Черновик' })).toHaveTextContent('Версия 2 · заглушка')
   })
 
   it('«Очистить всё» — пусто и после перезагрузки; план Датаиста — снова из профиля, «К началу плана» — к первой неделе', async () => {
@@ -78,73 +145,56 @@ describe('T-CP-071 FR-CP-071 план Датаиста: календарь со 
     await waitFor(async () => expect((await storage.load())?.example).toBe('cleared'))
     view.unmount()
     await open(null, dataist, storage)
-    expect(screen.queryAllByRole('button', { name: /100 ИИ-сотрудников/ })).toHaveLength(0)
-    expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
+    expect(screen.queryAllByRole('button', { name: research })).toHaveLength(0)
     await profile('Загрузить план Датаиста')
     const note = await screen.findByText(/^Загружен план Датаиста — с 15 ноя/)
     await userEvent.click(within(note.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'К началу плана' }))
-    expect(await screen.findAllByRole('button', { name: /Knowledge Management/ })).not.toHaveLength(0)
+    expect((await screen.findAllByRole('button', { name: research })).length).toBeGreaterThan(0)
   })
 
-  it('до плана Датаиста в браузере был свой план — открывается план Датаиста, прежний не стёрт: «Вернуть прежний» ставит его', async () => {
+  it('до плана Датаиста в браузере был свой план — открывается расписание, прежний не стёрт: «Вернуть прежний» ставит его', async () => {
     const storage: PlanStorage = { ...keeping(), previous: async () => smallPlan() }
     await open(null, dataist, storage)
     const note = await screen.findByText(/^Открыт план Датаиста: 7 каналов, с 15 ноя — прежний план не стёрт$/)
-    expect(await screen.findAllByRole('button', { name: /Note Taking/ })).not.toHaveLength(0)
+    expect((await screen.findAllByRole('button', { name: research })).length).toBeGreaterThan(0)
     await waitFor(async () => expect((await storage.load())?.example).toBe(DATAIST_EXAMPLE))
     await userEvent.click(within(note.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'Вернуть прежний' }))
     const side = screen.getByRole('complementary', { name: 'Фильтры' })
     await waitFor(() => expect(within(side).getAllByText('Andre AIT').length).toBeGreaterThan(0))
-    expect(within(side).queryByText('Нейроний')).toBeNull()
   })
 
-  it('сохранён пустой план (ещё до плана Датаиста) — встаёт план Датаиста; мои соцсети остаются', async () => {
+  it('сохранён пустой план — встаёт расписание; мои соцсети остаются', async () => {
     const blank: Plan = { ...emptyPlan('2026-11-03'), analytics: { competitors: [], accounts: [{ id: 'a1', name: 'Мой блог', platform: 'Telegram', handle: '@blog' }] } }
     const storage = keeping()
     await open(blank, dataist, storage)
     await screen.findByText(/^Загружен план Датаиста: 7 каналов, с 15 ноя$/)
-    expect(await screen.findAllByRole('button', { name: /Note Taking/ })).not.toHaveLength(0)
     const kept = await storage.load()
     expect([kept?.example, kept?.analytics?.accounts?.map((a) => a.name)]).toEqual([DATAIST_EXAMPLE, ['Мой блог']])
   })
-  it('сохранён старый пример — открывается план Датаиста; «К началу плана» — первая неделя, «Отменить» вернёт прежний', async () => {
-    await open(smallPlan()) // старый пример: формат FULL Демо, метки плана Датаиста нет
-    const note = await screen.findByText(/Загружен план Датаиста: 7 каналов, с 15 ноя.* — прежний пример заменён/)
-    const bar = note.closest('[role="status"]') as HTMLElement
-    await userEvent.click(within(bar).getByRole('button', { name: 'К началу плана' }))
-    expect(await screen.findAllByRole('button', { name: /Knowledge Management · 100 продуктов · 1\/100/ })).not.toHaveLength(0)
-    expect(screen.getAllByRole('button', { name: /^Обучение 1: ИИ инженер по автоматизации · Лекция 4 из 8/ }).length).toBeGreaterThan(0)
-    // каналы плана — в фильтрах слева
-    const side = screen.getByRole('complementary', { name: 'Фильтры' })
-    for (const name of ['Датаист Live', 'Лаборатория Датаиста', 'Академия Датаиста', 'Нейроний', 'Ландао', 'Антрополис']) expect(within(side).getAllByText(name).length).toBeGreaterThan(0)
-    // ⌘Z — прежний план
+
+  it('сохранён старый пример — открывается расписание; «Отменить» вернёт прежний', async () => {
+    await open(smallPlan())
+    await screen.findByText(/Загружен план Датаиста: 7 каналов, с 15 ноя.* — прежний пример заменён/)
     await userEvent.keyboard('{Meta>}z{/Meta}')
-    await waitFor(() => expect(screen.queryAllByRole('button', { name: /Knowledge Management/ })).toHaveLength(0))
-    expect(within(side).queryByText('Нейроний')).toBeNull()
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
+    await waitFor(() => expect(within(side).queryByText('Нейроний')).toBeNull())
   })
 
-  it('сохранён план Датаиста прежней версии (с 8 ноября) — его сменяет новый (с 15 ноября); «Отменить» вернёт прежний', async () => {
-    const stale: Plan = { ...dataist, example: 'dataist-calendar', start: '2026-11-08', items: dataist.items.map((it) => ({ ...it, title: it.title.replace('100 продуктов', '100 ИИ-сотрудников за 100 дней') })) }
+  it('сохранён план Датаиста прежней версии (календарь со страницы) — его сменяет расписание; «Отменить» вернёт прежний', async () => {
+    const stale: Plan = { ...smallPlan(), example: 'dataist-calendar-2' }
     const storage = keeping()
     await open(stale, dataist, storage)
     await screen.findByText(/^Обновлён план Датаиста: 7 каналов, с 15 ноя$/)
-    expect(await screen.findAllByRole('button', { name: /Knowledge Management · 100 продуктов · 1\/100/ })).not.toHaveLength(0)
     expect((await storage.load())?.example).toBe(DATAIST_EXAMPLE)
     await userEvent.keyboard('{Meta>}z{/Meta}')
-    expect(await screen.findAllByRole('button', { name: /Knowledge Management · 100 ИИ-сотрудников/ })).not.toHaveLength(0)
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
+    await waitFor(() => expect(within(side).getAllByText('Andre AIT').length).toBeGreaterThan(0))
   })
 
   it('свой план не трогаем: ни замены, ни тоста', async () => {
     const own = { ...smallPlan(), rules: smallPlan().rules.filter((r) => r.id !== 'f_demo'), items: smallPlan().items.filter((it) => it.ruleId !== 'f_demo') }
     const { storage } = await open(own)
-    expect(screen.getAllByRole('button', { name: /Тезисы · Тезис дня/ }).length).toBeGreaterThan(0)
-    expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
+    expect(screen.queryByText(/план Датаиста/)).toBeNull()
     expect((await storage.load())?.example).toBeUndefined()
-  })
-
-  it('исходный план — без метки плана Датаиста (старый seed): сохранённый пример остаётся как был', async () => {
-    const { storage } = await open(smallPlan(), smallPlan())
-    expect(screen.queryByText(/Загружен план Датаиста/)).toBeNull()
-    expect((await storage.load())?.rules.some((r) => r.id === 'f_demo')).toBe(true)
   })
 })

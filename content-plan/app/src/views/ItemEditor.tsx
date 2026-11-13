@@ -5,9 +5,10 @@ import { contextOf, partsActions, presetOfSource, scheduleRule, scheduleDates, s
 import { newId, type Action } from '../model/store'
 import {
   FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, filesOf, isHome, isImage, isSlot, MAX_FILE_MB, MAX_FILES, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, SHORT_VIDEO, shownTitle,
-  statusOf, TEXT_IMAGE, timeOf, type Attachment, type Item, type Rule, type SourceRef, type Status,
+  statusOf, TEXT_IMAGE, timeOf, type Attachment, type Draft, type Item, type Rule, type SourceRef, type Status,
 } from '../model/types'
 import { unitsOf } from '../model/units'
+import { stubDraft } from '../model/draft'
 import { IconButton, PickText, PlatformIcon, PlayPause } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
@@ -83,6 +84,8 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const [platforms, setPlatforms] = useState<string[]>(() => base.platforms ?? presetPlatforms(plan, channels.get(firstChannel), firstFormat, rules.get(firstRule)))
   const [status, setStatus] = useState<Status>(base.status ?? 'planned')
   const [note, setNote] = useState(base.note ?? '')
+  // черновик по теме, заметке и фото — пока заглушка: черновики будут выдавать другие приложения
+  const [copy, setCopy] = useState<Draft | undefined>(base.draft)
   const [files, setFiles] = useState<Attachment[]>(() => filesOf(base))
   const [time, setTime] = useState(base.time ?? '')
   // ситуативно — без часа, сверху дня (как «весь день» в Google Календаре); у нового — как у формата рубрики
@@ -245,6 +248,13 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
     setError(big.length ? `Файл больше ${MAX_FILE_MB} МБ не добавлен: ${big.map((f) => f.name).join(', ')}` : ok.length > room ? `Не больше ${MAX_FILES} файлов — лишние не добавлены` : '')
   }
 
+  const makeDraft = (version: number) => {
+    if (!title.trim()) return setError('Сначала впишите тему — черновик собирается из неё, заметки и фото')
+    const rubricText = newTag || plan.rubrics.find((r) => r.id === rubricId)?.name
+    setCopy(stubDraft({ title: title.trim(), note, format, files: files.length, rubric: rubricText }, version))
+    setError('')
+  }
+
   const save = (toDrafts = false) => {
     const named = title.trim()
     const t = named || PLACEHOLDER
@@ -292,6 +302,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
       platforms: shownPlatforms,
       status,
       note: note || undefined,
+      draft: copy,
       files: files.length ? files : undefined,
       images: undefined,
       format,
@@ -328,6 +339,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
         source: source ? (day ? 'пересоздано' : 'черновик') : t === PLACEHOLDER ? 'нужна тема' : day ? 'вручную' : 'черновик',
         rank: sample?.rank ?? 50,
         note: patch.note,
+        draft: patch.draft,
         files: patch.files,
         time: patch.time,
         allDay: patch.allDay,
@@ -538,6 +550,29 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
             onAdd={addFiles}
             onRemove={(i) => setFiles((list) => list.filter((_, k) => k !== i))}
           />
+        </div>
+
+        {/* черновик — из темы, заметки и фото; пока заглушка, «Перегенерировать» — следующая версия */}
+        <div className="cp-field">
+          <span className="nr-label">Черновик</span>
+          {copy ? (
+            <div className="cp-draft" role="region" aria-label="Черновик">
+              <div className="cp-draft__head">
+                <span className="cp-muted">Версия {copy.version}{copy.stub ? ' · заглушка' : ''}</span>
+                <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => makeDraft(copy.version + 1)}>
+                  <Icon name="reset" size={14} /> Перегенерировать
+                </button>
+              </div>
+              <pre className="cp-draft__text">{copy.text}</pre>
+            </div>
+          ) : (
+            <div className="cp-draft__empty">
+              <button type="button" className="nr-btn nr-btn--sm" onClick={() => makeDraft(1)}>
+                <Icon name="spark" size={14} /> Создать черновик
+              </button>
+              <span className="cp-hint">Из темы, заметки и фото. Пока заглушка — черновики будут собирать приложения.</span>
+            </div>
+          )}
         </div>
 
         <div className="cp-field" title={needRule ? 'У рубрики в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>

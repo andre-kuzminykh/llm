@@ -51,6 +51,8 @@ export interface Rule {
   bank?: boolean // темы к формату копятся в банке
   stream?: boolean // поток: выходит по вебхуку круглосуточно, как только пришло (лента Neuronium); своего времени нет
   allDay?: boolean // ситуативно: новые материалы формата — без часа, сверху дня, как событие «на весь день» в Google Календаре
+  scheduled?: boolean // в расписании: слоты «Нужна тема» ставятся сами — навсегда, пока рубрику не убрали (schedule.ts)
+  weeks?: number[] // недели 4-недельного цикла (1–4, неделя I — с plan.cycleStart); без поля — каждую неделю
 }
 
 export type Status = 'planned' | 'progress' | 'paused' | 'ready' | 'published'
@@ -85,6 +87,15 @@ export interface Item {
   files?: Attachment[] // к заметке — до 5 файлов: картинки и тексты
   images?: string[] // так картинки заметки хранились раньше: читаются как файлы
   ref?: SourceRef // из чего пересоздан: пост или видео (своё или конкурента); сам контекст — текстом в заметке
+  draft?: Draft // черновик по теме, заметке и файлам: пока заглушка — потом его соберут другие приложения
+}
+
+/** Черновик материала: сценарий видео, текст поста или статьи. Перегенерировать — новая версия. */
+export interface Draft {
+  text: string
+  version: number
+  at: string // когда собран, ISO
+  stub?: boolean // заглушка: настоящий черновик выдадут приложения, которые подключим позже
 }
 
 /** Файл в заметке: картинка или текст (txt, md, pdf, docx…) — data: URL, хранится с планом. */
@@ -145,7 +156,8 @@ export const LANGS: { id: Lang; code: string; name: string }[] = [
 
 export interface Plan {
   version: 3
-  example?: string // план Датаиста из календаря (public/seed.json, scripts/dataist-seed.mjs): «dataist-calendar»; «cleared» — очищен руками
+  cycleStart?: ISODate // начало недели I 4-недельного цикла расписания (Rule.weeks)
+  example?: string // план Датаиста — расписание из таблицы (public/seed.json, scripts/schedule-seed.mjs): «dataist-schedule-1»; «cleared» — очищен руками
   start: ISODate
   end: ISODate
   platforms: string[]
@@ -311,8 +323,8 @@ export function emptyPlan(today: ISODate): Plan {
 
 export const DEFAULT_TIME = '12:00'
 /** Как подписан поток вместо времени: «24/7». */
-/** Метка плана Датаиста (public/seed.json): новее — сохранённый план со старой меткой меняется на новый (scripts/dataist-seed.mjs). */
-export const DATAIST_EXAMPLE = 'dataist-calendar-2'
+/** Метка плана Датаиста (public/seed.json): новее — сохранённый план со старой меткой меняется на новый (scripts/schedule-seed.mjs). */
+export const DATAIST_EXAMPLE = 'dataist-schedule-1'
 export const STREAM_TIME = '24/7'
 /** Подпись времени у ситуативного: без часа, сверху дня. */
 export const ALL_DAY = 'Весь день'
