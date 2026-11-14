@@ -2,7 +2,8 @@ import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'reac
 import { dateText, dayTitle, shortDate, today, weekday, WEEKDAYS, addDays } from '../model/dates'
 import { presetOf, presetRule, PRESETS, repeatDates, repeatText, times, type Preset, type RepeatRule } from '../model/repeat'
 import { contextOf, partsActions, presetOfSource, scheduleRule, scheduleDates, sourceOfItem, VOICES, type Place, type Source, type Voice } from '../model/social'
-import { newId, type Action } from '../model/store'
+import { onSchedule } from '../model/schedule'
+import { matesOf, newId, type Action } from '../model/store'
 import {
   FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, filesOf, isHome, isImage, isSlot, MAX_FILE_MB, MAX_FILES, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, SHORT_VIDEO, shownTitle,
   statusOf, TEXT_IMAGE, timeOf, type Attachment, type Draft, type Item, type Rule, type SourceRef, type Status,
@@ -97,6 +98,11 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const [error, setError] = useState('')
   const [newTag, setNewTag] = useState('') // рубрика, которой ещё нет: заведётся при сохранении
   const [format, setFormat] = useState(firstFormat)
+  // карточка из нескольких форматов (тот же день, час, канал, рубрика и тема): площадки у каждого формата свои,
+  // формат можно убрать из карточки или добавить
+  const [matePlats, setMatePlats] = useState<Record<string, string[]>>({})
+  const [dropped, setDropped] = useState<string[]>([])
+  const [added, setAdded] = useState<{ format: string; platforms: string[] }[]>([])
   // пересоздать: на сколько коротких нарезать, как поставить части и чем озвучить
   const [count, setCount] = useState(preset?.count ?? 1)
   const [place, setPlace] = useState<Place>((preset?.count ?? 1) > 1 ? 'sameDay' : 'drafts')
@@ -118,6 +124,17 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
     [plan.items, existing],
   )
   const isBank = !!existing && existing.date === null
+  // остальные форматы карточки — без группы, с датой; у карточки с группой (FULL с тизером и анонсами) — свой порядок
+  const formatOrder = Object.keys(FORMAT_ICON)
+  // по порядку, как на карточке: горизонталь, вертикаль, пост, веб, рассылка
+  const mates = useMemo(
+    () => (existing?.date && !existing.group ? matesOf(plan, existing).sort((a, b) => formatOrder.indexOf(a.format) - formatOrder.indexOf(b.format)) : []),
+    [plan, existing], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const cardMode = mates.length > 0 || added.length > 0
+  const canAddFormat = !!existing?.date && !existing.group && !existing.derive
+  const cardFormats = [format, ...mates.filter((m) => !dropped.includes(m.id)).map((m) => m.format), ...added.map((a) => a.format)]
+  const missing = formatOrder.filter((f) => !cardFormats.includes(f))
   // вся карточка материала: статус ставится и тизеру, и анонсам — как кнопкой на карточке
   const cardIds = useMemo(() => {
     if (!existing?.date) return existing ? [existing.id] : []
@@ -215,7 +232,8 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   }
   // нарезка: только у нового из источника, короткими видео
   const parts = !existing && !!source && format === SHORT_VIDEO ? Math.max(1, Math.min(20, count)) : 1
-  const canRepeat = !!date && !(existing && existing.date === null) && parts === 1
+  // повтор — у одиночного материала; у карточки из нескольких форматов повтор — строкой в «Расписании»
+  const canRepeat = !!date && !(existing && existing.date === null) && parts === 1 && !cardMode
   const repeats = canRepeat ? repeatDates(date, repeat, plan.end) : []
   const presetNow: Preset = presetOf(repeat)
   const rDays = repeat?.days.length ? repeat.days : date ? [weekday(date)] : []
@@ -251,9 +269,49 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const makeDraft = (version: number) => {
     if (!title.trim()) return setError('Сначала впишите тему — черновик собирается из неё, заметки и фото')
     const rubricText = newTag || plan.rubrics.find((r) => r.id === rubricId)?.name
-    setCopy(stubDraft({ title: title.trim(), note, format, files: files.length, rubric: rubricText }, version))
+    const formats = cardMode ? [...cardFormats].sort((a, b) => formatOrder.indexOf(a) - formatOrder.indexOf(b)) : undefined
+    setCopy(stubDraft({ title: title.trim(), note, format, formats, files: files.length, rubric: rubricText }, version))
     setError('')
   }
+
+  /** Карточка из нескольких форматов: площадки форматов, убранные и добавленные форматы — тем же шагом истории. */
+  const cardActions = (c: { date: string; channelId: string; rubricId: string | null; title: string; at?: string; patch: Partial<Item> }): Action[] => {
+    const out: Action[] = []
+    for (const m of mates) {
+      if (dropped.includes(m.id)) out.push({ type: 'remove', id: m.id, withGroup: false })
+      else if (matePlats[m.id] && matePlats[m.id].join() !== m.platforms.join()) out.push({ type: 'update', id: m.id, patch: { platforms: matePlats[m.id] } })
+    }
+    for (const a of added) {
+      // формат рубрики в канале — если он выходит в этот день; иначе разовый: расписание его не снимет
+      const fit = c.channelId && c.rubricId ? rulesFor(c.channelId, c.rubricId).find((x) => x.format === a.format && x.rubricId === c.rubricId) : undefined
+      const r = fit && (fit.scheduled ? onSchedule(plan, fit, c.date) : fit.days[weekday(c.date)]) ? fit : undefined
+      const item: Item = {
+        id: newId(),
+        date: c.date,
+        channelId: c.channelId,
+        ruleId: r?.id ?? '',
+        rubricId: c.rubricId,
+        title: c.title,
+        format: a.format,
+        platforms: a.platforms,
+        status: c.patch.status ?? 'planned',
+        source: 'вручную',
+        rank: existing?.rank ?? 50,
+        note: c.patch.note,
+        draft: c.patch.draft,
+        files: c.patch.files,
+        // час — как у карточки; ситуативно — тоже; формат вне сетки — разовый
+        time: c.at && c.at !== timeOf({}, r) ? c.at : undefined,
+        allDay: c.patch.allDay,
+        offGrid: !r || undefined,
+      }
+      for (const k of Object.keys(item) as (keyof Item)[]) if (item[k] === undefined) delete item[k]
+      out.push({ type: 'create', item, withFamily: false })
+    }
+    return out
+  }
+  /** Добавить формат в карточку: площадки — какие у канала для этого формата. */
+  const addFormat = (f: string) => setAdded((list) => [...list, { format: f, platforms: FORMAT_HOME[f] ? [FORMAT_HOME[f]] : presetFor(realChannel, f) }])
 
   const save = (toDrafts = false) => {
     const named = title.trim()
@@ -320,9 +378,15 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
       // повтор от этого материала вперёд: копии со своим днём, общий series
       const series = repeats.length ? existing.series ?? newId('s') : undefined
       const edited = { ...patch, ...(series ? { series } : {}) }
-      // карточка — одна: группа переносится вместе
-      run([...setup, { type: 'edit', id: existing.id, patch: edited, date: date && date !== existing.date ? date : undefined, withGroup: true }, ...(series ? repeatCopies({ ...existing, ...edited, date } as Item, ruleNow, needRule, series) : [])])
-      toast(`${series ? `Сохранено и повторится ещё ${times(repeats.length)} — ${repeatText(repeat, date)}` : 'Сохранено'}`, true)
+      // карточка — одна: группа и остальные форматы карточки переносятся вместе, тема, заметка и черновик — общие
+      run([
+        ...setup,
+        { type: 'edit', id: existing.id, patch: edited, date: date && date !== existing.date ? date : undefined, withGroup: true },
+        ...cardActions({ date: date || existing.date!, channelId: cid, rubricId: patch.rubricId ?? null, title: t, at: allDay ? undefined : timeOf({ time: patch.time }, ruleNow), patch }),
+        ...(series ? repeatCopies({ ...existing, ...edited, date } as Item, ruleNow, needRule, series) : []),
+      ])
+      const n = cardFormats.length
+      toast(`${series ? `Сохранено и повторится ещё ${times(repeats.length)} — ${repeatText(repeat, date)}` : cardMode ? `Сохранено: карточка — ${n} ${n < 5 ? 'формата' : 'форматов'}` : 'Сохранено'}`, true)
     } else {
       const sample = ruleNow ? plan.items.find((x) => x.ruleId === ruleNow!.id && x.date && !x.derive) : undefined
       const item: Item = {
@@ -382,8 +446,9 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const remove = () => {
     if (!existing) return
     // карточка удаляется целиком: тизер, анонсы и письма группы — вместе, «Отменить» вернёт
-    dispatch({ type: 'remove', id: existing.id, withGroup: members.length > 0 })
-    toast(members.length ? `Удалено: карточка целиком (${members.length + 1})` : 'Удалено', true)
+    const all = members.length + mates.length
+    dispatch({ type: 'remove', id: existing.id, withGroup: all > 0 })
+    toast(all ? `Удалено: карточка целиком (${all + 1})` : 'Удалено', true)
     onClose()
   }
 
@@ -575,6 +640,63 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
           )}
         </div>
 
+        {cardMode && (
+          <div className="cp-field">
+            <span className="nr-label">Форматы карточки</span>
+            <p className="cp-hint">Одна тема в нескольких форматах: тема, заметка, фото, черновик, время и статус — общие; площадки у каждого формата свои.</p>
+            <div className="cp-cardfmts" role="group" aria-label="Форматы карточки">
+              <CardFormat format={format} platforms={shownPlatforms} all={plan.platforms} onToggle={togglePlatform} />
+              {mates.map((m) =>
+                dropped.includes(m.id) ? (
+                  <div key={m.id} className="cp-cardfmt cp-cardfmt--gone">
+                    <span className="cp-cardfmt__name">
+                      <Icon name={FORMAT_ICON[m.format]?.icon ?? 'f-post'} size={16} /> {FORMAT_SHORT[m.format] ?? m.format} — уберётся
+                    </span>
+                    <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => setDropped((l) => l.filter((x) => x !== m.id))}>
+                      Вернуть
+                    </button>
+                  </div>
+                ) : (
+                  <CardFormat
+                    key={m.id}
+                    format={m.format}
+                    platforms={matePlats[m.id] ?? m.platforms}
+                    all={plan.platforms}
+                    onToggle={(p) => setMatePlats((cur) => {
+                      const list = cur[m.id] ?? m.platforms
+                      return { ...cur, [m.id]: list.includes(p) ? list.filter((x) => x !== p) : plan.platforms.filter((x) => x === p || list.includes(x)) }
+                    })}
+                    onRemove={() => setDropped((l) => [...l, m.id])}
+                  />
+                ),
+              )}
+              {added.map((a, i) => (
+                <CardFormat
+                  key={`add-${a.format}`}
+                  format={a.format}
+                  platforms={a.platforms}
+                  all={plan.platforms}
+                  isNew
+                  onToggle={(p) => setAdded((list) => list.map((x, k) => (k === i ? { ...x, platforms: x.platforms.includes(p) ? x.platforms.filter((y) => y !== p) : plan.platforms.filter((y) => y === p || x.platforms.includes(y)) } : x)))}
+                  onRemove={() => setAdded((list) => list.filter((_, k) => k !== i))}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {canAddFormat && missing.length > 0 && (
+          <div className="cp-field">
+            <span className="nr-label">Ещё формат в эту карточку</span>
+            <div className="cp-addfmt" role="group" aria-label="Добавить формат">
+              {missing.map((f) => (
+                <button key={f} type="button" className="nr-btn nr-btn--ghost nr-btn--sm" aria-label={`Добавить формат: ${FORMAT_SHORT[f] ?? f}`} onClick={() => addFormat(f)}>
+                  <Icon name="plus" size={13} /> <Icon name={FORMAT_ICON[f].icon} size={14} /> {FORMAT_ICON[f].label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!cardMode && (<>
         <div className="cp-field" title={needRule ? 'У рубрики в этом канале такого формата ещё нет: заведётся, разовый' : rule?.what || undefined}>
           <span className="nr-label">Формат{needRule && <span className="cp-field__new"> · новый</span>}</span>
           {/* значками: горизонталь, вертикаль, пост, веб, рассылка — щёлкнуть один */}
@@ -587,7 +709,8 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
             ))}
           </div>
         </div>
-        {fits.length > 1 && (
+        </>)}
+        {fits.length > 1 && !cardMode && (
           <label className="cp-field" title={rule?.what || undefined}>
             <span className="nr-label">Что именно</span>
             <select className="nr-field" value={ruleId} onChange={(e) => takeRule(rules.get(e.target.value))}>
@@ -658,7 +781,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
         )}
 
         {/* площадки — по формату: у сайта и письма их нет; выбранные руками канал запомнит */}
-        {platformList.length > 0 && (
+        {platformList.length > 0 && !cardMode && (
           <div className="cp-field">
             <span className="nr-label">Площадки</span>
             {/* одной строкой, плитками как форматы: значок и название */}
@@ -823,6 +946,41 @@ function NoteBox({ note, setNote, noteRef, files, onAdd, onRemove }: {
       {big !== null && files[big] && (
         <div className="cp-dialog__scrim cp-lightbox" role="dialog" aria-modal="true" aria-label="Картинка" onClick={() => setBig(null)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setBig(null))}>
           <img src={files[big].url} alt={files[big].name} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Формат в карточке: значок и название, площадки — щёлкнуть, чтобы снять или поставить; сайт и рассылка — своя площадка. */
+function CardFormat({ format, platforms, all, onToggle, onRemove, isNew }: {
+  format: string
+  platforms: string[]
+  all: string[]
+  onToggle: (p: string) => void
+  onRemove?: () => void
+  isNew?: boolean
+}) {
+  const name = FORMAT_SHORT[format] ?? format
+  const home = FORMAT_HOME[format]
+  const can = all.filter((p) => platformsFor(format, all).includes(p) || (platforms.includes(p) && !isHome(p)))
+  return (
+    <div className="cp-cardfmt" role="group" aria-label={`${name}${isNew ? ' — новый' : ''}`}>
+      <div className="cp-cardfmt__name">
+        <Icon name={FORMAT_ICON[format]?.icon ?? 'f-post'} size={16} />
+        <span>{name}</span>
+        {isNew && <span className="cp-field__new">новый</span>}
+        {onRemove && <IconButton icon="close" size="sm" label={`Убрать из карточки: ${name}`} onClick={onRemove} />}
+      </div>
+      {home ? (
+        <span className="cp-hint">{home === 'Web' ? 'На сайте' : 'В рассылке'}</span>
+      ) : (
+        <div className="cp-cardfmt__plats">
+          {can.map((p) => (
+            <button key={p} type="button" className="cp-chipbtn" aria-pressed={platforms.includes(p)} aria-label={`${name}: ${p}`} onClick={() => onToggle(p)}>
+              <PlatformIcon platform={p} size={13} /> {p}
+            </button>
+          ))}
         </div>
       )}
     </div>

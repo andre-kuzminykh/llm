@@ -1564,3 +1564,21 @@ th[aria-sort='descending'] .cp-ov__sort { color: var(--nr-text); }
 .cp-draft__empty { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cp-draft__empty .nr-btn { display: inline-flex; align-items: center; gap: 6px; }
 .cp-draft__empty .cp-hint { margin: 0; }
+
+/* карточка из нескольких форматов: у каждого формата — свои площадки; добавить формат — строкой кнопок */
+.cp-cardfmts { display: grid; gap: 6px; }
+.cp-cardfmt { display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--nr-r-md); background: var(--nr-fill-3); }
+.cp-cardfmt--gone { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--nr-text-3); }
+.cp-cardfmt__name { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: var(--nr-fw-medium, 500); }
+.cp-cardfmt__name .nr-icon { flex: none; color: var(--nr-text-2); }
+.cp-cardfmt__name > button:last-child { margin-left: auto; }
+.cp-cardfmt .cp-hint { margin: 0; }
+.cp-cardfmt__plats { display: flex; flex-wrap: wrap; gap: 4px; }
+.cp-chipbtn {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 9px; border: 1px solid var(--nr-sep); border-radius: 999px;
+  background: var(--nr-canvas); color: var(--nr-text-2); font: var(--nr-fw-medium) 12px/1.2 var(--nr-font); cursor: pointer;
+}
+@media (hover: hover) { .cp-chipbtn:hover { color: var(--nr-text); } }
+.cp-chipbtn[aria-pressed='true'] { background: var(--nr-accent-soft); border-color: var(--nr-accent-line); color: var(--nr-accent-text); }
+.cp-addfmt { display: flex; flex-wrap: wrap; gap: 4px; }
+.cp-addfmt .nr-btn { display: inline-flex; align-items: center; gap: 4px; }

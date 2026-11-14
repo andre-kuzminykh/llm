@@ -205,11 +205,15 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
   const st = statusOf(head.status)
   // формат рубрики начинается с самой рубрики («Обучение 1») — подпись одна, без «Обучение · Обучение 1»
   const fused = !!format && !!rubric && format.startsWith(`${rubric.name} `)
-  const label = fused ? format : `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
-  const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
-  // форматы карточки: главного материала первым, остальные — по порядку (горизонталь, вертикаль, веб, пост)
+  // форматы карточки: главного материала первым, остальные — по порядку плиток формы (горизонталь, вертикаль, пост, веб)
   const own = new Set(unit.items.map((it) => it.format))
   const formats = [head.format, ...Object.keys(FORMAT_ICON).filter((f) => f !== head.format && own.has(f))].filter((f) => FORMAT_ICON[f])
+  // один материал в нескольких форматах — одна карточка: в подписи для чтения — все форматы
+  const many = !head.group && formats.length > 1 // у FULL с тизером и анонсами подпись — по FULL, как была
+  const label = many
+    ? `${rubric ? `${rubric.name} · ` : ''}${formats.map((f) => FORMAT_SHORT[f] ?? f).join(', ')}`
+    : fused ? format : `${rubric?.name ?? ''}${format ? ` · ${format}` : ''}`
+  const platLabel = plats.map((p) => `${p.platform} — ${p.parts.map((x) => x.type).join(', ')}`).join(' · ')
   // ряд одной строкой: значок с промежутком — 15 px, черта между форматом и площадками — 6; не влезло — «+N»;
   // пальцем кнопка ▶ крупнее — ряду значков остаётся меньше места
   const room = iconRoom === undefined ? Infinity : iconRoom - (TOUCH ? 8 : 0)
@@ -285,7 +289,7 @@ export function UnitCard({ unit, variant = 'compact', style, showTime = true, na
             {caption && <span className="cp-card__cap">{caption}</span>}
             <span className="cp-card__title">{title}</span>
             <span className="cp-card__foot" aria-hidden="true">
-              <span className="cp-card__kind">{FORMAT_SHORT[head.format] ?? head.format}</span>
+              <span className="cp-card__kind">{many ? formats.map((f) => FORMAT_ICON[f].label).join(' · ') : FORMAT_SHORT[head.format] ?? head.format}</span>
               <span className="cp-card__plats">
                 {where.map(({ platform }) => (
                   <PlatformIcon key={platform} platform={platform} size={12} />

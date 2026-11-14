@@ -12,14 +12,24 @@ const FRAME: Record<string, string[]> = {
 }
 const KIND: Record<string, string> = { [SHORT_VIDEO]: 'Сценарий короткого видео', [FULL_VIDEO]: 'Сценарий длинного видео', [WEB_PAGE]: 'Статья', [TEXT_IMAGE]: 'Пост', [MAIL]: 'Письмо' }
 
-/** Заглушка черновика: каркас формата с темой, рубрикой и заметкой; версия — какая по счёту. */
-export function stubDraft(src: { title: string; note?: string; format: string; files?: number; rubric?: string }, version = 1, at = new Date().toISOString()): Draft {
+/** Заглушка черновика: каркас формата с темой, рубрикой и заметкой; версия — какая по счёту.
+ *  Карточка из нескольких форматов — один черновик на всю карточку: каркас каждого формата по очереди. */
+export function stubDraft(
+  src: { title: string; note?: string; format: string; formats?: string[]; files?: number; rubric?: string },
+  version = 1,
+  at = new Date().toISOString(),
+): Draft {
   const note = (src.note ?? '').trim()
+  const list = src.formats && src.formats.length > 1 ? src.formats : [src.format]
+  const frame = (f: string) => (FRAME[f] ?? FRAME[TEXT_IMAGE]).map((x, i) => `${i + 1}. ${x} — …`)
+  const kind = (f: string) => KIND[f] ?? 'Черновик'
   const lines = [
-    `${KIND[src.format] ?? 'Черновик'}${src.rubric ? ` · ${src.rubric}` : ''}`,
+    list.length > 1
+      ? `Черновик карточки${src.rubric ? ` · ${src.rubric}` : ''}: ${list.map((f) => kind(f).toLowerCase()).join(', ')}`
+      : `${kind(src.format)}${src.rubric ? ` · ${src.rubric}` : ''}`,
     `Тема: ${src.title}`,
     '',
-    ...(FRAME[src.format] ?? FRAME[TEXT_IMAGE]).map((x, i) => `${i + 1}. ${x} — …`),
+    ...(list.length > 1 ? list.flatMap((f, i) => [...(i ? [''] : []), kind(f), ...frame(f)]) : frame(src.format)),
     ...(note ? ['', `Опора из заметки: ${note.length > 280 ? `${note.slice(0, 280)}…` : note}`] : []),
     ...(src.files ? [`Файлы заметки: ${src.files}`] : []),
   ]

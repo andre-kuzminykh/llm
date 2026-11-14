@@ -2,6 +2,7 @@
 // для отмены. Неизменённые материалы переиспользуются, поэтому снимок истории дешёвый.
 import { addDays, daysBetween, fromMin, toMin, weekday } from './dates'
 import { scheduleRule, unscheduleRule } from './schedule'
+import { mateKey } from './units'
 import { FORMAT_HOME, FORMAT_PLATFORMS, isSlot, PLACEHOLDER, rubricKey, rubricName, TEXT_IMAGE, timeOf, type Analytics, type Channel, type ISODate, type Item, type Plan, type Rubric, type Rule } from './types'
 
 let seq = 0
@@ -13,6 +14,15 @@ export const newId = (prefix = 'n') => `${prefix}${Date.now().toString(36)}${(se
 const derived = (template: string, head: Item) => template.replace('{title}', head.title).replace('{topic}', head.title)
 
 const ruleOf = (plan: Plan, id: string) => plan.rules.find((r) => r.id === id)
+
+/** Остальные форматы той же карточки: тот же день, час, канал, рубрика и тема (короткое, статья и пост исследования). */
+export function matesOf(plan: Plan, it: Item): Item[] {
+  const key = mateKey(it, ruleOf(plan, it.ruleId))
+  if (!key) return []
+  return plan.items.filter((x) => x.id !== it.id && x.date === it.date && mateKey(x, ruleOf(plan, x.ruleId)) === key)
+}
+/** Что у карточки общее: тема, заметка, файлы, черновик и статус — правят один раз для всех её форматов. */
+const SHARED = ['title', 'note', 'files', 'images', 'draft', 'status'] as const
 
 /** Производные члены группы берут у главного заголовок (по шаблону) и рубрику. */
 const rederive = (items: Item[], head: Item) =>
@@ -32,7 +42,9 @@ export function moveItem(plan: Plan, id: string, date: ISODate, withGroup = true
   // ситуативное поставили на час — у него теперь время, сверху дня его больше нет
   const timed = !!time && !!it.allDay
   if (it.date === date && !shift && !timed) return plan
-  const together = withGroup && it.group && it.date ? (x: Item) => x.group === it.group && x.date === it.date : (x: Item) => x.id === id
+  // с группой — вся группа; без неё — вся карточка: остальные форматы той же темы в тот же час
+  const mates = withGroup && !it.group ? new Set(matesOf(plan, it).map((x) => x.id)) : null
+  const together = withGroup && it.group && it.date ? (x: Item) => x.group === it.group && x.date === it.date : (x: Item) => x.id === id || !!mates?.has(x.id)
   // конец, если карточку растягивали, едет вместе с началом — длительность та же
   const at = (x: Item) =>
     shift ? { time: fromMin(toMin(timeOf(x, ruleOf(plan, x.ruleId))) + shift), ...(x.end ? { end: endAt(toMin(x.end) + shift) } : {}) } : {}
@@ -146,9 +158,37 @@ export function updateItem(plan: Plan, id: string, patch: Partial<Item>): Plan {
 
 /** Правка из формы: поля, затем дата (с группой или без) — одним шагом истории. */
 export function editItem(plan: Plan, id: string, patch: Partial<Item>, date?: ISODate, withGroup = true): Plan {
-  let next = updateItem(plan, id, patch)
-  // стал ситуативным или получил час — анонсы его группы туда же: выходят вместе с ним
   const it = plan.items.find((x) => x.id === id)
+  const mates = withGroup && it && !it.group ? matesOf(plan, it) : []
+  let next = updateItem(plan, id, patch)
+  // карточка из нескольких форматов: тема, заметка, файлы, черновик, статус, время и «весь день» — всем, карточка не расходится
+  const head = next.items.find((x) => x.id === id)
+  if (mates.length && head) {
+    const ids = new Set(mates.map((x) => x.id))
+    const when = timeOf(head, ruleOf(next, head.ruleId))
+    const timed = 'time' in patch || 'allDay' in patch
+    next = {
+      ...next,
+      items: next.items.map((x) => {
+        if (!ids.has(x.id)) return x
+        const out: Item = { ...x }
+        for (const k of SHARED) if (k in patch) (out as unknown as Record<string, unknown>)[k] = patch[k]
+        if (timed) {
+          if (head.allDay) {
+            out.allDay = true
+            delete out.time
+          } else {
+            delete out.allDay
+            if (when === timeOf({}, ruleOf(next, x.ruleId))) delete out.time
+            else out.time = when
+          }
+        }
+        for (const k of Object.keys(out) as (keyof Item)[]) if (out[k] === undefined) delete out[k]
+        return out
+      }),
+    }
+  }
+  // стал ситуативным или получил час — анонсы его группы туда же: выходят вместе с ним
   if (withGroup && it?.group && it.date && 'allDay' in patch && !!patch.allDay !== !!it.allDay) {
     next = {
       ...next,
@@ -233,7 +273,8 @@ export function catchUp(plan: Plan, moves: CatchUpMove[]): Plan {
 export function removeItem(plan: Plan, id: string, withGroup = true): Plan {
   const it = plan.items.find((x) => x.id === id)
   if (!it) return plan
-  const gone = withGroup && it.group && it.date ? (x: Item) => x.group === it.group && x.date === it.date : (x: Item) => x.id === id
+  const mates = withGroup && !it.group ? new Set(matesOf(plan, it).map((x) => x.id)) : null
+  const gone = withGroup && it.group && it.date ? (x: Item) => x.group === it.group && x.date === it.date : (x: Item) => x.id === id || !!mates?.has(x.id)
   return { ...plan, items: plan.items.filter((x) => !gone(x)) }
 }
 
