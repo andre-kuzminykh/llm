@@ -1117,7 +1117,6 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
 @media (hover: hover) { .cp-month__num:hover { background: var(--nr-fill-2); } }
 .cp-month__day--today .cp-month__num { color: #fff; background: var(--nr-accent); }
 .cp-month__top .cp-viol { margin-left: 0; }
-.cp-month__n { margin-left: auto; font-size: var(--nr-fs-xs); color: var(--nr-text-3); font-variant-numeric: tabular-nums; }
 /* «Неделя / Месяц» — значками, рядом с видом недели */
 .cp-span .cp-views__item { padding: 0 8px; }
 

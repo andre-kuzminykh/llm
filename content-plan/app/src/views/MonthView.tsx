@@ -87,7 +87,6 @@ function MonthDay({ date, out }: { date: ISODate; out: boolean }) {
           {Number(date.slice(8))}
         </button>
         {viol > 0 && <span className="cp-viol" title={`Нарушений: ${viol}`} aria-label={`Нарушений: ${viol}`} role="img" />}
-        {units.length > 0 && <span className="cp-month__n" aria-hidden="true">{units.length}</span>}
       </span>
       {units.map((u) => (
         <UnitCard key={u.key} unit={u} variant="post" />
