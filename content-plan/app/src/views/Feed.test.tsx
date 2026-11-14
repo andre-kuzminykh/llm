@@ -55,7 +55,7 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и
     const reel = within(feed).getByRole('article', { name: 'ИИ-агенты в бухгалтерии' })
     const faces = within(reel).getByRole('radiogroup', { name: 'Формат карточки' })
     expect(within(faces).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Вертикаль', 'Пост', 'Веб'])
-    expect(within(reel).getByText('Выйдет · Пн, 16 ноября, 09:00')).toBeInTheDocument()
+    expect(within(reel).getByText('Выйдет · Пн, 16 ноября, 10:00')).toBeInTheDocument()
     expect(within(reel).getByRole('img', { name: 'Короткое видео: ИИ-агенты в бухгалтерии' })).toBeInTheDocument()
     await userEvent.click(within(faces).getByRole('radio', { name: 'Пост' }))
     expect(within(reel).getByRole('img', { name: 'Пост: ИИ-агенты в бухгалтерии' })).toBeInTheDocument()
@@ -156,6 +156,48 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и
     await userEvent.click(within(mine).getByRole('button', { name: 'Включить звук' }))
     expect(video.muted).toBe(false)
     expect(within(mine).getByRole('button', { name: 'Выключить звук' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('фильтры: формат — строкой над лентой (с числом), площадки и аккаунты — панелью слева; свёрнута — число на кнопке «Фильтры»', async () => {
+    await open(null, { demo: true, side: 'theirs' })
+    const kinds = screen.getByRole('group', { name: 'Формат' })
+    expect(within(kinds).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual([
+      'Все',
+      ...['Короткие видео', 'Длинные видео', 'Посты', 'Карусели', 'Статьи'].map((l) => expect.stringMatching(new RegExp(`^${l}: \\d+$`))),
+    ])
+    const shorts = Number(within(kinds).getByRole('button', { name: /^Короткие видео/ }).getAttribute('aria-label')!.split(': ')[1])
+    await userEvent.click(within(kinds).getByRole('button', { name: /^Короткие видео/ }))
+    const feed = screen.getByRole('feed', { name: 'Лента: смотрю других' })
+    expect(feed.querySelectorAll('.cp-reel__frame:not(.cp-reel__frame--short)')).toHaveLength(0)
+    expect(Number(feed.querySelector('[data-reel]')!.getAttribute('aria-setsize'))).toBe(shorts)
+    // панель слева: площадка TikTok — только Tech Shorts
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
+    expect(within(within(side).getByRole('group', { name: 'Аккаунты' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['AI Daily', 'Нейросети без воды', 'Tech Shorts', 'Growth Lab'])
+    await userEvent.click(within(within(side).getByRole('group', { name: 'Площадки' })).getByRole('button', { name: 'TikTok' }))
+    await waitFor(() => expect(within(feed).getAllByRole('button', { name: /^Только / }).every((b) => b.getAttribute('aria-label') === 'Только Tech Shorts')).toBe(true))
+    await userEvent.click(within(side).getByRole('button', { name: 'Свернуть фильтры' }))
+    expect(screen.getByRole('button', { name: 'Фильтры' })).toHaveTextContent('1')
+    // ничего не подошло — «Сбросить фильтры»
+    await userEvent.click(within(kinds).getByRole('button', { name: /^Статьи/ }))
+    await userEvent.click(within(kinds).getByRole('button', { name: /^Короткие видео/ }))
+    expect(screen.getByRole('heading', { name: 'По этим фильтрам ничего нет' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }))
+    expect(within(kinds).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Фильтры' })).not.toHaveTextContent('1')
+  })
+
+  it('свои: фильтр «Посты» — карточка открывается видом поста; «Когда»: выйдет / вышло; каналы — каналы плана', async () => {
+    await open(withTopic(), { demo: true })
+    await userEvent.click(within(screen.getByRole('group', { name: 'Формат' })).getByRole('button', { name: /^Посты/ }))
+    const feed = screen.getByRole('feed', { name: 'Лента: я выпускаю' })
+    const card = within(feed).getByRole('article', { name: 'ИИ-агенты в бухгалтерии' })
+    expect(within(card).getByRole('radio', { name: 'Пост' })).toHaveAttribute('aria-checked', 'true')
+    const side = screen.getByRole('complementary', { name: 'Фильтры' })
+    expect(within(within(side).getByRole('group', { name: 'Каналы' })).getAllByRole('button')[0]).toHaveTextContent('Лаборатория Датаиста')
+    await userEvent.click(within(side).getByRole('radio', { name: 'Выйдет' }))
+    expect(within(feed).getAllByRole('article').map((a) => a.getAttribute('aria-label'))).toEqual(['ИИ-агенты в бухгалтерии'])
+    await userEvent.click(within(side).getByRole('radio', { name: 'Вышло' }))
+    expect(within(screen.getByRole('feed', { name: 'Лента: я выпускаю' })).queryByRole('article', { name: 'ИИ-агенты в бухгалтерии' })).toBeNull()
   })
 
   it('подписаться ссылкой: площадка и @аккаунт — из ссылки; первая подписка заменяет пример; «Отписаться» — открепиться', async () => {

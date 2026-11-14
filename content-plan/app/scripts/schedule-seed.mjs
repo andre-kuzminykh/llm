@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 const SRC = new URL('../../source/schedule.csv', import.meta.url)
 const OUT = new URL('../public/seed.json', import.meta.url)
 // метка плана — как DATAIST_EXAMPLE в src/model/types.ts: сохранённый план с другой меткой программа сменит на этот
-export const EXAMPLE = 'dataist-schedule-1'
+export const EXAMPLE = 'dataist-schedule-2'
 export const START = '2026-11-15' // неделя I
 export const END = '2027-11-14' // год вперёд; дальше — программа
 

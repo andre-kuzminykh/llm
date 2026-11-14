@@ -326,7 +326,7 @@ export function emptyPlan(today: ISODate): Plan {
 export const DEFAULT_TIME = '12:00'
 /** Как подписан поток вместо времени: «24/7». */
 /** Метка плана Датаиста (public/seed.json): новее — сохранённый план со старой меткой меняется на новый (scripts/schedule-seed.mjs). */
-export const DATAIST_EXAMPLE = 'dataist-schedule-1'
+export const DATAIST_EXAMPLE = 'dataist-schedule-2'
 export const STREAM_TIME = '24/7'
 /** Подпись времени у ситуативного: без часа, сверху дня. */
 export const ALL_DAY = 'Весь день'

@@ -142,10 +142,19 @@ export const isStaleDataist = (p: Plan) => !!p.example?.startsWith('dataist-') &
 /** Пустой план, сохранённый до плана Датаиста: ни каналов, ни материалов; очищенный руками («Очистить всё») помечен и не считается. */
 export const isBlankPlan = (p: Plan) => !p.example && !p.items.length && !p.channels.length
 
+/** Время в расписании Датаиста сдвинулось (14.11.2026, правка владельца): 7 → 8, 8 → 9, 9 → 10, 10 → 11, 20 → 19. */
+export const HOUR_SHIFT: Record<string, string> = { '07:00': '08:00', '08:00': '09:00', '09:00': '10:00', '10:00': '11:00', '20:00': '19:00' }
+/** Сохранённый план Датаиста с прежним расписанием переводится сам, на месте: строки расписания — на новое время (слоты
+ *  идут за ними), вписанные темы, заметки, черновики и время, поставленное руками, — как были. */
+export function shiftDataistHours(p: Plan): Plan {
+  if (p.example !== 'dataist-schedule-1') return p
+  return { ...p, example: DATAIST_EXAMPLE, rules: p.rules.map((r) => (r.scheduled && HOUR_SHIFT[r.time] ? { ...r, time: HOUR_SHIFT[r.time] } : r)) }
+}
+
 export async function upgradePlan(p: AnyPlan, seed: () => Promise<Plan>): Promise<Plan> {
   if (isV1(p)) return webAndMail(splitDataist(renameAndFormats(migrateV1(p, await seed()))))
   if (isV2(p)) return webAndMail(splitDataist(renameAndFormats(migrateV2(p, await seed()))))
-  return webAndMail(splitDataist(renameAndFormats(await addStreams(p, seed))))
+  return shiftDataistHours(webAndMail(splitDataist(renameAndFormats(await addStreams(p, seed)))))
 }
 
 

@@ -173,3 +173,44 @@ export function parseFollow(input: string, fallback = 'YouTube'): { platform: st
 /** Уже следим за этим аккаунтом на этой площадке? */
 export const followed = (list: Competitor[], f: { platform: string; handle: string }) =>
   list.some((c) => c.platform === f.platform && c.handle.toLowerCase() === f.handle.toLowerCase())
+
+// ── фильтры ленты: формат, каналы (или аккаунты), площадки, топики, когда ─────────────────────────────────
+
+/** Выделенное — остаётся только оно; ничего не выделено в разрезе — в нём всё. */
+export interface ReelFilters {
+  kinds: ReelKind[]
+  owners: string[] // каналы плана и мои соцсети — в «Я выпускаю», аккаунты подписок — в «Смотрю других»
+  platforms: string[]
+  tags: string[]
+  when: 'all' | 'soon' | 'out' // своё: что выйдет, что вышло
+}
+export const NO_REEL_FILTERS: ReelFilters = { kinds: [], owners: [], platforms: [], tags: [], when: 'all' }
+
+/** Форматы в ленте: как выглядят и как зовутся во множественном — для фильтра. */
+export const REEL_KINDS: { kind: ReelKind; label: string; icon: string }[] = [
+  { kind: 'short', label: 'Короткие видео', icon: 'f-vertical' },
+  { kind: 'video', label: 'Длинные видео', icon: 'f-horizontal' },
+  { kind: 'post', label: 'Посты', icon: 'f-post' },
+  { kind: 'carousel', label: 'Карусели', icon: 'image' },
+  { kind: 'article', label: 'Статьи', icon: 'f-web' },
+]
+
+/** Площадки материала: у каждого вида — свои; статья — на сайте. */
+export const reelPlatforms = (r: Reel) => [...new Set([...r.faces.flatMap((f) => f.platforms), r.platform])]
+
+/** Подходит ли материал под фильтры; без одного из разрезов — для счётчиков в этом разрезе. */
+export function reelVisible(r: Reel, f: ReelFilters, skip?: keyof ReelFilters): boolean {
+  if (skip !== 'kinds' && f.kinds.length && !r.faces.some((x) => f.kinds.includes(x.kind))) return false
+  if (skip !== 'owners' && f.owners.length && !f.owners.includes(r.owner)) return false
+  if (skip !== 'platforms' && f.platforms.length && !reelPlatforms(r).some((p) => f.platforms.includes(p))) return false
+  if (skip !== 'tags' && f.tags.length && !r.tags.some((t) => f.tags.includes(t))) return false
+  if (skip !== 'when' && f.when === 'soon' && !r.planned) return false
+  if (skip !== 'when' && f.when === 'out' && r.planned) return false
+  return true
+}
+
+/** Сколько разрезов выбрано (без формата — он строкой над лентой): для значка на кнопке «Фильтры». */
+export const reelFilterCount = (f: ReelFilters) => f.owners.length + f.platforms.length + f.tags.length + (f.when === 'all' ? 0 : 1)
+
+/** С какого вида открыть материал: первый, что подходит под выбранные форматы. */
+export const faceFor = (r: Reel, kinds: ReelKind[]) => Math.max(0, kinds.length ? r.faces.findIndex((x) => kinds.includes(x.kind)) : 0)

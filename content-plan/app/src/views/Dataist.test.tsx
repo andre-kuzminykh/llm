@@ -29,8 +29,8 @@ const profile = async (item: string | RegExp) => {
   await userEvent.click(screen.getByRole('button', { name: 'Профиль' }))
   await userEvent.click(screen.getByRole('menuitem', { name: item }))
 }
-// карточка расписания в неделе: короткое видео, пост и статья исследования в 09:00 — одна карточка «Нужна тема»
-const research = /^Исследование · Короткое видео, Текст с картинкой, Страница на сайте: Нужна тема, 09:00/
+// карточка расписания в неделе: короткое видео, пост и статья исследования в 10:00 — одна карточка «Нужна тема»
+const research = /^Исследование · Короткое видео, Текст с картинкой, Страница на сайте: Нужна тема, 10:00/
 const lesson = /^Микроурок · Короткое видео: Нужна тема, 17:00/
 const cardsIn = (el: HTMLElement) => [...el.querySelectorAll('.cp-card')] as HTMLElement[]
 
@@ -60,10 +60,10 @@ describe('T-CP-075 FR-CP-075 план Датаиста — расписание 
     const caps = (d: string) => cardsIn(day(d)).map((c) => `${c.querySelector('.cp-card__time')?.textContent} ${c.querySelector('.cp-card__ch')?.textContent} · ${c.querySelector('.cp-card__cap')?.textContent} · ${c.querySelector('.cp-card__kind')?.textContent}`)
     const c16 = caps('2026-11-16')
     // исследование Лаборатории — короткое, пост и статья: одна карточка; внизу — все форматы
-    expect(c16).toContain('09:00 Лаборатория Датаиста · Исследование · Вертикаль · Пост · Веб')
-    expect(c16).toContain('10:00 Лаборатория Датаиста · Обзор · Горизонталь · Вертикаль')
+    expect(c16).toContain('10:00 Лаборатория Датаиста · Исследование · Вертикаль · Пост · Веб')
+    expect(c16).toContain('11:00 Лаборатория Датаиста · Обзор · Горизонталь · Вертикаль')
     expect(caps('2026-11-23').filter((c) => c.includes('Обзор'))).toHaveLength(0)
-    expect(caps('2026-11-30')).toContain('10:00 Лаборатория Датаиста · Разработка · Горизонталь · Вертикаль')
+    expect(caps('2026-11-30')).toContain('11:00 Лаборатория Датаиста · Разработка · Горизонталь · Вертикаль')
     // микроуроки — в разное время: каждый своей карточкой
     expect(c16.filter((c) => c.includes('Микроурок'))).toEqual(['17:00', '17:15', '17:30', '17:45'].map((t) => `${t} Академия Датаиста · Микроурок · Короткое видео`))
     // у карточки исследования — площадки всех её форматов
@@ -102,7 +102,7 @@ describe('T-CP-075 FR-CP-075 план Датаиста — расписание 
     await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
     expect(screen.getByText('Сохранено: карточка — 3 формата')).toBeInTheDocument()
     // в календаре — одна карточка с темой
-    const card = /^Исследование · Полное видео, Короткое видео, Текст с картинкой: ИИ-агенты в бухгалтерии, 09:00/
+    const card = /^Исследование · Полное видео, Короткое видео, Текст с картинкой: ИИ-агенты в бухгалтерии, 10:00/
     expect(screen.getAllByRole('button', { name: card })).toHaveLength(1)
     // открыли снова — три формата, у поста — без X, заметка и черновик — на месте
     await userEvent.click(screen.getByRole('button', { name: card }))
@@ -127,12 +127,12 @@ describe('T-CP-075 FR-CP-075 план Датаиста — расписание 
     const lab = within(sheet).getByRole('region', { name: 'Лаборатория Датаиста' })
     const longs = within(lab).getByRole('group', { name: 'Лаборатория Датаиста: Длинное видео' })
     expect(within(longs).getAllByRole('button', { name: /поправить$/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Обзор, Пн · I неделя, 10:00 — поправить',
-      'Разработка, Пн · III неделя, 10:00 — поправить',
+      'Обзор, Пн · I неделя, 11:00 — поправить',
+      'Разработка, Пн · III неделя, 11:00 — поправить',
     ])
-    // Исследование в коротком видео — с 09:00 на 09:30
+    // Исследование в коротком видео — с 10:00 на 09:30
     const shorts = within(lab).getByRole('group', { name: 'Лаборатория Датаиста: Короткое видео' })
-    await userEvent.click(within(shorts).getByRole('button', { name: 'Исследование, каждый день, 09:00 — поправить' }))
+    await userEvent.click(within(shorts).getByRole('button', { name: 'Исследование, каждый день, 10:00 — поправить' }))
     const ed = within(shorts).getByRole('group', { name: 'Строка расписания: Исследование' })
     fireEvent.change(within(ed).getByLabelText('Время'), { target: { value: '09:30' } })
     await userEvent.click(within(ed).getByRole('button', { name: 'Сохранить' }))
@@ -242,6 +242,21 @@ describe('T-CP-075 FR-CP-075 план Датаиста — расписание 
     await userEvent.keyboard('{Meta>}z{/Meta}')
     const side = screen.getByRole('complementary', { name: 'Фильтры' })
     await waitFor(() => expect(within(side).getAllByText('Andre AIT').length).toBeGreaterThan(0))
+  })
+
+  it('сохранён план с прежним временем расписания — переведён на месте, без замены: вписанная тема — на новом часе (09:00 → 10:00)', async () => {
+    const back: Record<string, string> = { '08:00': '07:00', '09:00': '08:00', '10:00': '09:00', '11:00': '10:00', '19:00': '20:00' }
+    const old: Plan = {
+      ...dataist,
+      example: 'dataist-schedule-1',
+      rules: dataist.rules.map((r) => (back[r.time] ? { ...r, time: back[r.time] } : r)),
+      items: dataist.items.map((it) => (it.date === '2026-11-16' && it.channelId === 'lab' && it.rubricId === 'research' ? { ...it, title: 'Агенты в бухгалтерии' } : it)),
+    }
+    vi.setSystemTime(new Date('2026-11-16T08:00:00'))
+    const storage = keeping()
+    await open(old, dataist, storage)
+    expect(await screen.findByRole('button', { name: /^Исследование · Короткое видео, Текст с картинкой, Страница на сайте: Агенты в бухгалтерии, 10:00/ })).toBeInTheDocument()
+    expect(screen.queryByText(/план Датаиста/)).toBeNull()
   })
 
   it('свой план не трогаем: ни замены, ни тоста', async () => {

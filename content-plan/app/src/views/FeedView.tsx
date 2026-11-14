@@ -6,26 +6,21 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { addDays, dayTitle, today } from '../model/dates'
 import { topicLabel } from '../model/overview'
-import { followed, parseFollow, reelOfCard, reelOfPost, type Face, type Reel, type Side } from '../model/reel'
+import { faceFor, followed, NO_REEL_FILTERS, parseFollow, REEL_KINDS, reelFilterCount, reelOfCard, reelOfPost, reelPlatforms, reelVisible, type Face, type Reel, type ReelFilters, type ReelKind, type Side } from '../model/reel'
 import { newId } from '../model/store'
 import { isSlot, statusOf, timeOf } from '../model/types'
 import { unitsOf } from '../model/units'
-import { PlatformIcon, Switch } from '../ui/bits'
+import { IconButton, PlatformIcon, Switch } from '../ui/bits'
 import { demoClip, type Source } from '../ui/clips'
 import { usePlan } from '../ui/ctx'
 import { useHomeData } from '../ui/homeData'
+import { setReelState, useReelState } from '../ui/reelState'
 import { Icon } from '../ui/Icon'
 import { fmtNum } from './Overview'
 
 const PAGE = 12
 const FOLLOW_PLATFORMS = ['YouTube', 'Telegram', 'TikTok', 'Instagram', 'X', 'LinkedIn', 'Web']
-const readSide = (): Side => {
-  try {
-    return localStorage.getItem('cp:reel-side') === 'theirs' ? 'theirs' : 'mine'
-  } catch {
-    return 'mine'
-  }
-}
+const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 const ago = (ms: number, now = Date.now()) => {
   const h = Math.round((now - ms) / 3600_000)
   if (h >= 0 && h < 1) return 'только что'
@@ -38,30 +33,14 @@ const clock = (s?: number) => (s ? `${Math.floor(s / 60)}:${String(s % 60).padSt
 const dayShort = (d: string) => dayTitle(d).replace(/ \d{4}$/, '')
 const initial = (name: string) => name.replace(/^[@#]/, '').trim().charAt(0).toUpperCase() || '·'
 
-export function FeedView() {
-  const { plan, byDate, rules, channels, rubrics, dispatch, toast, setSection } = usePlan()
+/** Материалы ленты: свои — карточки календаря с темой (что выйдет — ближайшее первым, дальше вышедшее и мои посты —
+ *  свежие первыми); чужие — посты подписок. Одни и те же для ленты и панели фильтров. */
+export function useReels() {
+  const { plan, byDate, rules, channels, rubrics } = usePlan()
   const data = useHomeData()
-  const { demo, setDemo, who, now } = data
-  const [side, setSideState] = useState<Side>(readSide)
-  const setSide = (s: Side) => {
-    setSideState(s)
-    setOwner(null)
-    setLimit(PAGE)
-    feedRef.current?.scrollTo?.({ top: 0 })
-    try {
-      localStorage.setItem('cp:reel-side', s)
-    } catch {
-      /* без хранилища — просто не запомнится */
-    }
-  }
-  const [owner, setOwner] = useState<string | null>(null)
-  const [limit, setLimit] = useState(PAGE)
-  const [subsOpen, setSubsOpen] = useState(false)
-  const feedRef = useRef<HTMLDivElement>(null)
+  const { who, now } = data
   const order = useMemo(() => plan.channels.map((c) => c.id), [plan.channels])
-
-  // свои: карточки календаря с темой — что выйдет (ближайшее первым), дальше вышедшее и мои посты — свежие первыми
-  const mineReels = useMemo(() => {
+  const mine = useMemo(() => {
     const t = today()
     const cards: Reel[] = []
     for (let d = addDays(t, -30); d <= addDays(t, 90); d = addDays(d, 1)) {
@@ -78,26 +57,59 @@ export function FeedView() {
     const past = [...cards.filter((r) => !soon.includes(r)), ...posts].sort((a, b) => b.at - a.at)
     return [...soon, ...past]
   }, [byDate, rules, order, channels, rubrics, data.feed, who, now])
-  const theirsReels = useMemo(() => data.feed.posts.filter((p) => !p.mine).map((p) => reelOfPost(p, who.get(p.owner))), [data.feed, who])
-  const all = side === 'mine' ? mineReels : theirsReels
-  const list = owner ? all.filter((r) => r.owner === owner) : all
+  const theirs = useMemo(() => data.feed.posts.filter((p) => !p.mine).map((p) => reelOfPost(p, who.get(p.owner))), [data.feed, who])
+  return { mine, theirs, data }
+}
+
+export function FeedView() {
+  const { plan, dispatch, toast, setSection, sideOpen, toggleSide } = usePlan()
+  const { mine, theirs, data } = useReels()
+  const { demo, setDemo, now } = data
+  const { side, filters } = useReelState()
+  const f = filters[side]
+  const setF = (patch: Partial<ReelFilters>) => {
+    setReelState({ filters: { ...filters, [side]: { ...f, ...patch } } })
+    setLimit(PAGE)
+    feedRef.current?.scrollTo?.({ top: 0 })
+  }
+  const setSide = (s: Side) => {
+    setReelState({ side: s })
+    setLimit(PAGE)
+    feedRef.current?.scrollTo?.({ top: 0 })
+  }
+  const [limit, setLimit] = useState(PAGE)
+  const [subsOpen, setSubsOpen] = useState(false)
+  const feedRef = useRef<HTMLDivElement>(null)
+  const all = side === 'mine' ? mine : theirs
+  const list = useMemo(() => all.filter((r) => reelVisible(r, f)), [all, f])
+  // сколько каждого формата при остальных фильтрах — числом на кнопке
+  const kindCount = (k: ReelKind) => all.filter((r) => reelVisible(r, f, 'kinds') && r.faces.some((x) => x.kind === k)).length
+  const n = sideOpen ? 0 : reelFilterCount(f)
 
   // подписки: свои (в плане) или пример в демо; ссылка → следить, «Отписаться» — убрать
   const stored = plan.analytics?.competitors ?? []
   const follow = (input: string, platform: string) => {
-    const f = parseFollow(input, platform)
-    if (!f) return 'Вставьте ссылку на аккаунт (youtube.com/@…, t.me/…, tiktok.com/@…) или @аккаунт'
-    if (followed(stored, f)) return `Вы уже следите за ${f.handle} в ${f.platform}`
-    dispatch({ type: 'analytics', patch: { competitors: [...stored, { id: newId('c'), name: f.name, platform: f.platform, handle: f.handle, added: today() }] } })
-    toast(`Следите: ${f.name} · ${f.platform} — посты появятся в ленте`, true)
+    const fl = parseFollow(input, platform)
+    if (!fl) return 'Вставьте ссылку на аккаунт (youtube.com/@…, t.me/…, tiktok.com/@…) или @аккаунт'
+    if (followed(stored, fl)) return `Вы уже следите за ${fl.handle} в ${fl.platform}`
+    dispatch({ type: 'analytics', patch: { competitors: [...stored, { id: newId('c'), name: fl.name, platform: fl.platform, handle: fl.handle, added: today() }] } })
+    toast(`Следите: ${fl.name} · ${fl.platform} — посты появятся в ленте`, true)
     return ''
   }
   const unfollow = (id: string) => {
     const c = stored.find((x) => x.id === id)
     if (!c) return
     dispatch({ type: 'analytics', patch: { competitors: stored.filter((x) => x.id !== id) } })
-    if (owner === id) setOwner(null)
+    if (filters.theirs.owners.includes(id)) setReelState({ filters: { ...filters, theirs: { ...filters.theirs, owners: filters.theirs.owners.filter((x) => x !== id) } } })
     toast(`Отписались: ${c.name} · ${c.platform}`, true)
+  }
+  /** Сторис и аватар: только этот аккаунт (ещё раз — все); из «Я выпускаю» — сразу к его постам. */
+  const pickOwner = (id: string | null) => {
+    const now = filters.theirs.owners
+    const owners = !id ? [] : now.length === 1 && now[0] === id && side === 'theirs' ? [] : [id]
+    setReelState({ side: 'theirs', filters: { ...filters, theirs: { ...filters.theirs, owners } } })
+    setLimit(PAGE)
+    feedRef.current?.scrollTo?.({ top: 0 })
   }
 
   // листать по одному: стрелки, PageUp/PageDown, j/k; у конца — подгрузить ещё
@@ -125,12 +137,16 @@ export function FeedView() {
     const el = feedRef.current
     if (el && el.scrollTop + el.clientHeight * 3 > el.scrollHeight && limit < list.length) setLimit(limit + PAGE)
   }
-  useEffect(() => setLimit(PAGE), [owner])
+  const filtered = list.length < all.length
 
   return (
     <>
       <header className="cp-top cp-reels__top">
         <div className="cp-top__left">
+          <button type="button" className="nr-btn nr-btn--ghost nr-btn--icon cp-top__filter" aria-label="Фильтры" title={sideOpen ? 'Свернуть фильтры' : 'Развернуть фильтры'} aria-pressed={sideOpen} aria-expanded={sideOpen} onClick={toggleSide}>
+            <Icon name="filter" size={20} />
+            {n > 0 && <span className="cp-top__badge" aria-hidden="true">{n}</span>}
+          </button>
           <h1 className="nr-title">Главная</h1>
         </div>
         <div className="cp-top__right">
@@ -155,31 +171,56 @@ export function FeedView() {
       <Subs
         stored={stored}
         shown={data.theirs}
-        owner={side === 'theirs' ? owner : undefined}
-        setOwner={(id) => {
-          if (side !== 'theirs') setSide('theirs')
-          setOwner(id)
-        }}
+        selected={side === 'theirs' ? filters.theirs.owners : undefined}
+        setOwner={pickOwner}
         open={subsOpen}
         setOpen={setSubsOpen}
         onFollow={follow}
         onUnfollow={unfollow}
       />
+      {/* формат — строкой над лентой: короткие, длинные, посты, карусели, статьи; выделенное — остаётся только оно */}
+      <div className="cp-reels__kinds" role="group" aria-label="Формат">
+        <button type="button" className="cp-reels__kind" aria-pressed={!f.kinds.length} onClick={() => setF({ kinds: [] })}>
+          Все
+        </button>
+        {REEL_KINDS.map((k) => {
+          const c = kindCount(k.kind)
+          return (
+            <button key={k.kind} type="button" className="cp-reels__kind" aria-pressed={f.kinds.includes(k.kind)} aria-label={`${k.label}: ${c}`} onClick={() => setF({ kinds: toggle(f.kinds, k.kind) })}>
+              <Icon name={k.icon} size={15} />
+              {k.label}
+              <span className="cp-reels__n">{c}</span>
+            </button>
+          )
+        })}
+      </div>
       <div className="cp-reels__wrap">
         {list.length ? (
           <div className="cp-reels nr-scroll" ref={feedRef} role="feed" aria-label={side === 'mine' ? 'Лента: я выпускаю' : 'Лента: смотрю других'} aria-busy="false" tabIndex={0} onKeyDown={onKey} onScroll={onScroll}>
             {list.slice(0, limit).map((r, i) => (
               <ReelView
-                key={r.id}
+                key={`${r.id}|${f.kinds.join()}`}
                 reel={r}
+                face0={faceFor(r, f.kinds)}
                 pos={i + 1}
                 size={list.length}
                 now={now}
                 canUnfollow={stored.some((c) => c.id === r.owner)}
                 onUnfollow={() => unfollow(r.owner)}
-                onOwner={side === 'theirs' ? () => setOwner(owner === r.owner ? null : r.owner) : undefined}
+                onOwner={side === 'theirs' ? () => pickOwner(r.owner) : undefined}
               />
             ))}
+          </div>
+        ) : filtered ? (
+          <div className="cp-reels__empty">
+            <Icon name="filter" size={28} />
+            <h2>По этим фильтрам ничего нет</h2>
+            <p>Снимите часть фильтров — или все сразу.</p>
+            <div className="cp-reels__emptyact">
+              <button type="button" className="nr-btn nr-btn--primary" onClick={() => setF(NO_REEL_FILTERS)}>
+                Сбросить фильтры
+              </button>
+            </div>
           </div>
         ) : (
           <Empty side={side} demo={demo} onDemo={() => setDemo(true)} onCalendar={() => setSection('calendar')} onSubs={() => setSubsOpen(true)} />
@@ -199,9 +240,112 @@ export function FeedView() {
   )
 }
 
+/** Фильтры ленты — той же панелью слева, что в календаре и аналитике: формат, каналы (у чужих — аккаунты), площадки,
+ *  топики и (у своих) когда. Выделенное — остаётся только оно; ничего не выделено — всё. */
+export function FeedSide({ onClose }: { onClose: () => void }) {
+  const { narrow, channels, plan } = usePlan()
+  const { mine, theirs, data } = useReels()
+  const { side, filters } = useReelState()
+  const all = side === 'mine' ? mine : theirs
+  const f = filters[side]
+  const set = (patch: Partial<ReelFilters>) => setReelState({ filters: { ...filters, [side]: { ...f, ...patch } } })
+  const changed = f.kinds.length + reelFilterCount(f) > 0
+  // каналы — по порядку плана, дальше мои соцсети; аккаунты — по порядку подписок
+  const order = side === 'mine' ? [...plan.channels.map((c) => c.id), ...data.mine.map((a) => a.id)] : data.theirs.map((a) => a.id)
+  const rank = (id: string) => (order.indexOf(id) + 1 || 999)
+  const owners = [...new Map(all.map((r) => [r.owner, { id: r.owner, name: r.ownerName, platform: r.platform, color: channels.get(r.owner)?.color }])).values()].sort((a, b) => rank(a.id) - rank(b.id))
+  const platforms = [...new Set(all.flatMap(reelPlatforms))].filter((p) => p !== 'Mail')
+  const tagCount = new Map<string, number>()
+  for (const r of all) for (const t of r.tags) tagCount.set(t, (tagCount.get(t) ?? 0) + 1)
+  const tags = [...tagCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([t]) => t)
+  const ownersLabel = side === 'mine' ? 'Каналы' : 'Аккаунты'
+  return (
+    <aside className="cp-side nr-scroll cp-feedside" aria-label="Фильтры">
+      <div className="cp-side__head">
+        <span className="cp-side__title">Фильтры</span>
+        {changed && (
+          <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => set(NO_REEL_FILTERS)}>
+            Сбросить
+          </button>
+        )}
+        {narrow ? <IconButton icon="close" label="Закрыть фильтры" onClick={onClose} size="sm" /> : <IconButton icon="chev-left" label="Свернуть фильтры" onClick={onClose} size="sm" />}
+      </div>
+      <p className="cp-hint cp-feedside__hint">{side === 'mine' ? 'Лента «Я выпускаю».' : 'Лента «Смотрю других».'} Выделите — останется только выделенное.</p>
+      <div className="cp-side__block">
+        <span className="nr-label">Форматы</span>
+        <div className="cp-pills cp-side__rubrics" role="group" aria-label="Форматы">
+          {REEL_KINDS.map((k) => (
+            <button key={k.kind} type="button" className="nr-pill" aria-pressed={f.kinds.includes(k.kind)} onClick={() => set({ kinds: toggle(f.kinds, k.kind) })}>
+              <Icon name={k.icon} size={14} />
+              {k.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {owners.length > 0 && (
+        <div className="cp-side__block">
+          <span className="nr-label">{ownersLabel}</span>
+          <div className="cp-pills cp-side__rubrics" role="group" aria-label={ownersLabel}>
+            {owners.map((o) => (
+              <button key={o.id} type="button" className="nr-pill" aria-pressed={f.owners.includes(o.id)} onClick={() => set({ owners: toggle(f.owners, o.id) })}>
+                {o.color ? <span className="nr-dot" style={{ background: o.color }} aria-hidden="true" /> : <PlatformIcon platform={o.platform} size={13} />}
+                {o.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {platforms.length > 0 && (
+        <div className="cp-side__block">
+          <span className="nr-label">Площадки</span>
+          <div className="cp-pills cp-side__rubrics" role="group" aria-label="Площадки">
+            {platforms.map((p) => (
+              <button key={p} type="button" className="nr-pill" aria-pressed={f.platforms.includes(p)} onClick={() => set({ platforms: toggle(f.platforms, p) })}>
+                <PlatformIcon platform={p} size={13} />
+                {p === 'Web' ? 'Сайт' : p}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {tags.length > 0 && (
+        <div className="cp-side__block">
+          <span className="nr-label">{side === 'mine' ? 'Рубрики и топики' : 'Топики'}</span>
+          <div className="cp-pills cp-side__rubrics" role="group" aria-label="Топики">
+            {tags.map((t) => (
+              <button key={t} type="button" className="nr-pill" aria-pressed={f.tags.includes(t)} onClick={() => set({ tags: toggle(f.tags, t) })}>
+                {topicLabel(t)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {side === 'mine' && (
+        <div className="cp-side__block">
+          <span className="nr-label">Когда</span>
+          <div className="nr-seg" role="radiogroup" aria-label="Когда">
+            {(
+              [
+                ['all', 'Всё'],
+                ['soon', 'Выйдет'],
+                ['out', 'Вышло'],
+              ] as const
+            ).map(([id, label]) => (
+              <button key={id} type="button" role="radio" aria-checked={f.when === id} className="nr-seg__item" onClick={() => set({ when: id })}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </aside>
+  )
+}
+
 /** Один материал на экран: кадр по виду формата, подпись, справа — цифры и «Саммери». */
-function ReelView({ reel, pos, size, now, canUnfollow, onUnfollow, onOwner }: {
+function ReelView({ reel, face0 = 0, pos, size, now, canUnfollow, onUnfollow, onOwner }: {
   reel: Reel
+  face0?: number
   pos: number
   size: number
   now: number
@@ -210,7 +354,7 @@ function ReelView({ reel, pos, size, now, canUnfollow, onUnfollow, onOwner }: {
   onOwner?: () => void
 }) {
   const { openItem, openRecreate } = usePlan()
-  const [faceIx, setFaceIx] = useState(0)
+  const [faceIx, setFaceIx] = useState(face0)
   const [sheet, setSheet] = useState(false)
   const [liked, setLiked] = useState(false)
   const face = reel.faces[faceIx] ?? reel.faces[0]
@@ -524,10 +668,10 @@ function SummarySheet({ reel, onClose, onRecreate, onOpen, onUnfollow }: {
 }
 
 /** Сторис подписок строкой сверху: «Все», аккаунты (щелчок — только он), «Подписаться»; панель — ссылкой. */
-function Subs({ stored, shown, owner, setOwner, open, setOpen, onFollow, onUnfollow }: {
+function Subs({ stored, shown, selected, setOwner, open, setOpen, onFollow, onUnfollow }: {
   stored: { id: string; name: string; platform: string; handle: string }[]
   shown: { id: string; name: string; platform: string; handle: string }[]
-  owner: string | null | undefined // undefined — смотрим свою ленту: ничего не выбрано
+  selected: string[] | undefined // выбранные аккаунты; undefined — смотрим свою ленту: ничего не выбрано
   setOwner: (id: string | null) => void
   open: boolean
   setOpen: (v: boolean) => void
@@ -547,14 +691,14 @@ function Subs({ stored, shown, owner, setOwner, open, setOpen, onFollow, onUnfol
   return (
     <div className="cp-subs">
       <div className="cp-subs__row" role="group" aria-label="Подписки">
-        <button type="button" className="cp-subs__item" aria-pressed={owner === null} onClick={() => setOwner(null)}>
+        <button type="button" className="cp-subs__item" aria-pressed={!!selected && !selected.length} onClick={() => setOwner(null)}>
           <span className="cp-subs__ava cp-subs__ava--all">
             <Icon name="people" size={18} />
           </span>
           Все
         </button>
         {shown.map((c) => (
-          <button key={c.id} type="button" className="cp-subs__item" aria-pressed={owner === c.id} aria-label={`${c.name}, ${c.platform}`} onClick={() => setOwner(owner === c.id ? null : c.id)}>
+          <button key={c.id} type="button" className="cp-subs__item" aria-pressed={!!selected?.includes(c.id)} aria-label={`${c.name}, ${c.platform}`} onClick={() => setOwner(c.id)}>
             <span className="cp-subs__ava" style={{ '--reel-h': hueFor(c.id) } as CSSProperties}>
               {initial(c.name)}
               <span className="cp-reel__avaplat">

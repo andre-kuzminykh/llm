@@ -879,9 +879,9 @@ const slot = /^Исследование · Короткое видео, Текс
   // «видео» на карточке — один раз: в подписи только рубрика, формат словами — внизу
   const twice = await mGrid.locator('.cp-card__cap').filter({ hasText: /видео/i }).count()
   const caps = await mGrid.locator('[data-date="2026-11-16"] .cp-card--post').evaluateAll((cs) => cs.map((c) => [c.querySelector('.cp-card__time')?.textContent, c.querySelector('.cp-card__ch')?.textContent, c.querySelector('.cp-card__cap')?.textContent, c.querySelector('.cp-card__kind')?.textContent].join(' | ')))
-  const review = caps.includes('10:00 | Лаборатория Датаиста | Обзор | Горизонталь · Вертикаль')
+  const review = caps.includes('11:00 | Лаборатория Датаиста | Обзор | Горизонталь · Вертикаль')
   // исследование Лаборатории — короткое, пост и статья в 09:00: одна карточка, внизу все форматы (FR-CP-077)
-  const merged = caps.includes('09:00 | Лаборатория Датаиста | Исследование | Вертикаль · Пост · Веб')
+  const merged = caps.includes('10:00 | Лаборатория Датаиста | Исследование | Вертикаль · Пост · Веб')
   const review23 = await mGrid.locator('[data-date="2026-11-23"] .cp-card__cap').filter({ hasText: /^Обзор$/ }).count()
   const wide = await dc.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
   await dc.waitForTimeout(400)
@@ -902,7 +902,7 @@ const slot = /^Исследование · Короткое видео, Текс
   await dc.waitForTimeout(300)
   await dc.screenshot({ path: `${SHOTS}/14-dataist-schedule.png` })
   check(
-    chans === 7 && lines === 49 && labLong.join('|') === 'Обзор, Пн · I неделя, 10:00 — поправить|Разработка, Пн · III неделя, 10:00 — поправить' && !swide,
+    chans === 7 && lines === 49 && labLong.join('|') === 'Обзор, Пн · I неделя, 11:00 — поправить|Разработка, Пн · III неделя, 11:00 — поправить' && !swide,
     `«Расписание» в шапке: 7 каналов, ${lines} строк (рубрика, дни, недели цикла, время), как таблица`,
     `расписание: каналов ${chans}, строк ${lines}, длинное Лаборатории ${JSON.stringify(labLong)}, шире ${swide}`,
   )
@@ -1087,6 +1087,27 @@ const slot = /^Исследование · Короткое видео, Текс
     subs === 6 && inside && recreate && /^1 \/ \d+$/.test(before ?? '') && /^2 \/ \d+$/.test(after ?? '') && slid && !wide,
     `смотрю других: подписки строкой (${subs - 2} + «Все», «Подписаться»); саммери — окном в кадре с «Пересоздать у себя»; карусель — ${before} → ${after}`,
     `смотрю других: подписок ${subs}, саммери в кадре ${inside}, кнопка ${recreate}, карусель ${before} → ${after}, сдвиг ${slid}, шире ${wide}`,
+  )
+  // фильтры ленты: формат — строкой над лентой, остальное — панелью слева (FR-CP-081)
+  await theirs.evaluate((el) => el.scrollTo({ top: 0 }))
+  await fd.getByRole('group', { name: 'Подписки' }).getByRole('button', { name: 'Все' }).click()
+  const kinds = fd.getByRole('group', { name: 'Формат', exact: true })
+  await kinds.getByRole('button', { name: /^Короткие видео/ }).click()
+  await fd.waitForTimeout(400)
+  const notShort = await theirs.locator('.cp-reel__frame:not(.cp-reel__frame--short)').count()
+  const shortN = await theirs.locator('.cp-reel__frame--short').count()
+  const panel = fd.getByRole('complementary', { name: 'Фильтры' })
+  const groups = await panel.getByRole('group').evaluateAll((gs) => gs.map((g) => g.getAttribute('aria-label')))
+  await panel.getByRole('group', { name: 'Площадки' }).getByRole('button', { name: 'Instagram' }).click()
+  await fd.waitForTimeout(300)
+  const onlyIg = await theirs.locator('[data-reel]').evaluateAll((els) => els.every((e) => e.querySelector('.cp-reel__ava')?.getAttribute('aria-label') === 'Только Growth Lab'))
+  await fd.screenshot({ path: `${SHOTS}/15-feed-filters.png` })
+  await panel.getByRole('button', { name: 'Сбросить' }).click()
+  const fwide = await fd.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  check(
+    notShort === 0 && shortN > 0 && groups.join('|') === 'Форматы|Аккаунты|Площадки|Топики' && onlyIg && !fwide,
+    `лента: фильтр «Короткие видео» — только они (${shortN}); панель слева — форматы, аккаунты, площадки, топики; Instagram — только Growth Lab`,
+    `фильтры ленты: не коротких ${notShort}, коротких ${shortN}, группы ${groups.join(', ')}, Instagram ${onlyIg}, шире ${fwide}`,
   )
   await fd.close()
 }

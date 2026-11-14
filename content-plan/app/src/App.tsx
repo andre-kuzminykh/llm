@@ -20,7 +20,7 @@ import { inFrame, profileName } from './ui/frame'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
 import { HomeSide } from './views/HomeSide'
-import { FeedView } from './views/FeedView'
+import { FeedSide, FeedView } from './views/FeedView'
 import { HomeView } from './views/HomeView'
 import { SettingsSheet } from './views/SettingsSheet'
 import { ScheduleSheet } from './views/ScheduleSheet'
@@ -631,7 +631,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
           </nav>
         )}
         {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {sideOpen && section !== 'feed' && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : <HomeSide onClose={() => setSideOpen(false)} />)}
+        {sideOpen && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : section === 'feed' ? <FeedSide onClose={() => setSideOpen(false)} /> : <HomeSide onClose={() => setSideOpen(false)} />)}
         <main className="nr-main">
           {section === 'analytics' ? <HomeView /> : section === 'feed' ? <FeedView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}

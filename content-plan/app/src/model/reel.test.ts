@@ -19,9 +19,9 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: вид по форма
     const items = seed.items
       .filter((it) => it.date === '2026-11-16' && it.channelId === 'lab' && it.rubricId === 'research')
       .map((it) => ({ ...it, title: 'ИИ-агенты в бухгалтерии', note: 'Кейс: закрытие месяца за день', files: [{ name: 'a.png', type: 'image/png', size: 1, url: 'data:image/png;base64,AA' }] }))
-    const r = reelOfCard(items, { channelName: 'Лаборатория Датаиста', rubric: 'Исследование', time: '09:00', at: 0 })
+    const r = reelOfCard(items, { channelName: 'Лаборатория Датаиста', rubric: 'Исследование', time: '10:00', at: 0 })
     expect(r.faces.map((f) => `${f.label}:${f.kind}`)).toEqual(['Вертикаль:short', 'Пост:post', 'Веб:article'])
-    expect([r.side, r.title, r.summary, r.images.length, r.planned?.time, r.caption]).toEqual(['mine', 'ИИ-агенты в бухгалтерии', 'Кейс: закрытие месяца за день', 1, '09:00', 'Кейс: закрытие месяца за день #исследование'])
+    expect([r.side, r.title, r.summary, r.images.length, r.planned?.time, r.caption]).toEqual(['mine', 'ИИ-агенты в бухгалтерии', 'Кейс: закрытие месяца за день', 1, '10:00', 'Кейс: закрытие месяца за день #исследование'])
   })
 
   it('видео из заметки карточки — играет в ленте: у карточки есть источник с типом файла', () => {
@@ -29,7 +29,7 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: вид по форма
     const items = seed.items
       .filter((it) => it.date === '2026-11-16' && it.channelId === 'lab' && it.rubricId === 'research')
       .map((it) => ({ ...it, title: 'Тема', files: [{ name: 'ролик.mp4', type: 'video/mp4', size: 10, url: 'data:video/mp4;base64,AA' }, { name: 'a.png', type: 'image/png', size: 1, url: 'data:image/png;base64,AA' }] }))
-    const r = reelOfCard(items, { channelName: 'Лаборатория Датаиста', time: '09:00', at: 0 })
+    const r = reelOfCard(items, { channelName: 'Лаборатория Датаиста', time: '10:00', at: 0 })
     expect([r.videos, r.images.length]).toEqual([[{ src: 'data:video/mp4;base64,AA', type: 'video/mp4' }], 1])
   })
 

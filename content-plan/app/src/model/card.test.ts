@@ -12,12 +12,12 @@ const research = (p: Plan, d = '2026-11-16') => p.items.filter((it) => it.date =
 const short = research(seed).find((it) => it.format === SHORT_VIDEO)!
 
 describe('T-CP-077 FR-CP-077 один материал в нескольких форматах — одна карточка: тот же день, час, канал, рубрика и тема', () => {
-  it('16 ноября: 29 публикаций — 15 карточек; исследование Лаборатории в 09:00 — короткое, пост и статья одной карточкой, главное — видео', () => {
+  it('16 ноября: 29 публикаций — 15 карточек; исследование Лаборатории в 10:00 — короткое, пост и статья одной карточкой, главное — видео', () => {
     const cards = cardsOf(on(seed, '2026-11-16'), rules, order)
     expect(cards).toHaveLength(15)
     expect(unitsOf(on(seed, '2026-11-16'), rules, order)).toHaveLength(15)
     const lab = cards.find((u) => u.head.rubricId === 'research' && u.channelId === 'lab')!
-    expect([lab.time, ...lab.items.map((it) => it.format)]).toEqual(['09:00', SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE])
+    expect([lab.time, ...lab.items.map((it) => it.format)]).toEqual(['10:00', SHORT_VIDEO, TEXT_IMAGE, WEB_PAGE])
     // микроуроки — в разное время: четыре карточки
     expect(cards.filter((u) => u.head.rubricId === 'microlesson').map((u) => u.time)).toEqual(['17:00', '17:15', '17:30', '17:45'])
   })
