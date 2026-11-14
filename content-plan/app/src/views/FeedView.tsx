@@ -3,7 +3,7 @@
 // «Смотрю других» — посты подписок: ссылку на соцсеть вставили — следите, «Отписаться» — открепились.
 // Короткое видео — кадр 9:16 с надписью; длинное — 16:9 в рамке; пост — карточка или карусель с подписью; статья —
 // обложка с подписью. Справа — цифры и «Саммери»: одно окно с саммери, главным, топиками и кнопкой «Пересоздать».
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { addDays, dayTitle, today } from '../model/dates'
 import { topicLabel } from '../model/overview'
 import { followed, parseFollow, reelOfCard, reelOfPost, type Face, type Reel, type Side } from '../model/reel'
@@ -11,6 +11,7 @@ import { newId } from '../model/store'
 import { isSlot, statusOf, timeOf } from '../model/types'
 import { unitsOf } from '../model/units'
 import { PlatformIcon, Switch } from '../ui/bits'
+import { demoClip, type Source } from '../ui/clips'
 import { usePlan } from '../ui/ctx'
 import { useHomeData } from '../ui/homeData'
 import { Icon } from '../ui/Icon'
@@ -112,6 +113,13 @@ export function FeedView() {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'j') (e.preventDefault(), go(1))
     else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'k') (e.preventDefault(), go(-1))
+    else if (e.key === ' ' && (e.target as HTMLElement) === feedRef.current) {
+      // пробел — пауза и пуск видео на экране
+      e.preventDefault()
+      const el = feedRef.current!
+      const i = Math.round(el.scrollTop / (el.clientHeight || 1))
+      el.querySelectorAll<HTMLElement>('[data-reel]')[i]?.querySelector<HTMLButtonElement>('.cp-reel__tap')?.click()
+    }
   }
   const onScroll = () => {
     const el = feedRef.current
@@ -211,6 +219,7 @@ function ReelView({ reel, pos, size, now, canUnfollow, onUnfollow, onOwner }: {
     ? `${statusOf(reel.planned.status).label === 'В плане' ? 'Выйдет' : statusOf(reel.planned.status).label} · ${dayShort(reel.planned.date)}${reel.planned.time ? `, ${reel.planned.time}` : ''}`
     : ago(reel.at, now)
   const overlay = face.kind === 'short' || face.kind === 'video'
+  const sources = sourcesOf(reel, face)
   const plats = [...new Set(reel.faces.flatMap((f) => f.platforms))].filter((p) => p !== 'Web' && p !== 'Mail')
   return (
     <article className="cp-reel" aria-label={reel.title} aria-posinset={pos} aria-setsize={size} data-reel={reel.id}>
@@ -231,7 +240,7 @@ function ReelView({ reel, pos, size, now, canUnfollow, onUnfollow, onOwner }: {
             {reel.planned && <span className="cp-reel__pill cp-reel__pill--soon">{when}</span>}
             {reel.sample && <span className="cp-reel__pill">демо</span>}
           </div>
-          <Media reel={reel} face={face} />
+          <Media reel={reel} face={face} sources={sources} />
           <div className={`cp-reel__cap${overlay ? ' cp-reel__cap--over' : ''}`}>
             <div className="cp-reel__who">
               <b>{reel.handle ?? reel.ownerName}</b>
@@ -250,9 +259,9 @@ function ReelView({ reel, pos, size, now, canUnfollow, onUnfollow, onOwner }: {
               </div>
             )}
           </div>
-          {overlay && (
+          {overlay && !sources && (
             <div className="cp-reel__bar" aria-hidden="true">
-              <i style={{ width: `${18 + (reel.hue % 60)}%` }} />
+              <i style={{ width: '0%' }} />
             </div>
           )}
           {sheet && (
@@ -321,30 +330,44 @@ function ReelView({ reel, pos, size, now, canUnfollow, onUnfollow, onOwner }: {
   )
 }
 
-/** Кадр по виду: короткое — 9:16 с надписью, длинное — 16:9 в рамке, пост — карточка, карусель — слайды, статья — обложка. */
-function Media({ reel, face }: { reel: Reel; face: Face }) {
+/** Что играть: видео из заметки карточки; у примера (демо) — демо-клип; иначе видео ещё нет — кадр-обложка. */
+function sourcesOf(reel: Reel, face: Face): { list: Source[]; demo: boolean } | null {
+  if (face.kind !== 'short' && face.kind !== 'video') return null
+  if (reel.videos.length) return { list: reel.videos, demo: false }
+  if (reel.sample) return { list: demoClip(face.kind === 'video', reel.hue), demo: true }
+  return null
+}
+
+/** Кадр по виду: короткое — 9:16 с надписью, длинное — 16:9 в рамке, пост — карточка, карусель — слайды, статья — обложка.
+ *  Видео играет по-настоящему (Player); нет видео — обложка, у своей карточки — «прикрепите видео к заметке». */
+function Media({ reel, face, sources }: { reel: Reel; face: Face; sources: { list: Source[]; demo: boolean } | null }) {
   const img = reel.images[0]
   const bg = img ? { backgroundImage: `url("${img}")` } : undefined
+  const noVideo = reel.planned && <span className="cp-reel__novideo">Видео ещё нет — прикрепите его к заметке карточки</span>
   if (face.kind === 'short')
-    return (
+    return sources ? (
+      <div className="cp-reel__poster cp-reel__poster--video">
+        <Player sources={sources.list} title={reel.title} wide={false} sound={!sources.demo} say={sources.demo ? reel.title : undefined} />
+      </div>
+    ) : (
       <div className={`cp-reel__poster${img ? ' cp-reel__poster--img' : ''}`} style={bg} role="img" aria-label={`Короткое видео${reel.duration ? `, ${clock(reel.duration)}` : ''}: ${reel.title}`}>
         <span className="cp-reel__say">{reel.title}</span>
-        <span className="cp-reel__play" aria-hidden="true">
-          <Icon name="play" size={28} />
-        </span>
-        {reel.duration ? <span className="cp-reel__dur">{clock(reel.duration)}</span> : null}
+        {noVideo}
       </div>
     )
   if (face.kind === 'video')
     return (
       <div className="cp-reel__wide">
-        <div className={`cp-reel__wideimg${img ? ' cp-reel__poster--img' : ''}`} style={bg} role="img" aria-label={`Видео${reel.duration ? `, ${clock(reel.duration)}` : ''}: ${reel.title}`}>
-          <span className="cp-reel__widetitle">{reel.title}</span>
-          <span className="cp-reel__play" aria-hidden="true">
-            <Icon name="play" size={24} />
-          </span>
-          {reel.duration ? <span className="cp-reel__dur">{clock(reel.duration)}</span> : null}
-        </div>
+        {sources ? (
+          <div className="cp-reel__wideimg cp-reel__wideimg--video">
+            <Player sources={sources.list} title={reel.title} wide sound={!sources.demo} say={sources.demo ? reel.title : undefined} />
+          </div>
+        ) : (
+          <div className={`cp-reel__wideimg${img ? ' cp-reel__poster--img' : ''}`} style={bg} role="img" aria-label={`Видео${reel.duration ? `, ${clock(reel.duration)}` : ''}: ${reel.title}`}>
+            <span className="cp-reel__widetitle">{reel.title}</span>
+            {noVideo}
+          </div>
+        )}
       </div>
     )
   if (face.kind === 'carousel') return <Carousel reel={reel} />
@@ -639,5 +662,134 @@ function Empty({ side, demo, onDemo, onCalendar, onSubs }: { side: Side; demo: b
         )}
       </div>
     </div>
+  )
+}
+
+/** Видео в ленте — играет само, когда материал на экране (без звука — так браузеры разрешают), и встаёт на паузу, когда
+ *  ушли; щелчок — пауза и пуск; полоса внизу — перемотка (мышью, пальцем, стрелками); звук — кнопкой (у своих видео). */
+function Player({ sources, title, wide, sound, say }: { sources: Source[]; title: string; wide: boolean; sound: boolean; say?: string }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  const [playing, setPlaying] = useState(false)
+  const [time, setTime] = useState(0)
+  const [dur, setDur] = useState(0)
+  const [muted, setMuted] = useState(true)
+  const [flash, setFlash] = useState<'play' | 'pause' | null>(null)
+  const [seeking, setSeeking] = useState(false)
+  // на экране — играть, ушли — пауза
+  useEffect(() => {
+    const v = ref.current
+    if (!v || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(
+      (es) => {
+        for (const e of es) {
+          if (e.isIntersecting && e.intersectionRatio >= 0.6) v.play()?.catch?.(() => {})
+          else v.pause()
+        }
+      },
+      { threshold: [0, 0.6, 1] },
+    )
+    io.observe(v)
+    return () => io.disconnect()
+  }, [])
+  // полоса — плавно, по кадрам, пока играет
+  useEffect(() => {
+    if (!playing || typeof requestAnimationFrame === 'undefined') return
+    let raf = 0
+    const tick = () => {
+      if (ref.current) setTime(ref.current.currentTime)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing])
+  useEffect(() => {
+    if (!flash) return
+    const t = setTimeout(() => setFlash(null), 650)
+    return () => clearTimeout(t)
+  }, [flash])
+  const toggle = () => {
+    const v = ref.current
+    if (!v) return
+    if (v.paused) {
+      v.play()?.catch?.(() => {})
+      setFlash('play')
+    } else {
+      v.pause()
+      setFlash('pause')
+    }
+  }
+  const seekTo = (s: number) => {
+    const v = ref.current
+    if (!v || !dur) return
+    const t = Math.max(0, Math.min(dur - 0.05, s))
+    v.currentTime = t
+    setTime(t)
+  }
+  const at = (e: PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return r.width ? ((e.clientX - r.left) / r.width) * dur : 0
+  }
+  const pct = dur ? Math.min(100, (time / dur) * 100) : 0
+  return (
+    <>
+      <video
+        ref={ref}
+        className="cp-reel__video"
+        muted={muted}
+        playsInline
+        loop
+        preload="metadata"
+        aria-label={`${wide ? 'Видео' : 'Короткое видео'}: ${title}`}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onLoadedMetadata={(e) => setDur(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
+        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+      >
+        {sources.map((s) => (
+          <source key={s.src.slice(0, 64) + s.type} src={s.src} type={s.type} />
+        ))}
+      </video>
+      {say && <span className={wide ? 'cp-reel__widetitle' : 'cp-reel__say'}>{say}</span>}
+      <button type="button" className={`cp-reel__tap${playing ? '' : ' cp-reel__tap--paused'}`} aria-label={playing ? 'Пауза' : 'Смотреть'} onClick={toggle}>
+        <span className={`cp-reel__play${flash ? ' cp-reel__play--flash' : ''}`} aria-hidden="true">
+          <Icon name={flash ?? 'play'} size={wide ? 24 : 30} />
+        </span>
+      </button>
+      {sound && (
+        <button type="button" className="cp-reel__sound" aria-label={muted ? 'Включить звук' : 'Выключить звук'} aria-pressed={!muted} onClick={() => setMuted(!muted)}>
+          <Icon name={muted ? 'sound-off' : 'sound-on'} size={16} />
+          <span>{muted ? 'Без звука' : 'Звук'}</span>
+        </button>
+      )}
+      <div
+        className={`cp-reel__seek${seeking ? ' cp-reel__seek--on' : ''}`}
+        role="slider"
+        tabIndex={0}
+        aria-label="Перемотка"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(dur)}
+        aria-valuenow={Math.round(time)}
+        aria-valuetext={`${clock(Math.round(time)) || '0:00'} из ${clock(Math.round(dur)) || '0:00'}`}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture?.(e.pointerId)
+          setSeeking(true)
+          seekTo(at(e))
+        }}
+        onPointerMove={(e) => seeking && seekTo(at(e))}
+        onPointerUp={() => setSeeking(false)}
+        onPointerCancel={() => setSeeking(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight') (e.preventDefault(), e.stopPropagation(), seekTo(time + 2))
+          else if (e.key === 'ArrowLeft') (e.preventDefault(), e.stopPropagation(), seekTo(time - 2))
+        }}
+      >
+        <span className="cp-reel__seekbar">
+          <i style={{ width: `${pct}%` }} />
+        </span>
+        <span className="cp-reel__time" aria-hidden="true">
+          {clock(Math.floor(time)) || '0:00'} / {clock(Math.round(dur)) || '0:00'}
+        </span>
+      </div>
+    </>
   )
 }

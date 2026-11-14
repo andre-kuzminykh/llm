@@ -1,4 +1,4 @@
-// HTML одним файлом — прототип, который открывается без сервера: стили, скрипт и шрифты — внутри,
+// HTML одним файлом — прототип, который открывается без сервера: стили, скрипт, шрифты и демо-видео ленты — внутри,
 // план Датаиста (пример для «Загрузить план Датаиста») — тоже. Запуск: npm run single → dist-single/smm-prototype.html
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -19,7 +19,10 @@ html = html.replace(/<link rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/, (_, href)
 // план Датаиста — пример, тот же JSON, что public/seed.json; скрипт модулем — внутри (модуль выполнится после разбора страницы)
 const seed = readFileSync(join(dist, 'seed.json'), 'utf8')
 html = html.replace(/<script type="module"[^>]*src="([^"]+)"[^>]*><\/script>/, (_, src) => {
-  const js = readFileSync(asset(src), 'utf8')
+  // демо-видео ленты — data:-адресами вместо файлов рядом (new URL("v1-….webm", import.meta.url) → new URL("data:…"))
+  const js = readFileSync(asset(src), 'utf8').replace(/new URL\("([\w-]+\.(webm|mp4))",import\.meta\.url\)/g, (_, f, ext) =>
+    `new URL("data:video/${ext};base64,${readFileSync(join(dist, 'assets', f)).toString('base64')}")`,
+  )
   return `<script type="application/json" id="cp-seed">${safe(seed)}</script><script type="module">${safe(js)}</script>`
 })
 html = html.replace('<title>Контент-план</title>', '<title>SMM — прототип</title>')

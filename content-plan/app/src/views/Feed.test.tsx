@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../App'
 import { memoryStorage } from '../model/storage'
@@ -108,6 +108,54 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и
     await userEvent.click(within(car).getByRole('button', { name: 'Следующий слайд' }))
     expect(car).toHaveTextContent(`2 / ${n}`)
     expect(within(car).getByRole('button', { name: 'Предыдущий слайд' })).toBeInTheDocument()
+  })
+
+  it('видео играет по-настоящему: демо — клип WebM и MP4, щелчок — «Смотреть» / «Пауза», полоса — перемотка; своё видео — из заметки, со звуком кнопкой', async () => {
+    // jsdom видео не проигрывает — play/pause только шлют события, как браузер
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { value: false, configurable: true })
+      this.dispatchEvent(new Event('play'))
+      return Promise.resolve()
+    })
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { value: true, configurable: true })
+      this.dispatchEvent(new Event('pause'))
+    })
+    await open(null, { demo: true, side: 'theirs' })
+    const feed = screen.getByRole('feed', { name: 'Лента: смотрю других' })
+    const reel = within(feed).getAllByRole('article').find((a) => a.querySelector('video'))!
+    const video = reel.querySelector('video')!
+    expect([...video.querySelectorAll('source')].map((x) => x.getAttribute('type'))).toEqual(['video/webm', 'video/mp4'])
+    expect(video.muted).toBe(true)
+    expect(within(reel).queryByRole('button', { name: 'Включить звук' })).toBeNull() // у демо-клипа звука нет
+    await userEvent.click(within(reel).getByRole('button', { name: 'Смотреть' }))
+    expect(play).toHaveBeenCalled()
+    await userEvent.click(within(reel).getByRole('button', { name: 'Пауза' }))
+    expect(pause).toHaveBeenCalled()
+    expect(within(reel).getByRole('button', { name: 'Смотреть' })).toBeInTheDocument()
+    expect(within(reel).getByRole('slider', { name: 'Перемотка' })).toHaveAttribute('aria-valuetext', '0:00 из 0:00')
+    play.mockRestore()
+    pause.mockRestore()
+  })
+
+  it('своя карточка: видео нет — «прикрепите к заметке»; прикрепили — играет оно, звук включается кнопкой', async () => {
+    await open(withTopic())
+    const reel = within(await screen.findByRole('feed', { name: 'Лента: я выпускаю' })).getByRole('article', { name: 'ИИ-агенты в бухгалтерии' })
+    expect(reel).toHaveTextContent('Видео ещё нет — прикрепите его к заметке карточки')
+    expect(reel.querySelector('video')).toBeNull()
+    cleanup()
+    const plan = withTopic()
+    const withVideo: Plan = {
+      ...plan,
+      items: plan.items.map((it) => (it.title === 'ИИ-агенты в бухгалтерии' ? { ...it, files: [{ name: 'ролик.mp4', type: 'video/mp4', size: 10, url: 'data:video/mp4;base64,AAAA' }] } : it)),
+    }
+    await open(withVideo)
+    const mine = within(await screen.findByRole('feed', { name: 'Лента: я выпускаю' })).getByRole('article', { name: 'ИИ-агенты в бухгалтерии' })
+    const video = mine.querySelector('video')!
+    expect(video.querySelector('source')).toHaveAttribute('src', 'data:video/mp4;base64,AAAA')
+    await userEvent.click(within(mine).getByRole('button', { name: 'Включить звук' }))
+    expect(video.muted).toBe(false)
+    expect(within(mine).getByRole('button', { name: 'Выключить звук' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('подписаться ссылкой: площадка и @аккаунт — из ссылки; первая подписка заменяет пример; «Отписаться» — открепиться', async () => {

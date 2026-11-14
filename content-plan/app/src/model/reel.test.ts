@@ -24,6 +24,15 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: вид по форма
     expect([r.side, r.title, r.summary, r.images.length, r.planned?.time, r.caption]).toEqual(['mine', 'ИИ-агенты в бухгалтерии', 'Кейс: закрытие месяца за день', 1, '09:00', 'Кейс: закрытие месяца за день #исследование'])
   })
 
+  it('видео из заметки карточки — играет в ленте: у карточки есть источник с типом файла', () => {
+    const seed = loadDataist()
+    const items = seed.items
+      .filter((it) => it.date === '2026-11-16' && it.channelId === 'lab' && it.rubricId === 'research')
+      .map((it) => ({ ...it, title: 'Тема', files: [{ name: 'ролик.mp4', type: 'video/mp4', size: 10, url: 'data:video/mp4;base64,AA' }, { name: 'a.png', type: 'image/png', size: 1, url: 'data:image/png;base64,AA' }] }))
+    const r = reelOfCard(items, { channelName: 'Лаборатория Датаиста', time: '09:00', at: 0 })
+    expect([r.videos, r.images.length]).toEqual([[{ src: 'data:video/mp4;base64,AA', type: 'video/mp4' }], 1])
+  })
+
   it('подписка ссылкой: площадка и @аккаунт из ссылки; @аккаунт — на выбранной площадке; сайт — Web; повтор узнаётся', () => {
     const cases = ['https://www.youtube.com/@aidaily', 't.me/neuro_digest', 'https://www.tiktok.com/@techshorts/video/1', 'instagram.com/growthlab/', 'https://x.com/sama', 'https://www.linkedin.com/company/anthropic', '@my_rival', 'blog.example.com/ai']
     expect(cases.map((c) => parseFollow(c, 'Telegram')).map((f) => `${f?.platform} ${f?.handle}`)).toEqual([

@@ -64,6 +64,18 @@ const P: Record<string, ReactElement> = {
   // статусы материала: заливка, чтобы читались в 12 px
   play: <path d="M8.5 6.3v11.4a1 1 0 0 0 1.5.86l9.3-5.7a1 1 0 0 0 0-1.72L10 5.44a1 1 0 0 0-1.5.86z" fill="currentColor" />,
   pause: <path d="M8.5 6.5v11M15.5 6.5v11" strokeWidth={3.5} />,
+  'sound-on': (
+    <>
+      <path d="M4 9.5h3l4.5-4v13L7 14.5H4z" fill="currentColor" />
+      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+    </>
+  ),
+  'sound-off': (
+    <>
+      <path d="M4 9.5h3l4.5-4v13L7 14.5H4z" fill="currentColor" />
+      <path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
+    </>
+  ),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" strokeWidth={2.5} />,
   published: (
     <>

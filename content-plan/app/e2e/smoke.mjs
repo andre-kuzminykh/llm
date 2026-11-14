@@ -1030,6 +1030,36 @@ const slot = /^Исследование · Короткое видео, Текс
   await fd.getByRole('radio', { name: 'Смотрю других' }).click()
   const theirs = fd.getByRole('feed', { name: 'Лента: смотрю других' })
   await theirs.waitFor()
+  // видео играет по-настоящему: само, когда на экране; щелчок — пауза; полоса — перемотка; ушли — пауза (FR-CP-080)
+  {
+    const idx = await theirs.locator('[data-reel]').evaluateAll((els) => els.findIndex((e) => e.querySelector('video')))
+    await theirs.evaluate((el, i) => el.scrollTo({ top: i * el.clientHeight }), idx)
+    await fd.waitForTimeout(1600)
+    const reel = theirs.locator('[data-reel]').nth(idx)
+    const st = () => reel.locator('video').evaluate((v) => ({ paused: v.paused, t: v.currentTime, d: v.duration, w: v.videoWidth }))
+    const auto = await st()
+    await reel.getByRole('button', { name: 'Пауза' }).click()
+    const p1 = await st()
+    await fd.waitForTimeout(500)
+    const p2 = await st()
+    await reel.getByRole('button', { name: 'Смотреть' }).click()
+    const bar = reel.getByRole('slider', { name: 'Перемотка' })
+    const bb = await bar.boundingBox()
+    await fd.mouse.click(bb.x + bb.width * 0.75, bb.y + bb.height - 2)
+    await fd.waitForTimeout(150)
+    const sk = await st()
+    await fd.screenshot({ path: `${SHOTS}/15-feed-video.png` })
+    await fd.getByRole('button', { name: 'Следующий' }).click()
+    await fd.waitForTimeout(1300)
+    const gone = await st()
+    check(
+      idx >= 0 && !auto.paused && auto.t > 0.5 && auto.w > 0 && p1.paused && Math.abs(p2.t - p1.t) < 0.05 && sk.t > auto.d * 0.6 && gone.paused,
+      `лента: видео играет само (${auto.t.toFixed(1)} из ${auto.d.toFixed(0)} с, ${auto.w}px), «Пауза» держит кадр, полоса — перемотка (${sk.t.toFixed(1)} с), к следующему — пауза`,
+      `видео: ${JSON.stringify({ idx, auto, p1, p2, sk, gone })}`,
+    )
+    await theirs.evaluate((el) => el.scrollTo({ top: 0 }))
+    await fd.waitForTimeout(500)
+  }
   const subs = await fd.getByRole('group', { name: 'Подписки' }).getByRole('button').count()
   const first = theirs.getByRole('article').first()
   await first.getByRole('button', { name: 'Саммери' }).click()

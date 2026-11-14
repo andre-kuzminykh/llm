@@ -121,6 +121,8 @@ export interface SourceRef {
 }
 export const MAX_FILES = 5
 export const MAX_FILE_MB = 5
+/** Видео к заметке — крупнее: оно играет в ленте; хранится в браузере вместе с планом. */
+export const MAX_VIDEO_MB = 40
 
 /** Канал конкурента: его заводит человек (позже подтянутся из маркетингового анализа); мониторим каждый час. */
 export interface Competitor {

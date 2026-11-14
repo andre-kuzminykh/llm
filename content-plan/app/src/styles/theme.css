@@ -1773,3 +1773,40 @@ button.cp-reel__act:active .cp-reel__ico { transform: scale(0.92); }
   .cp-subs__form { grid-template-columns: minmax(0, 1fr) auto; }
   .cp-subs__form input { grid-column: 1 / -1; }
 }
+
+/* видео в ленте играет по-настоящему: само на экране, пауза щелчком, полоса — перемотка */
+.cp-reel__poster--video { padding: 0; background: #000; display: block; }
+.cp-reel__wideimg--video { background: #000; }
+.cp-reel__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.cp-reel__poster--video .cp-reel__say { position: absolute; z-index: 1; left: 10%; right: 10%; top: 50%; transform: translateY(-50%); margin: 0 auto; pointer-events: none; }
+.cp-reel__wideimg--video .cp-reel__widetitle { pointer-events: none; }
+.cp-reel__tap { position: absolute; inset: 0; z-index: 1; border: 0; padding: 0; background: transparent; cursor: pointer; }
+.cp-reel__tap:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.7); outline-offset: -4px; }
+.cp-reel__tap .cp-reel__play { left: 50%; top: 50%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.2s var(--nr-ease); pointer-events: none; }
+.cp-reel__tap--paused .cp-reel__play { opacity: 1; }
+.cp-reel__tap .cp-reel__play--flash { opacity: 1; animation: cp-flash 0.65s var(--nr-ease) forwards; }
+@keyframes cp-flash { 0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.2; } 30% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 0; } }
+.cp-reel__tap--paused .cp-reel__play--flash { animation: none; }
+.cp-reel__sound {
+  position: absolute; z-index: 3; top: 44px; right: 12px; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px;
+  border: 0; border-radius: 999px; background: rgba(0, 0, 0, 0.45); color: #fff; font: var(--nr-fw-semibold, 600) 12px/1 var(--nr-font); cursor: pointer;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.cp-reel__wideimg--video .cp-reel__sound { top: 10px; }
+.cp-reel__seek { position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; height: 18px; display: flex; align-items: flex-end; cursor: pointer; touch-action: none; outline: none; }
+.cp-reel__seekbar { position: relative; flex: 1; height: 3px; background: rgba(255, 255, 255, 0.25); transition: height 0.15s var(--nr-ease); }
+.cp-reel__seekbar i { position: absolute; left: 0; top: 0; bottom: 0; background: #fe2c55; }
+.cp-reel__seekbar i::after { content: ''; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #fff; transform: translateY(-50%) scale(0); transition: transform 0.15s var(--nr-ease); }
+.cp-reel__seek:hover .cp-reel__seekbar, .cp-reel__seek--on .cp-reel__seekbar, .cp-reel__seek:focus-visible .cp-reel__seekbar { height: 6px; }
+.cp-reel__seek:hover .cp-reel__seekbar i::after, .cp-reel__seek--on .cp-reel__seekbar i::after, .cp-reel__seek:focus-visible .cp-reel__seekbar i::after { transform: translateY(-50%) scale(1); }
+.cp-reel__time {
+  position: absolute; right: 10px; bottom: 12px; padding: 2px 7px; border-radius: 6px; background: rgba(0, 0, 0, 0.55); color: #fff;
+  font: var(--nr-fw-semibold, 600) 11px/1.4 var(--nr-font); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity 0.15s var(--nr-ease); pointer-events: none;
+}
+.cp-reel__seek:hover .cp-reel__time, .cp-reel__seek--on .cp-reel__time, .cp-reel__seek:focus-visible .cp-reel__time, .cp-reel__tap--paused ~ .cp-reel__seek .cp-reel__time { opacity: 1; }
+.cp-reel__novideo {
+  position: relative; z-index: 1; align-self: start; justify-self: center; margin-top: 14px; max-width: 80%; padding: 5px 10px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42); color: rgba(255, 255, 255, 0.88); font: 500 12px/1.35 var(--nr-font); text-align: center;
+}
+.cp-reel__wideimg .cp-reel__novideo { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); margin: 0; white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+.cp-reel__poster:not(.cp-reel__poster--video) { grid-template-rows: auto auto; align-content: center; }

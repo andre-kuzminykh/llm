@@ -48,11 +48,11 @@ export async function readImage(file: File): Promise<string> {
 /** Картинки из буфера или перетаскивания. */
 export const imageFiles = (list: FileList | null | undefined) => [...(list ?? [])].filter((f) => f.type.startsWith('image/'))
 
-/** Что можно прикрепить к заметке: картинки и тексты. */
-export const ACCEPT = 'image/*,.txt,.md,.markdown,.csv,.json,.rtf,.pdf,.doc,.docx,.odt,text/*'
+/** Что можно прикрепить к заметке: картинки, видео (играет в ленте) и тексты. */
+export const ACCEPT = 'image/*,video/*,.txt,.md,.markdown,.csv,.json,.rtf,.pdf,.doc,.docx,.odt,text/*'
 const TEXT_EXT = /\.(txt|md|markdown|csv|json|rtf|pdf|docx?|odt)$/i
-export const okFile = (f: File) => f.type.startsWith('image/') || f.type.startsWith('text/') || TEXT_EXT.test(f.name)
-/** Файлы из выбора, буфера или перетаскивания — только картинки и тексты. */
+export const okFile = (f: File) => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.startsWith('text/') || TEXT_EXT.test(f.name)
+/** Файлы из выбора, буфера или перетаскивания — картинки, видео и тексты. */
 export const noteFiles = (list: FileList | null | undefined) => [...(list ?? [])].filter(okFile)
 
 /** Файл заметки: картинка — сжатая, текст — как есть. */

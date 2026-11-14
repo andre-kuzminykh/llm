@@ -5,7 +5,7 @@ import { contextOf, partsActions, presetOfSource, scheduleRule, scheduleDates, s
 import { onSchedule } from '../model/schedule'
 import { matesOf, newId, type Action } from '../model/store'
 import {
-  FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, filesOf, isHome, isImage, isSlot, MAX_FILE_MB, MAX_FILES, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, SHORT_VIDEO, shownTitle,
+  FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, filesOf, isHome, isImage, isSlot, MAX_FILE_MB, MAX_FILES, MAX_VIDEO_MB, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, SHORT_VIDEO, shownTitle,
   statusOf, TEXT_IMAGE, timeOf, type Attachment, type Draft, type Item, type Rule, type SourceRef, type Status,
 } from '../model/types'
 import { unitsOf } from '../model/units'
@@ -259,11 +259,11 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
     const room = MAX_FILES - files.length
     if (!list.length) return
     if (room <= 0) return setError(`Не больше ${MAX_FILES} файлов`)
-    const big = list.filter((f) => f.size > MAX_FILE_MB * 1024 * 1024)
+    const big = list.filter((f) => f.size > (f.type.startsWith('video/') ? MAX_VIDEO_MB : MAX_FILE_MB) * 1024 * 1024)
     const ok = list.filter((f) => !big.includes(f))
     const read = await Promise.all(ok.slice(0, room).map((f) => readFile(f).catch(() => null)))
     setFiles((cur) => [...cur, ...read.filter((x): x is Attachment => !!x)].slice(0, MAX_FILES))
-    setError(big.length ? `Файл больше ${MAX_FILE_MB} МБ не добавлен: ${big.map((f) => f.name).join(', ')}` : ok.length > room ? `Не больше ${MAX_FILES} файлов — лишние не добавлены` : '')
+    setError(big.length ? `Файл больше ${MAX_FILE_MB} МБ (видео — ${MAX_VIDEO_MB} МБ) не добавлен: ${big.map((f) => f.name).join(', ')}` : ok.length > room ? `Не больше ${MAX_FILES} файлов — лишние не добавлены` : '')
   }
 
   const makeDraft = (version: number) => {
@@ -926,7 +926,7 @@ function NoteBox({ note, setNote, noteRef, files, onAdd, onRemove }: {
             )}
           </ul>
         )}
-        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-note__add" disabled={files.length >= MAX_FILES} onClick={() => input.current?.click()} title={`До ${MAX_FILES} файлов: картинки и тексты`}>
+        <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm cp-note__add" disabled={files.length >= MAX_FILES} onClick={() => input.current?.click()} title={`До ${MAX_FILES} файлов: картинки, видео и тексты`}>
           <Icon name="clip" size={16} />
           {files.length ? `Файлы ${files.length}/${MAX_FILES}` : 'Прикрепить файл'}
         </button>

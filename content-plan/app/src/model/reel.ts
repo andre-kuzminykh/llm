@@ -34,6 +34,7 @@ export interface Reel {
   faces: Face[]
   slides: string[] // карусель и пост: текст слайдов
   images: string[] // фото из заметки карточки
+  videos: { src: string; type: string }[] // видео из заметки карточки — играет в ленте
   duration?: number
   stats?: { views: number; likes: number; comments: number; shares: number }
   url?: string
@@ -85,6 +86,7 @@ export function reelOfPost(p: Post, who?: { name: string; handle?: string }): Re
     faces: [{ format: p.format, kind, label: KIND_LABEL[kind], platforms: [p.platform] }],
     slides,
     images: [],
+    videos: [],
     duration: p.duration,
     stats: { views: p.views, likes: p.likes, comments: p.comments, shares: p.shares },
     url: p.url,
@@ -101,6 +103,7 @@ export function reelOfCard(
 ): Reel {
   const head = items[0]
   const images = filesOf(head).filter(isImage).map((f) => f.url)
+  const videos = filesOf(head).filter((f) => f.type.startsWith('video/')).map((f) => ({ src: f.url, type: f.type }))
   const order = Object.keys(FORMAT_ICON)
   const sorted = [...items].sort((a, b) => order.indexOf(a.format) - order.indexOf(b.format))
   const faces: Face[] = sorted.map((it) => {
@@ -125,6 +128,7 @@ export function reelOfCard(
     faces,
     slides: slidesOf(shownTitle(head), note),
     images,
+    videos,
     itemId: head.id,
     hue: hueOf(head.id),
     source: { title: shownTitle(head), summary, kind: faces[0].kind === 'video' ? 'video' : faces[0].kind === 'short' ? 'short' : faces[0].kind === 'article' ? 'article' : 'post', owner: c.channelName, itemId: head.id, rubricId: head.rubricId },
