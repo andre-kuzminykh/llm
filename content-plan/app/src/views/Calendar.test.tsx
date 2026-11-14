@@ -179,7 +179,7 @@ describe('T-CP-069 FR-CP-069 NFR-CP-008 одно меню отделов вну�
     expect(within(nav).getByRole('button', { name: 'SMM — контент-план' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getAllByRole('button', { name: /— скоро$/ })).toHaveLength(9)
     // в колонке разделов — только «Главная» и «Календарь»: профиль — внизу панели отделов
-    expect(within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь'])
+    expect(within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Лента'])
     await userEvent.click(within(nav).getByRole('button', { name: 'Профиль' }))
     expect(within(screen.getByRole('menu', { name: 'Профиль' })).getByText(/^Скоро: Главное, HR, Рынок/)).toBeInTheDocument()
   })
@@ -190,11 +190,11 @@ describe('T-CP-069 FR-CP-069 NFR-CP-008 одно меню отделов вну�
     await ready()
     expect(screen.queryByRole('navigation', { name: 'Отделы' })).toBeNull()
     expect(screen.queryByText('Nr')).toBeNull()
-    // в шапке — два раздела SMM и его меню (что за третьей кнопкой — FR-CP-070), значков отделов нет
+    // в шапке — три раздела SMM и его меню (что за третьей кнопкой — FR-CP-070), значков отделов нет
     const tabs = screen.getByRole('navigation', { name: 'Разделы' })
-    expect(within(tabs).getAllByRole('button')).toHaveLength(3)
+    expect(within(tabs).getAllByRole('button')).toHaveLength(4)
     expect(within(tabs).queryAllByRole('button', { name: /— скоро$|— контент-план$/ })).toHaveLength(0)
-    await userEvent.click(within(tabs).getAllByRole('button')[2])
+    await userEvent.click(within(tabs).getAllByRole('button')[3])
     const menu = screen.getByRole('menu')
     expect(within(menu).queryByText(/^Скоро:/)).toBeNull()
     expect(menu.textContent).not.toMatch(/Главное|Рынок|Система|Менеджмент|Маркетинг|Инжиниринг/)
@@ -228,8 +228,8 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     expect(document.querySelector('.cp-topnav')).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Разделы' })).toBeNull()
     const items = within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button')
-    expect(items.map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — аналитика и лента', 'Календарь контента', 'Настройки'])
-    const settings = items[2]
+    expect(items.map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — аналитика и лента', 'Календарь контента', 'Лента — что выпускаю и что смотрю', 'Настройки'])
+    const settings = items[3]
     expect(settings).toHaveClass('cp-sub__item')
     expect(settings).toHaveTextContent('Настройки')
     expect(settings).toHaveAttribute('title', 'Настройки')
@@ -286,7 +286,7 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     // ниже страницы навигации нет — внизу окна ничего, панель у Neuronium
     const below = [...document.querySelectorAll('nav')].filter((n) => !main.contains(n) && main.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING)
     expect(below).toEqual([])
-    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Главная', 'Календарь', 'Настройки'])
+    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Главная', 'Календарь', 'Лента', 'Настройки'])
     expect(within(nav).queryByRole('button', { name: 'Профиль' })).toBeNull()
   })
   it('телефон в окне Neuronium: «Главная» и «Календарь» в шапке переключают разделы, выбранный отмечен', async () => {
@@ -371,7 +371,7 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     renderApp()
     await ready()
     const tabs = screen.getByRole('navigation', { name: 'Разделы' })
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Профиль'])
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Лента', 'Профиль'])
     // та же нижняя панель, что была: рейл-вкладки первым в оболочке (внизу её ставит CSS), строки в шапке нет
     expect(tabs).toHaveClass('nr-rail', 'cp-tabs')
     expect(tabs).not.toHaveClass('cp-topnav')

@@ -74,7 +74,7 @@ await page.getByRole('heading', { name: 'Главная' }).waitFor()
   const connect = await page.getByRole('note').filter({ hasText: 'Подключите соцсети, чтобы видеть ленту и графики' }).count()
   const noCharts = !(await page.getByRole('region', { name: 'Аналитика' }).count())
   await page.screenshot({ path: `${SHOTS}/0-empty.png` })
-  check(items.join('|') === 'Главная|Календарь' && connect && noCharts, 'с чистого листа: первым — главная, вторым — календарь; «Подключите соцсети», графиков нет', `главная: ${items.join(', ')}, уведомление ${connect}, графики ${!noCharts}`)
+  check(items.join('|') === 'Главная|Календарь|Лента' && connect && noCharts, 'с чистого листа: первым — главная, вторым — календарь, третьим — лента; «Подключите соцсети», графиков нет', `главная: ${items.join(', ')}, уведомление ${connect}, графики ${!noCharts}`)
   // демо: аналитика как в Search Console — плитки, график, разрезы; щелчок по строке — провалиться
   await page.getByRole('switch', { name: 'Демо' }).click()
   const ov = page.getByRole('region', { name: 'Аналитика' })
@@ -415,7 +415,7 @@ await page.keyboard.press('Control+z')
   await settings.getByRole('list', { name: 'Конкуренты' }).getByRole('button', { name: 'Убрать: AI Daily' }).click()
   await settings.getByRole('button', { name: 'Закрыть' }).click()
   check(
-    items.join('|') === 'Главная|Календарь' && sub.x >= rail.x + rail.width - 1 && soon === 'dashed' && watched && mine && langOpts.join('|') === 'RU — Русский|EN — English' && !rivalLang,
+    items.join('|') === 'Главная|Календарь|Лента' && sub.x >= rail.x + rail.width - 1 && soon === 'dashed' && watched && mine && langOpts.join('|') === 'RU — Русский|EN — English' && !rivalLang,
     'СММ: «Главная» и «Календарь» справа от отделов; соцсети (с языком RU/EN) и конкуренты — в настройках; маркет-анализ — пунктиром',
     `СММ: ${items.join(', ')}, рамка «${soon}», конкурент ${watched}, мои соцсети ${mine}, языки ${langOpts.join(', ')}, у конкурента ${rivalLang}`,
   )
@@ -796,7 +796,7 @@ await weekFirst(phone)
 await phone.goto(BASE)
 await phone.getByRole('heading', { name: 'Главная' }).waitFor()
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
-check(tabs.join('|') === 'Главная|Календарь|Профиль', 'телефон: внизу Главная, Календарь и Профиль', `телефон: внизу ${tabs.join(', ')}`)
+check(tabs.join('|') === 'Главная|Календарь|Лента|Профиль', 'телефон: внизу Главная, Календарь, Лента и Профиль', `телефон: внизу ${tabs.join(', ')}`)
 // на своём адресе панель разделов — по-прежнему внизу, строки разделов в шапке (она только в окне Neuronium) нет (FR-CP-070)
 const bar = await phone.locator('nav.cp-tabs').boundingBox()
 check(bar && bar.y + bar.height > 843 && !(await phone.locator('.cp-topnav').count()), 'телефон на своём адресе: панель разделов — внизу, как была, строки разделов в шапке нет', `телефон, панель разделов: ${JSON.stringify(bar)}`)
@@ -991,6 +991,93 @@ const slot = /^Исследование · Короткое видео, Текс
   await dp.screenshot({ path: `${SHOTS}/14-dataist-phone-schedule.png` })
   check(n9 === 15 && !pcut && !pwide && !pswide, `телефон: план Датаиста — лентой по дням, 16 ноября — ${n9} карточек целиком; «Расписание» — значком, вбок не едет`, `телефон, лента: 16 ноября ${n9}, обрезано ${pcut}, шире ${pwide}/${pswide}`)
   await dp.close()
+}
+
+// лента как в TikTok (FR-CP-078): по одному материалу на экран, кадр 9:16; листается кнопкой и клавишей; саммери — окном в кадре
+{
+  const fd = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  fd.on('pageerror', (e) => fail(`ошибка на странице: ${e.message}`))
+  await fd.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      localStorage.setItem('cp:section', JSON.stringify('feed'))
+      localStorage.setItem('cp:demo', 'true')
+      sessionStorage.setItem('seeded', '1')
+    }
+  })
+  await fd.goto(BASE)
+  const feed = fd.getByRole('feed', { name: 'Лента: я выпускаю' })
+  await feed.waitFor()
+  await fd.waitForTimeout(400)
+  const frame = fd.locator('.cp-reel__frame').first()
+  const box = await frame.boundingBox()
+  const ratio = box ? box.width / box.height : 0
+  await fd.screenshot({ path: `${SHOTS}/15-feed-mine.png` })
+  const at = () => feed.evaluate((el) => Math.round(el.scrollTop / el.clientHeight))
+  await fd.getByRole('button', { name: 'Следующий' }).click()
+  await fd.waitForTimeout(900)
+  const afterBtn = await at()
+  await feed.focus()
+  await fd.keyboard.press('ArrowDown')
+  await fd.waitForTimeout(900)
+  const afterKey = await at()
+  check(Math.abs(ratio - 9 / 16) < 0.02 && afterBtn === 1 && afterKey === 2, `лента: кадр 9:16 (${box && Math.round(box.width)}×${box && Math.round(box.height)}), «Следующий» и ↓ — к следующему материалу`, `лента: соотношение ${ratio.toFixed(3)}, после кнопки ${afterBtn}, после ↓ ${afterKey}`)
+  // смотрю других: подписки строкой, саммери — окном внизу кадра, «Пересоздать у себя»; карусель листается вбок
+  await fd.getByRole('radio', { name: 'Смотрю других' }).click()
+  const theirs = fd.getByRole('feed', { name: 'Лента: смотрю других' })
+  await theirs.waitFor()
+  const subs = await fd.getByRole('group', { name: 'Подписки' }).getByRole('button').count()
+  const first = theirs.getByRole('article').first()
+  await first.getByRole('button', { name: 'Саммери' }).click()
+  const sheet = first.getByRole('dialog')
+  await sheet.waitFor()
+  await fd.waitForTimeout(300)
+  const fb = await first.locator('.cp-reel__frame').boundingBox()
+  const sb = await sheet.boundingBox()
+  const inside = fb && sb && sb.x >= fb.x - 1 && sb.x + sb.width <= fb.x + fb.width + 1 && sb.y + sb.height <= fb.y + fb.height + 1
+  const recreate = await sheet.getByRole('button', { name: 'Пересоздать у себя' }).isVisible()
+  await fd.screenshot({ path: `${SHOTS}/15-feed-summary.png` })
+  await sheet.getByRole('button', { name: 'Закрыть саммери' }).click()
+  await fd.getByRole('button', { name: 'Нейросети без воды, Telegram' }).click()
+  const car = theirs.getByRole('group', { name: /^Карусель: \d+ слайдов$/ }).first()
+  await car.scrollIntoViewIfNeeded()
+  await fd.waitForTimeout(700)
+  const before = await car.locator('.cp-reel__count').textContent()
+  await car.getByRole('button', { name: 'Следующий слайд' }).click()
+  await fd.waitForTimeout(700)
+  const after = await car.locator('.cp-reel__count').textContent()
+  const slid = await car.locator('.cp-reel__track').evaluate((el) => el.scrollLeft > 10)
+  await fd.screenshot({ path: `${SHOTS}/15-feed-carousel.png` })
+  const wide = await fd.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  check(
+    subs === 6 && inside && recreate && /^1 \/ \d+$/.test(before ?? '') && /^2 \/ \d+$/.test(after ?? '') && slid && !wide,
+    `смотрю других: подписки строкой (${subs - 2} + «Все», «Подписаться»); саммери — окном в кадре с «Пересоздать у себя»; карусель — ${before} → ${after}`,
+    `смотрю других: подписок ${subs}, саммери в кадре ${inside}, кнопка ${recreate}, карусель ${before} → ${after}, сдвиг ${slid}, шире ${wide}`,
+  )
+  await fd.close()
+}
+// телефон: лента во весь экран, цифры и «Саммери» — поверх кадра справа, вбок не едет
+{
+  const fp = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  await fp.addInitScript(() => {
+    localStorage.setItem('cp:section', JSON.stringify('feed'))
+    localStorage.setItem('cp:demo', 'true')
+    localStorage.setItem('cp:reel-side', 'theirs')
+  })
+  await fp.goto(BASE)
+  const feed = fp.getByRole('feed', { name: 'Лента: смотрю других' })
+  await feed.waitFor()
+  await fp.waitForTimeout(500)
+  const fb = await fp.locator('.cp-reel__frame').first().boundingBox()
+  const rb = await fp.locator('.cp-reel__rail').first().boundingBox()
+  const wide = await fp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  const head = await fp.locator('.cp-top').first().boundingBox()
+  await fp.screenshot({ path: `${SHOTS}/15-feed-phone.png` })
+  check(
+    fb && rb && Math.round(fb.width) === 390 && rb.x + rb.width <= fb.x + fb.width && rb.x > fb.x + fb.width / 2 && !wide && head && head.height < 70,
+    `телефон: лента во всю ширину, цифры и «Саммери» — поверх кадра справа, шапка в строку, вбок не едет`,
+    `телефон, лента: кадр ${JSON.stringify(fb)}, справа ${JSON.stringify(rb)}, шапка ${head?.height}, шире ${wide}`,
+  )
+  await fp.close()
 }
 
 await browser.close()

@@ -23,7 +23,7 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
     // чистый лист — как после «Очистить всё» (без сохранённого плана программа открывает план Датаиста, FR-CP-071)
     render(<App storage={async () => memoryStorage()} initialPlan={emptyPlan('2026-11-03')} />)
     await screen.findByRole('navigation', { name: 'SMM' })
-    expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь'])
+    expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Лента'])
     expect(within(smm()).getByRole('button', { name: /^Главная/ })).toHaveAttribute('aria-current', 'page')
     // без соцсетей и демо — графиков нет, уведомление «подключите»
     expect(screen.queryByRole('region', { name: 'Аналитика' })).toBeNull()

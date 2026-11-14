@@ -20,6 +20,7 @@ import { inFrame, profileName } from './ui/frame'
 import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
 import { HomeSide } from './views/HomeSide'
+import { FeedView } from './views/FeedView'
 import { HomeView } from './views/HomeView'
 import { SettingsSheet } from './views/SettingsSheet'
 import { ScheduleSheet } from './views/ScheduleSheet'
@@ -94,8 +95,12 @@ const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
 const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
   { id: 'home', label: 'Главная', full: 'Главная — аналитика и лента', icon: 'home' },
   { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
+  { id: 'feed', label: 'Лента', full: 'Лента — что выпускаю и что смотрю', icon: 'play' },
 ]
-const readSection = (): Section => (readLS<string>('cp:section', 'home') === 'calendar' ? 'calendar' : 'home')
+const readSection = (): Section => {
+  const s = readLS<string>('cp:section', 'home')
+  return s === 'calendar' || s === 'feed' ? s : 'home'
+}
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -625,9 +630,9 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
           </nav>
         )}
         {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {sideOpen && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : <HomeSide onClose={() => setSideOpen(false)} />)}
+        {sideOpen && section !== 'feed' && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : <HomeSide onClose={() => setSideOpen(false)} />)}
         <main className="nr-main">
-          {section === 'home' ? <HomeView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
+          {section === 'home' ? <HomeView /> : section === 'feed' ? <FeedView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} />}

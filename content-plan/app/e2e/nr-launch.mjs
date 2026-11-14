@@ -266,12 +266,12 @@ try {
     '«Настройки» шестерёнкой — внизу колонки разделов, меню — справа от неё (настройки на месте, «Скоро» нет); человечка во фрейме нет',
     `настройки во фрейме: ${JSON.stringify(left)}`,
   )
-  // T-CP-070, телефон: внизу у SMM панели нет (она одна, у Neuronium); «Главная, Календарь, Настройки» — вверху, в шапке:
+  // T-CP-070, телефон: внизу у SMM панели нет (она одна, у Neuronium); «Главная, Календарь, Лента, Настройки» — вверху, в шапке:
   // шестерёнкой, человечка и кружка нет, меню то же и раскрывается под строкой
   const small = await phone(nr.port, appOn.port, 'nr-launch-frame-phone.png')
   check(
-    small.tabs === 'Главная|Календарь|Настройки' && small.gear && small.people === 0 && small.avatar === 0 && small.peopleOpen === 0 && small.note === 0 && small.settings === 1 && small.menuUnder,
-    'телефон во фрейме: «Главная, Календарь, Настройки» — вверху, в шапке; шестерёнкой, человечка нет, меню то же и под строкой',
+    small.tabs === 'Главная|Календарь|Лента|Настройки' && small.gear && small.people === 0 && small.avatar === 0 && small.peopleOpen === 0 && small.note === 0 && small.settings === 1 && small.menuUnder,
+    'телефон во фрейме: «Главная, Календарь, Лента, Настройки» — вверху, в шапке; шестерёнкой, человечка нет, меню то же и под строкой',
     `телефон во фрейме: ${JSON.stringify(small)}`,
   )
   check(
@@ -287,7 +287,7 @@ try {
   )
   const night = await phone(nr.port, appOn.port, 'nr-launch-frame-phone-dark.png', 'dark')
   check(
-    night.tabs === 'Главная|Календарь|Настройки' && night.dark && night.smallest >= 44 && !night.crossing && !night.clipped && !night.outside && !night.wide && night.contrast >= 4.5 && night.bottomBar === 0 && night.below === 0 && night.menuUnder,
+    night.tabs === 'Главная|Календарь|Лента|Настройки' && night.dark && night.smallest >= 44 && !night.crossing && !night.clipped && !night.outside && !night.wide && night.contrast >= 4.5 && night.bottomBar === 0 && night.below === 0 && night.menuUnder,
     `телефон во фрейме, тёмная тема: то же — кнопки от 44 px, без наложений, внизу ничего, контраст ${night.contrast}`,
     `телефон во фрейме, тёмная тема: ${JSON.stringify(night)}`,
   )
