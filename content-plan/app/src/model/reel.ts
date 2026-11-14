@@ -3,6 +3,7 @@
 // в вертикальной рамке, пост — карточка или карусель с подписью, статья — обложка с подписью. Справа — цифры и «Саммери»:
 // одно окно с саммери, топиками и кнопкой «Пересоздать».
 import { tagsOf, type Post } from './metrics'
+import { plainText } from './post'
 import type { Source } from './social'
 import { filesOf, FORMAT_ICON, FULL_VIDEO, isImage, MAIL, SHORT_VIDEO, shownTitle, WEB_PAGE, type Competitor, type ISODate, type Item, type Status } from './types'
 
@@ -102,15 +103,22 @@ export function reelOfCard(
   c: { channelName: string; color?: string; rubric?: string; time: string; at: number },
 ): Reel {
   const head = items[0]
-  const images = filesOf(head).filter(isImage).map((f) => f.url)
-  const videos = filesOf(head).filter((f) => f.type.startsWith('video/')).map((f) => ({ src: f.url, type: f.type }))
+  // пост из редактора «Текст» — его медиа первыми; дальше файлы заметки
+  const post = head.post
+  const media = post?.media ?? []
+  const images = [...media.filter((m) => (m.kind === 'image' || m.kind === 'svg') && m.url).map((m) => m.url!), ...filesOf(head).filter(isImage).map((f) => f.url)]
+  const videos = [
+    ...media.filter((m) => m.kind === 'video' && m.url).map((m) => ({ src: m.url!, type: m.type ?? 'video/mp4' })),
+    ...filesOf(head).filter((f) => f.type.startsWith('video/')).map((f) => ({ src: f.url, type: f.type })),
+  ]
   const order = Object.keys(FORMAT_ICON)
   const sorted = [...items].sort((a, b) => order.indexOf(a.format) - order.indexOf(b.format))
   const faces: Face[] = sorted.map((it) => {
     const kind = kindOf(it.format, images.length)
     return { format: it.format, kind, label: FORMAT_ICON[it.format]?.label ?? KIND_LABEL[kind], platforms: it.platforms, itemId: it.id }
   })
-  const note = (head.note ?? '').trim()
+  // текст — пост, если он написан, иначе заметка
+  const note = (post?.body.trim() ? plainText(post.body) : head.note ?? '').trim()
   const summary = note.split('\n').find((l) => l.trim())?.trim() || head.draft?.text.split('\n').find((l) => l.startsWith('Тема:'))?.slice(6) || shownTitle(head)
   const rubricTag = c.rubric ? `#${c.rubric.toLowerCase().replace(/\s+/g, '_')}` : ''
   return {

@@ -21,6 +21,7 @@ import { useMedia, useTheme, type ThemePref } from './ui/theme'
 import { AgendaView } from './views/AgendaView'
 import { HomeSide } from './views/HomeSide'
 import { FeedSide, FeedView } from './views/FeedView'
+import { ImagesView, SoonView, TextView, VideoView } from './views/Sections'
 import { HomeView } from './views/HomeView'
 import { SettingsSheet } from './views/SettingsSheet'
 import { ScheduleSheet } from './views/ScheduleSheet'
@@ -92,15 +93,23 @@ const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
  *  выпускаю и что смотрю, сторис подписок сверху), календарь контента второй, аналитика (графики и посты) третьей. В окне Neuronium отделы — у него, а меню
  *  профиля — «Настройками» внизу этой колонки; на телефоне в окне внизу у SMM панели нет (она у Neuronium), разделы и
  *  «Настройки» — вверху, в шапке (FR-CP-069, FR-CP-070). */
-const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
-  { id: 'feed', label: 'Главная', full: 'Главная — лента: что выпускаю и что смотрю', icon: 'home' },
-  { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
-  { id: 'analytics', label: 'Аналитика', full: 'Аналитика — графики и посты', icon: 'chart' },
+const SECTIONS: { id: Section; label: string; short?: string; full: string; icon: string }[] = [
+  { id: 'feed', label: 'Лента', full: 'Лента — что выпускаю и что смотрю', icon: 'home' },
+  { id: 'calendar', label: 'Контент-план', short: 'План', full: 'Контент-план — календарь', icon: 'calendar' },
+  { id: 'text', label: 'Текст', full: 'Текст — посты и статьи с ассистентом', icon: 'pencil' },
+  { id: 'images', label: 'Картинки', full: 'Картинки — фото, инфографика, анимации', icon: 'image' },
+  { id: 'video', label: 'Видео', full: 'Видео — студия NR SMM', icon: 'play' },
+  { id: 'voice', label: 'Озвучка', full: 'Озвучка (скоро)', icon: 'sound-on' },
+  { id: 'autopost', label: 'Автопостинг', full: 'Автопостинг (скоро)', icon: 'bolt' },
+  { id: 'comments', label: 'Комменты', full: 'Комменты (скоро)', icon: 'comment' },
+  { id: 'analytics', label: 'Аналитика', full: 'Аналитика — графики, посты, портрет ЦА', icon: 'chart' },
 ]
-/** Открытый раздел помнится; прежняя «Главная» (графики) — теперь лента, графики — в «Аналитике». */
+/** На телефоне внизу (и в окне Neuronium — в шапке) — первые три, остальные — за «Ещё». */
+const PHONE_MAIN: Section[] = ['feed', 'calendar', 'text']
+/** Открытый раздел помнится; прежняя «Главная» — лента. */
 const readSection = (): Section => {
   const s = readLS<string>('cp:section', 'feed')
-  return s === 'calendar' || s === 'analytics' ? s : 'feed'
+  return SECTIONS.some((x) => x.id === s) ? (s as Section) : 'feed'
 }
 
 function readLS<T>(key: string, fallback: T): T {
@@ -286,7 +295,10 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
     setSectionState(s)
     writeLS('cp:section', s)
     setSheet(null)
+    setMore(false)
   }
+  const [textId, setTextId] = useState<string | null>(null)
+  const [more, setMore] = useState(false) // телефон: «Ещё» — остальные разделы
   const [toastState, setToast] = useState<({ msg: string; n: number } & ToastOpts) | null>(null)
   const narrow = useMedia('(max-width: 900px)')
   const phone = useMedia('(max-width: 600px)')
@@ -502,6 +514,12 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
     setHome: (patch) => setHomeState((h) => ({ ...h, ...patch, ...(patch.tab && patch.tab !== h.tab && !patch.filters ? { filters: NO_HOME_FILTERS } : {}) })),
     section,
     setSection,
+    textId,
+    openPost: (id) => {
+      setTextId(id)
+      setSection('text')
+    },
+    closePost: () => setTextId(null),
     openTask: (id) => setSheet((s) => ({ kind: 'task', id, back: backOf(s) })),
     openDay: (date) => setSheet({ kind: 'day', date }),
     openDayId,
@@ -554,6 +572,17 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
     />
   )
 
+  // телефон: «Ещё» — разделы, которым нет места внизу
+  const moreMenu = (
+    <div className="cp-menu cp-more" role="menu" aria-label="Ещё разделы">
+      {SECTIONS.filter((s) => !PHONE_MAIN.includes(s.id)).map((s) => (
+        <button key={s.id} type="button" role="menuitem" className="cp-menu__item" aria-current={section === s.id ? 'page' : undefined} onClick={() => setSection(s.id)}>
+          <Icon name={s.icon} size={18} />
+          <span>{s.label}</span>
+        </button>
+      ))}
+    </div>
+  )
   return (
     <PlanCtx.Provider value={ctx}>
       <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}${framed ? ' cp-framed' : ''}`}>
@@ -562,12 +591,17 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
              «Главная», «Календарь», «Аналитика» и «Настройки» — вверху, в шапке, строкой над датой и фильтрами. «Настройки»
              шестерёнкой: кружок-человечек — аккаунт Neuronium, входа у SMM нет (FR-CP-070, NFR-CP-009) */
           <nav className="cp-topnav" aria-label="Разделы">
-            {SECTIONS.map((s) => (
+            {SECTIONS.filter((s) => PHONE_MAIN.includes(s.id)).map((s) => (
               <button key={s.id} type="button" className="cp-topnav__tab" aria-current={section === s.id ? 'page' : undefined} onClick={() => setSection(s.id)}>
                 <Icon name={s.icon} size={20} />
-                <span>{s.label}</span>
+                <span>{s.short ?? s.label}</span>
               </button>
             ))}
+            <button type="button" className="cp-topnav__tab" aria-current={PHONE_MAIN.includes(section) ? undefined : 'page'} aria-expanded={more} onClick={() => setMore((m) => !m)}>
+              <Icon name="more" size={20} />
+              <span>Ещё</span>
+            </button>
+            {more && moreMenu}
             <button type="button" className="cp-topnav__gear" aria-label="Настройки" title="Настройки" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
               <Icon name="settings" size={22} />
             </button>
@@ -575,12 +609,17 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
           </nav>
         ) : phone ? (
           <nav className="nr-rail cp-tabs" aria-label="Разделы">
-            {SECTIONS.map((s) => (
+            {SECTIONS.filter((s) => PHONE_MAIN.includes(s.id)).map((s) => (
               <button key={s.id} type="button" className="cp-tab" aria-current={section === s.id ? 'page' : undefined} onClick={() => setSection(s.id)}>
                 <Icon name={s.icon} size={22} />
-                <span>{s.label}</span>
+                <span>{s.short ?? s.label}</span>
               </button>
             ))}
+            <button type="button" className="cp-tab" aria-current={PHONE_MAIN.includes(section) ? undefined : 'page'} aria-expanded={more} onClick={() => setMore((m) => !m)}>
+              <Icon name="more" size={22} />
+              <span>Ещё</span>
+            </button>
+            {more && moreMenu}
             <button type="button" className="cp-tab" aria-label="Профиль" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
               <span className="cp-avatar cp-avatar--sm" aria-hidden="true"><Icon name="user" size={14} /></span>
               <span>Профиль</span>
@@ -619,21 +658,44 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
                 <span aria-hidden="true">{s.label}</span>
               </button>
             ))}
-            {/* в окне Neuronium панели отделов нет — меню профиля внизу этой колонки, как её разделы, «Настройками» с
-                шестерёнкой: кружок аккаунта рядом — у Neuronium, входа у SMM нет (FR-CP-070) */}
-            {framed && (
-              <button type="button" className="cp-sub__item cp-sub__profile" aria-label="Настройки" aria-expanded={menu} title="Настройки" onClick={() => setMenu((m) => !m)}>
-                <Icon name="settings" size={20} />
-                <span aria-hidden="true">Настройки</span>
-              </button>
-            )}
+            {/* «Настройки» — десятым, сразу после «Аналитики» (FR-CP-084): в окне Neuronium — шестерёнка с меню SMM
+                (FR-CP-070), на своём адресе — сразу лист настроек: соцсети, конкуренты, мой аватар (меню — у «Профиля») */}
+            <button
+              type="button"
+              className="cp-sub__item cp-sub__profile"
+              aria-label="Настройки"
+              aria-expanded={framed ? menu : undefined}
+              title="Настройки"
+              onClick={() => (framed ? setMenu((m) => !m) : setSheet({ kind: 'settings' }))}
+            >
+              <Icon name="settings" size={20} />
+              <span aria-hidden="true">Настройки</span>
+            </button>
             {framed && profileMenu}
           </nav>
         )}
-        {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
-        {sideOpen && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : section === 'feed' ? <FeedSide onClose={() => setSideOpen(false)} /> : <HomeSide onClose={() => setSideOpen(false)} />)}
+        {narrow && sideOpen && (section === 'calendar' || section === 'feed' || section === 'analytics') && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
+        {sideOpen && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : section === 'feed' ? <FeedSide onClose={() => setSideOpen(false)} /> : section === 'analytics' ? <HomeSide onClose={() => setSideOpen(false)} /> : null)}
         <main className="nr-main">
-          {section === 'analytics' ? <HomeView /> : section === 'feed' ? <FeedView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
+          {section === 'analytics' ? (
+            <HomeView />
+          ) : section === 'feed' ? (
+            <FeedView />
+          ) : section === 'text' ? (
+            <TextView />
+          ) : section === 'images' ? (
+            <ImagesView />
+          ) : section === 'video' ? (
+            <VideoView />
+          ) : section === 'voice' || section === 'autopost' || section === 'comments' ? (
+            <SoonView id={section} />
+          ) : ctx.span === 'month' ? (
+            <MonthView />
+          ) : ctx.mode === 'feed' ? (
+            <AgendaView />
+          ) : (
+            <WeekView />
+          )}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} />}

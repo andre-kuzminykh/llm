@@ -67,7 +67,7 @@ const dragBy = async (loc, dx, dy) => {
 
 // с чистого листа: первым — главная (лента), графики — в «Аналитике»; соцсети — подключить в настройках
 await page.goto(BASE)
-await page.getByRole('heading', { name: 'Главная' }).waitFor()
+await page.getByRole('heading', { name: 'Лента', exact: true }).waitFor()
 {
   const smm = page.getByRole('navigation', { name: 'SMM' })
   const items = await smm.getByRole('button').allTextContents()
@@ -77,7 +77,7 @@ await page.getByRole('heading', { name: 'Главная' }).waitFor()
   const connect = await page.getByRole('note').filter({ hasText: 'Подключите соцсети, чтобы видеть ленту и графики' }).count()
   const noCharts = !(await page.getByRole('region', { name: 'Аналитика' }).count())
   await page.screenshot({ path: `${SHOTS}/0-empty.png` })
-  check(items.join('|') === 'Главная|Календарь|Аналитика' && mainFeed && connect && noCharts, 'с чистого листа: первой — главная (лента), второй — календарь, третьей — аналитика; в ней «Подключите соцсети», графиков нет', `разделы: ${items.join(', ')}, лента главной ${mainFeed}, уведомление ${connect}, графики ${!noCharts}`)
+  check(items.join('|') === 'Лента|Контент-план|Текст|Картинки|Видео|Озвучка|Автопостинг|Комменты|Аналитика|Настройки' && mainFeed && connect && noCharts, 'с чистого листа: девять разделов NR SMM, первой — лента; в аналитике в ней «Подключите соцсети», графиков нет', `разделы: ${items.join(', ')}, лента главной ${mainFeed}, уведомление ${connect}, графики ${!noCharts}`)
   // демо: аналитика как в Search Console — плитки, график, разрезы; щелчок по строке — провалиться
   await page.getByRole('switch', { name: 'Демо' }).click()
   const ov = page.getByRole('region', { name: 'Аналитика' })
@@ -149,7 +149,7 @@ await page.getByRole('heading', { name: 'Главная' }).waitFor()
 await page.getByRole('button', { name: 'Профиль' }).click()
 await page.getByRole('menuitem', { name: /Загрузить план Датаиста/ }).click()
 await toast().filter({ hasText: 'Загружен план Датаиста' }).waitFor()
-await page.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: 'Календарь контента' }).click()
+await page.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: 'Контент-план — календарь' }).click()
 await page.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const nav = page.getByRole('navigation', { name: 'Отделы' })
 check(
@@ -418,7 +418,7 @@ await page.keyboard.press('Control+z')
   await settings.getByRole('list', { name: 'Конкуренты' }).getByRole('button', { name: 'Убрать: AI Daily' }).click()
   await settings.getByRole('button', { name: 'Закрыть' }).click()
   check(
-    items.join('|') === 'Главная|Календарь|Аналитика' && sub.x >= rail.x + rail.width - 1 && soon === 'dashed' && watched && mine && langOpts.join('|') === 'RU — Русский|EN — English' && !rivalLang,
+    items.join('|') === 'Лента|Контент-план|Текст|Картинки|Видео|Озвучка|Автопостинг|Комменты|Аналитика|Настройки' && sub.x >= rail.x + rail.width - 1 && soon === 'dashed' && watched && mine && langOpts.join('|') === 'RU — Русский|EN — English' && !rivalLang,
     'СММ: «Главная» и «Календарь» справа от отделов; соцсети (с языком RU/EN) и конкуренты — в настройках; маркет-анализ — пунктиром',
     `СММ: ${items.join(', ')}, рамка «${soon}», конкурент ${watched}, мои соцсети ${mine}, языки ${langOpts.join(', ')}, у конкурента ${rivalLang}`,
   )
@@ -797,14 +797,15 @@ const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isM
 await oldSeed(phone)
 await weekFirst(phone)
 await phone.goto(BASE)
-await phone.getByRole('heading', { name: 'Главная' }).waitFor()
+await phone.getByRole('heading', { name: 'Лента', exact: true }).waitFor()
 const tabs = await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button').allTextContents()
-check(tabs.join('|') === 'Главная|Календарь|Аналитика|Профиль', 'телефон: внизу Главная, Календарь, Аналитика и Профиль', `телефон: внизу ${tabs.join(', ')}`)
+check(tabs.join('|') === 'Лента|План|Текст|Ещё|Профиль', 'телефон: внизу Лента, План, Текст, «Ещё» и Профиль', `телефон: внизу ${tabs.join(', ')}`)
 // на своём адресе панель разделов — по-прежнему внизу, строки разделов в шапке (она только в окне Neuronium) нет (FR-CP-070)
 const bar = await phone.locator('nav.cp-tabs').boundingBox()
 check(bar && bar.y + bar.height > 843 && !(await phone.locator('.cp-topnav').count()), 'телефон на своём адресе: панель разделов — внизу, как была, строки разделов в шапке нет', `телефон, панель разделов: ${JSON.stringify(bar)}`)
 // на телефоне фильтры аналитики — за кнопкой; на демо плитки по две, ничего не вылезает вбок
-await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Аналитика' }).click()
+await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Ещё' }).click()
+await phone.getByRole('menuitem', { name: 'Аналитика' }).click()
 await phone.getByRole('heading', { name: 'Аналитика' }).waitFor()
 await phone.getByRole('switch', { name: 'Демо' }).click()
 await phone.getByRole('region', { name: 'Аналитика' }).waitFor()
@@ -822,7 +823,7 @@ check(!phoneHome.side && !phoneHome.wide && phoneHome.strip.rows === 1 && phoneH
 await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Профиль' }).click()
 await phone.getByRole('menuitem', { name: /Загрузить план Датаиста/ }).click()
 await phone.getByRole('status').filter({ hasText: 'Загружен план Датаиста' }).waitFor()
-await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Календарь' }).click()
+await phone.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'План' }).click()
 await phone.getByRole('grid', { name: 'Неделя по времени' }).waitFor()
 const head = await phone.locator('.cp-top').boundingBox()
 check(head && head.height < 70, 'телефон: шапка в одну строку', `телефон: шапка ${head?.height}px`)
@@ -861,12 +862,12 @@ const slot = /^Исследование · Короткое видео, Текс
   dc.on('pageerror', (e) => fail(`ошибка на странице: ${e.message}`))
   const t0 = Date.now()
   await dc.goto(BASE)
-  await dc.getByRole('heading', { name: 'Главная' }).waitFor()
+  await dc.getByRole('heading', { name: 'Лента', exact: true }).waitFor()
   await dc.waitForTimeout(600)
   // на главной (лента) — пусто: слоты без темы в ленту не попадают, подсказка «впишите тему»
   const homeCards = (await dc.getByRole('feed').count()) + (await dc.getByRole('heading', { name: 'Здесь — то, что вы выпускаете' }).count() ? 0 : 1)
   await dc.screenshot({ path: `${SHOTS}/14-dataist-home.png` })
-  await dc.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: /Календарь/ }).click()
+  await dc.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: /^Контент-план/ }).click()
   // календарь — месяцем: каждый слот — своей карточкой целиком (FR-CP-072, FR-CP-075)
   const mGrid = dc.getByRole('grid', { name: 'Месяц: Ноябрь 2026' })
   await mGrid.waitFor()
@@ -941,7 +942,7 @@ const slot = /^Исследование · Короткое видео, Текс
   await kept.waitFor()
   const keptText = (await kept.locator('.cp-toast__msg').textContent()) ?? ''
   await kept.getByRole('button', { name: 'Вернуть прежний' }).click()
-  await dc.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: /Календарь/ }).click().catch(() => {})
+  await dc.getByRole('navigation', { name: 'SMM' }).getByRole('button', { name: /^Контент-план/ }).click().catch(() => {})
   const sideOld = await dc.getByRole('complementary', { name: 'Фильтры' }).getByText('Andre AIT').count()
   check(/^Открыт план Датаиста: 7 каналов, с 15 ноя — прежний план не стёрт$/.test(keptText) && sideOld > 0, `был свой план — открылся план Датаиста («${keptText}»), «Вернуть прежний» вернул свой`, `прежний план: «${keptText}», Andre AIT ${sideOld}`)
   await dc.close()
@@ -951,7 +952,7 @@ const slot = /^Исследование · Короткое видео, Текс
   const sw = await browser.newPage({ viewport: { width: 1440, height: 900 } })
   await oldSeed(sw)
   await sw.goto(BASE)
-  await sw.getByRole('heading', { name: 'Главная' }).waitFor()
+  await sw.getByRole('heading', { name: 'Лента', exact: true }).waitFor()
   await sw.getByRole('button', { name: 'Профиль' }).click()
   await sw.getByRole('menuitem', { name: 'Загрузить план Датаиста' }).click()
   await sw.getByRole('status').filter({ hasText: 'Загружен план Датаиста — с 25 окт' }).waitFor()
@@ -976,8 +977,8 @@ const slot = /^Исследование · Короткое видео, Текс
 {
   const dp = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
   await dp.goto(BASE)
-  await dp.getByRole('heading', { name: 'Главная' }).waitFor()
-  await dp.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Календарь' }).click()
+  await dp.getByRole('heading', { name: 'Лента', exact: true }).waitFor()
+  await dp.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'План' }).click()
   const feed = dp.getByRole('feed', { name: 'Лента по дням' })
   await feed.waitFor()
   const day9 = feed.locator('[data-day="2026-11-16"]')
@@ -1134,6 +1135,67 @@ const slot = /^Исследование · Короткое видео, Текс
     `телефон, лента: кадр ${JSON.stringify(fb)}, справа ${JSON.stringify(rb)}, шапка ${head?.height}, шире ${wide}`,
   )
   await fp.close()
+}
+
+// «Текст» (FR-CP-083): поле ассистента — внизу по центру, как в Neuronium; написали — диалог справа; «Вставить»; инфографика — в песочнице
+{
+  const tx = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  tx.on('pageerror', (e) => fail(`ошибка на странице: ${e.message}`))
+  await tx.addInitScript(() => {
+    try {
+      if (!sessionStorage.getItem('seeded')) {
+        localStorage.setItem('cp:section', JSON.stringify('text'))
+        sessionStorage.setItem('seeded', '1')
+      }
+    } catch {
+      /* песочница инфографики — без хранилища */
+    }
+  })
+  await tx.goto(BASE)
+  await tx.getByRole('heading', { name: 'Текст', exact: true }).waitFor()
+  await tx.getByRole('button', { name: 'Новый текст' }).click()
+  await tx.getByRole('textbox', { name: 'Текст поста' }).fill('Агенты в бухгалтерии: закрываем месяц за день.\n\nМы посчитали: 40 часов экономии в месяц.')
+  const doc = await tx.locator('.cp-ed__doc').boundingBox()
+  const bar = await tx.locator('.cp-ed__float .nr-composer').boundingBox()
+  const centered = doc && bar && Math.abs(bar.x + bar.width / 2 - (doc.x + doc.width / 2)) < 30 && bar.y + bar.height <= doc.y + doc.height + 1
+  const noAside = !(await tx.getByRole('complementary', { name: 'Ассистент' }).count())
+  await tx.getByRole('textbox', { name: 'Ассистенту' }).fill('Черновик по теме')
+  await tx.keyboard.press('Enter')
+  const aside = tx.getByRole('complementary', { name: 'Ассистент' })
+  await aside.waitFor()
+  const ab = await aside.boundingBox()
+  await aside.getByRole('button', { name: 'Вставить' }).last().click()
+  const inserted = (await tx.getByRole('textbox', { name: 'Текст поста' }).inputValue()).includes('# Новый текст')
+  await aside.getByRole('button', { name: 'Сгенерировать' }).click()
+  await tx.getByRole('menuitem', { name: /^Инфографику/ }).click()
+  const frame = tx.getByRole('list', { name: 'Медиа' }).locator('iframe')
+  await frame.waitFor()
+  const sandbox = await frame.getAttribute('sandbox')
+  await tx.waitForTimeout(400)
+  await tx.screenshot({ path: `${SHOTS}/16-text-editor.png` })
+  await tx.getByRole('radio', { name: 'Как выйдет' }).click()
+  const pv = await tx.getByRole('article', { name: 'Как выйдет' }).locator('h2').count()
+  await tx.screenshot({ path: `${SHOTS}/16-text-preview.png` })
+  check(
+    centered && noAside && ab && ab.x > 1000 && inserted && sandbox === '' && pv > 0,
+    '«Текст»: поле ассистента — внизу по центру; написали — диалог справа; «Вставить» — в текст; инфографика — в песочнице без скриптов; «Как выйдет» — с разметкой',
+    `«Текст»: по центру ${centered}, диалога не было ${noAside}, справа ${JSON.stringify(ab)}, вставлено ${inserted}, песочница «${sandbox}», заголовков ${pv}`,
+  )
+  await tx.close()
+}
+// телефон: «Текст» — поле внизу, вбок не едет; «Ещё» — остальные разделы
+{
+  const tp = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  await tp.addInitScript(() => localStorage.setItem('cp:section', JSON.stringify('text')))
+  await tp.goto(BASE)
+  await tp.getByRole('button', { name: 'Новый текст' }).click()
+  await tp.getByRole('textbox', { name: 'Текст поста' }).fill('Агенты в бухгалтерии: закрываем месяц за день.')
+  const wide = await tp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  await tp.screenshot({ path: `${SHOTS}/16-text-phone.png` })
+  await tp.getByRole('navigation', { name: 'Разделы' }).getByRole('button', { name: 'Ещё' }).click()
+  const more = await tp.getByRole('menu', { name: 'Ещё разделы' }).getByRole('menuitem').allTextContents()
+  check(!wide && more.join('|') === 'Картинки|Видео|Озвучка|Автопостинг|Комменты|Аналитика', 'телефон: «Текст» вбок не едет; «Ещё» — Картинки, Видео, Озвучка, Автопостинг, Комменты, Аналитика', `телефон, «Текст»: шире ${wide}, «Ещё» ${more.join(', ')}`)
+  await tp.close()
 }
 
 await browser.close()

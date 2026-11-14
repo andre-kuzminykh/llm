@@ -147,7 +147,7 @@ export function FeedView() {
             <Icon name="filter" size={20} />
             {n > 0 && <span className="cp-top__badge" aria-hidden="true">{n}</span>}
           </button>
-          <h1 className="nr-title">Главная</h1>
+          <h1 className="nr-title">Лента</h1>
         </div>
         <div className="cp-top__right">
           <Switch checked={demo} onChange={setDemo}>

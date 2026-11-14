@@ -38,7 +38,7 @@ export function onSchedule(plan: Plan, rule: Rule, date: ISODate): boolean {
 }
 
 /** Пустой слот: тема ещё не вписана, ни заметки, ни файлов, ни черновика — его можно убрать или переставить. */
-export const emptySlot = (it: Item) => it.title.trim() === PLACEHOLDER && it.status === 'planned' && !it.note && !it.files?.length && !it.images?.length && !it.draft
+export const emptySlot = (it: Item) => it.title.trim() === PLACEHOLDER && it.status === 'planned' && !it.note && !it.files?.length && !it.images?.length && !it.draft && !it.post?.body && !it.post?.media.length
 
 const slotOf = (rule: Rule, date: ISODate): Item => ({
   id: `s-${rule.id}-${date}`,

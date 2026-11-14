@@ -23,7 +23,7 @@ async function open(stored: Plan | null, opts: { demo?: boolean; side?: 'mine' |
   const storage = memoryStorage()
   if (stored) await storage.save(stored)
   render(<App storage={async () => storage} />)
-  await screen.findByRole('heading', { name: 'Главная' })
+  await screen.findByRole('heading', { name: 'Лента' })
 }
 
 describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и смотрю других — по одному материалу, саммери и «Пересоздать» в одном окне', () => {
@@ -39,8 +39,8 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и
     await open(null)
     localStorage.setItem('cp:section', JSON.stringify('home')) // прежняя «Главная» с графиками — теперь лента
     const nav = screen.getByRole('navigation', { name: 'SMM' })
-    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — лента: что выпускаю и что смотрю', 'Календарь контента', 'Аналитика — графики и посты'])
-    expect(within(nav).getByRole('button', { name: 'Главная — лента: что выпускаю и что смотрю' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Лента — что выпускаю и что смотрю', 'Контент-план — календарь', 'Текст — посты и статьи с ассистентом', 'Картинки — фото, инфографика, анимации', 'Видео — студия NR SMM', 'Озвучка (скоро)', 'Автопостинг (скоро)', 'Комменты (скоро)', 'Аналитика — графики, посты, портрет ЦА', 'Настройки'])
+    expect(within(nav).getByRole('button', { name: 'Лента — что выпускаю и что смотрю' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { name: 'Здесь — то, что вы выпускаете' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'В календарь' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('radio', { name: 'Смотрю других' }))

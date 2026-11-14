@@ -73,7 +73,7 @@ describe('T-CP-075 FR-CP-075 план Датаиста — расписание 
     expect([...month.querySelectorAll('.cp-card__cap')].filter((c) => /видео/i.test(c.textContent ?? ''))).toHaveLength(0)
   })
 
-  it('карточка из нескольких форматов: тема, заметка и черновик — один раз на всю карточку; площадки у формата свои; формат убрать и добавить', async () => {
+  it('карточка из нескольких форматов: тема и заметка — один раз на всю карточку; площадки у формата свои; формат убрать и добавить', async () => {
     vi.setSystemTime(new Date('2026-11-16T08:00:00'))
     await open(null)
     await userEvent.click((await screen.findAllByRole('button', { name: research }))[0])
@@ -94,24 +94,20 @@ describe('T-CP-075 FR-CP-075 план Датаиста — расписание 
     await userEvent.click(within(fmts).getByRole('button', { name: 'Убрать из карточки: Страница на сайте' }))
     await userEvent.click(within(form).getByRole('button', { name: 'Добавить формат: Полное видео' }))
     expect(rows()).toEqual(['Короткое видео', 'Текст с картинкой', 'Полное видео — новый'])
-    // черновик — на всю карточку: каркас каждого формата
-    await userEvent.click(within(form).getByRole('button', { name: 'Создать черновик' }))
-    const draft = within(form).getByRole('region', { name: 'Черновик' })
-    expect(draft).toHaveTextContent('Черновик карточки · Исследование: сценарий длинного видео, сценарий короткого видео, пост')
-    expect(draft).toHaveTextContent('Тема: ИИ-агенты в бухгалтерии')
+    // контент карточки — пост (редактор «Текст») и видео (студия NR SMM)
+    expect(within(within(form).getByRole('group', { name: 'Создать контент' })).getAllByRole('button').map((b) => b.querySelector('b')?.textContent)).toEqual(['Пост', 'Видео'])
     await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
     expect(screen.getByText('Сохранено: карточка — 3 формата')).toBeInTheDocument()
     // в календаре — одна карточка с темой
     const card = /^Исследование · Полное видео, Короткое видео, Текст с картинкой: ИИ-агенты в бухгалтерии, 10:00/
     expect(screen.getAllByRole('button', { name: card })).toHaveLength(1)
-    // открыли снова — три формата, у поста — без X, заметка и черновик — на месте
+    // открыли снова — три формата, у поста — без X, заметка — на месте
     await userEvent.click(screen.getByRole('button', { name: card }))
     const again = screen.getByRole('complementary', { name: 'Материал' })
     const fmts2 = within(again).getByRole('group', { name: 'Форматы карточки' })
     expect(within(fmts2).getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Полное видео', 'Короткое видео', 'Текст с картинкой'])
     expect(within(within(fmts2).getByRole('group', { name: 'Текст с картинкой' })).queryAllByRole('button', { pressed: true }).map((b) => b.getAttribute('aria-label'))).toEqual(['Текст с картинкой: Telegram', 'Текст с картинкой: LinkedIn'])
     expect(within(again).getByRole('textbox', { name: 'Заметка' })).toHaveValue('Кейс: закрытие месяца за день')
-    expect(within(again).getByRole('region', { name: 'Черновик' })).toHaveTextContent('Версия 1 · заглушка')
     // удалить — вся карточка
     await userEvent.click(within(again).getByRole('button', { name: 'Удалить' }))
     expect(screen.getByText('Удалено: карточка целиком (3)')).toBeInTheDocument()
@@ -168,27 +164,23 @@ describe('T-CP-075 FR-CP-075 план Датаиста — расписание 
     await waitFor(() => expect(screen.queryAllByRole('button', { name: podcast })).toHaveLength(0))
   })
 
-  it('одиночный слот → тема, заметка → «Создать черновик» (заглушка) → «Перегенерировать» — версия 2; черновик сохраняется с материалом', async () => {
+  it('одиночный слот → тема → «Пост»: открывается «Текст» с этой карточкой; написанное — у карточки, «Пост» в ней показывает сколько знаков', async () => {
     vi.setSystemTime(new Date('2026-11-16T08:00:00'))
     await open(null)
     await userEvent.click((await screen.findAllByRole('button', { name: lesson }))[0])
     let form = screen.getByRole('complementary', { name: 'Материал' })
-    await userEvent.click(within(form).getByRole('button', { name: 'Создать черновик' }))
-    expect(within(form).getByRole('alert')).toHaveTextContent('Сначала впишите тему')
     await userEvent.type(within(form).getByRole('textbox', { name: 'Тема' }), 'ИИ-агенты в бухгалтерии')
-    await userEvent.type(within(form).getByRole('textbox', { name: 'Заметка' }), 'Кейс: закрытие месяца за день')
-    await userEvent.click(within(form).getByRole('button', { name: 'Создать черновик' }))
-    const draft = within(form).getByRole('region', { name: 'Черновик' })
-    expect(draft).toHaveTextContent('Сценарий короткого видео · Микроурок')
-    expect(draft).toHaveTextContent('Тема: ИИ-агенты в бухгалтерии')
-    expect(draft).toHaveTextContent('Опора из заметки: Кейс: закрытие месяца за день')
-    expect(draft).toHaveTextContent('Версия 1 · заглушка')
-    await userEvent.click(within(draft).getByRole('button', { name: 'Перегенерировать' }))
-    expect(within(form).getByRole('region', { name: 'Черновик' })).toHaveTextContent('Версия 2 · заглушка')
     await userEvent.click(within(form).getByRole('button', { name: 'Сохранить' }))
     await userEvent.click(screen.getAllByRole('button', { name: /^Микроурок · Короткое видео: ИИ-агенты в бухгалтерии/ })[0])
     form = screen.getByRole('complementary', { name: 'Материал' })
-    expect(within(form).getByRole('region', { name: 'Черновик' })).toHaveTextContent('Версия 2 · заглушка')
+    await userEvent.click(within(within(form).getByRole('group', { name: 'Создать контент' })).getByRole('button', { name: /^Пост/ }))
+    expect(screen.getByRole('heading', { name: 'ИИ-агенты в бухгалтерии' })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'SMM' })).getByRole('button', { name: 'Текст — посты и статьи с ассистентом' })).toHaveAttribute('aria-current', 'page')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Текст поста' }), 'Закрываем месяц за день.')
+    await waitFor(() => expect(screen.getByText('Сохранено', { selector: '.cp-ed__saved' })).toBeInTheDocument(), { timeout: 2000 })
+    await userEvent.click(screen.getByRole('button', { name: 'Карточка: тема, заметка, форматы, время →' }))
+    form = screen.getByRole('complementary', { name: 'Материал' })
+    expect(within(form).getByRole('group', { name: 'Создать контент' })).toHaveTextContent('24 знака — открыть')
   })
 
   it('«Очистить всё» — пусто и после перезагрузки; план Датаиста — снова из профиля, «К началу плана» — к первой неделе', async () => {

@@ -21,7 +21,7 @@ export interface ToastAction {
   label: string
   run: () => void
 }
-export type Section = 'feed' | 'calendar' | 'analytics'
+export type Section = 'feed' | 'calendar' | 'text' | 'images' | 'video' | 'voice' | 'autopost' | 'comments' | 'analytics'
 
 /** Главная: чья лента (моя или конкурентов — «Поиск»), период графиков и фильтры — общие для графиков, таблицы и ленты. */
 export interface HomeState {
@@ -83,6 +83,10 @@ export interface Ctx {
   /** Раздел СММ: главная (графики и лента), календарь. */
   section: Section
   setSection: (s: Section) => void
+  /** «Текст»: открытый пост (карточка) — редактор; null — список. */
+  textId: string | null
+  openPost: (id: string) => void
+  closePost: () => void
   /** Планирование недели: уточнить темы пустых слотов. */
   /** Наверстать просроченное, не двигая остальной план. */
   /** Перенести период (отпуск): на следующие слоты или в свободные места. */

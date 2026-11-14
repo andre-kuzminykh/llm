@@ -6,10 +6,10 @@ import { onSchedule } from '../model/schedule'
 import { matesOf, newId, type Action } from '../model/store'
 import {
   FORMAT_HOME, FORMAT_ICON, FORMAT_SHORT, FORMATS, FULL_VIDEO, filesOf, isHome, isImage, isSlot, MAX_FILE_MB, MAX_FILES, MAX_VIDEO_MB, PLACEHOLDER, platformsFor, presetPlatforms, rubricName, SHORT_VIDEO, shownTitle,
-  statusOf, TEXT_IMAGE, timeOf, type Attachment, type Draft, type Item, type Rule, type SourceRef, type Status,
+  statusOf, TEXT_IMAGE, timeOf, type Attachment, type Item, type Rule, type SourceRef, type Status,
 } from '../model/types'
 import { unitsOf } from '../model/units'
-import { stubDraft } from '../model/draft'
+import { charCount, signs } from '../model/post'
 import { IconButton, PickText, PlatformIcon, PlayPause } from '../ui/bits'
 import { usePlan } from '../ui/ctx'
 import { Icon } from '../ui/Icon'
@@ -39,7 +39,7 @@ interface Props {
  *  дальше: канал, рубрика (обе можно не ставить — главное название), заметка с картинками, формат, площадки, языки.
  *  Площадки, выбранные руками, канал запоминает для формата. Внизу — «Готово». Сохранение — один шаг истории. */
 export function ItemEditor({ id, draft, source, preset: startPreset, onClose, onBack }: Props) {
-  const { plan, byDate, dispatch, rubrics, rules, channels, toast, openRecreate, setSection, show, openDrafts } = usePlan()
+  const { plan, byDate, dispatch, rubrics, rules, channels, toast, openRecreate, setSection, show, openDrafts, openPost } = usePlan()
   const existing = id ? plan.items.find((x) => x.id === id) : undefined
   const preset = source ? startPreset ?? presetOfSource(source) : undefined
   const srcItem = source?.itemId ? plan.items.find((x) => x.id === source.itemId) : undefined
@@ -86,7 +86,6 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
   const [status, setStatus] = useState<Status>(base.status ?? 'planned')
   const [note, setNote] = useState(base.note ?? '')
   // черновик по теме, заметке и фото — пока заглушка: черновики будут выдавать другие приложения
-  const [copy, setCopy] = useState<Draft | undefined>(base.draft)
   const [files, setFiles] = useState<Attachment[]>(() => filesOf(base))
   const [time, setTime] = useState(base.time ?? '')
   // ситуативно — без часа, сверху дня (как «весь день» в Google Календаре); у нового — как у формата рубрики
@@ -266,13 +265,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
     setError(big.length ? `Файл больше ${MAX_FILE_MB} МБ (видео — ${MAX_VIDEO_MB} МБ) не добавлен: ${big.map((f) => f.name).join(', ')}` : ok.length > room ? `Не больше ${MAX_FILES} файлов — лишние не добавлены` : '')
   }
 
-  const makeDraft = (version: number) => {
-    if (!title.trim()) return setError('Сначала впишите тему — черновик собирается из неё, заметки и фото')
-    const rubricText = newTag || plan.rubrics.find((r) => r.id === rubricId)?.name
-    const formats = cardMode ? [...cardFormats].sort((a, b) => formatOrder.indexOf(a) - formatOrder.indexOf(b)) : undefined
-    setCopy(stubDraft({ title: title.trim(), note, format, formats, files: files.length, rubric: rubricText }, version))
-    setError('')
-  }
+
 
   /** Карточка из нескольких форматов: площадки форматов, убранные и добавленные форматы — тем же шагом истории. */
   const cardActions = (c: { date: string; channelId: string; rubricId: string | null; title: string; at?: string; patch: Partial<Item> }): Action[] => {
@@ -360,7 +353,7 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
       platforms: shownPlatforms,
       status,
       note: note || undefined,
-      draft: copy,
+      draft: base.draft,
       files: files.length ? files : undefined,
       images: undefined,
       format,
@@ -617,26 +610,28 @@ export function ItemEditor({ id, draft, source, preset: startPreset, onClose, on
           />
         </div>
 
-        {/* черновик — из темы, заметки и фото; пока заглушка, «Перегенерировать» — следующая версия */}
+        {/* контент карточки: пост — в редакторе «Текст» (с ассистентом), видео — в студии NR SMM (подключим) */}
         <div className="cp-field">
-          <span className="nr-label">Черновик</span>
-          {copy ? (
-            <div className="cp-draft" role="region" aria-label="Черновик">
-              <div className="cp-draft__head">
-                <span className="cp-muted">Версия {copy.version}{copy.stub ? ' · заглушка' : ''}</span>
-                <button type="button" className="nr-btn nr-btn--ghost nr-btn--sm" onClick={() => makeDraft(copy.version + 1)}>
-                  <Icon name="reset" size={14} /> Перегенерировать
-                </button>
-              </div>
-              <pre className="cp-draft__text">{copy.text}</pre>
+          <span className="nr-label">Контент</span>
+          {existing ? (
+            <div className="cp-make" role="group" aria-label="Создать контент">
+              <button type="button" className="cp-make__btn" onClick={() => openPost(existing.id)}>
+                <Icon name="f-post" size={20} />
+                <span className="cp-make__txt">
+                  <b>Пост</b>
+                  <small>{existing.post ? `${signs(charCount(existing.post.body))}${existing.post.media.length ? ` · медиа ${existing.post.media.length}` : ''} — открыть` : 'текст, картинки, инфографика — с ассистентом'}</small>
+                </span>
+              </button>
+              <button type="button" className="cp-make__btn" onClick={() => setSection('video')}>
+                <Icon name="f-vertical" size={20} />
+                <span className="cp-make__txt">
+                  <b>Видео</b>
+                  <small>студия NR SMM — скоро</small>
+                </span>
+              </button>
             </div>
           ) : (
-            <div className="cp-draft__empty">
-              <button type="button" className="nr-btn nr-btn--sm" onClick={() => makeDraft(1)}>
-                <Icon name="spark" size={14} /> Создать черновик
-              </button>
-              <span className="cp-hint">Из темы, заметки и фото. Пока заглушка — черновики будут собирать приложения.</span>
-            </div>
+            <span className="cp-hint">Сохраните карточку — и создайте пост или видео.</span>
           )}
         </div>
 

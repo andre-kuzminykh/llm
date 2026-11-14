@@ -17,6 +17,13 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         <IconButton icon="close" label="Закрыть" onClick={onClose} />
       </div>
       <div className="cp-sheet__body nr-scroll">
+        {/* мой аватар: портрет, голос и тон — для озвучки и обложек; подключим с разделом «Озвучка» */}
+        <section className="cp-set" aria-labelledby="set-avatar">
+          <h3 id="set-avatar" className="cp-set__h">
+            Мой аватар <span className="cp-soon">скоро</span>
+          </h3>
+          <p className="cp-hint">Ваш портрет, голос и тон оф войс — для озвучки роликов и постов, обложек и ответов в комментах.</p>
+        </section>
         <section className="cp-set" aria-labelledby="set-mine">
           <h3 id="set-mine" className="cp-set__h">Мои соцсети</h3>
           <p className="cp-hint">Из них собираются графики и моя лента на главной: посты, теги (топики) и цифры. Контент всегда на двух языках: русская версия уходит в аккаунты RU, английская — в аккаунты EN.</p>

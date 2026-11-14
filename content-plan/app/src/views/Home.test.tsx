@@ -23,10 +23,10 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
     // чистый лист — как после «Очистить всё» (без сохранённого плана программа открывает план Датаиста, FR-CP-071)
     render(<App storage={async () => memoryStorage()} initialPlan={emptyPlan('2026-11-03')} />)
     await screen.findByRole('navigation', { name: 'SMM' })
-    expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Аналитика'])
-    expect(within(smm()).getByRole('button', { name: /^Главная/ })).toHaveAttribute('aria-current', 'page')
+    expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Лента', 'Контент-план', 'Текст', 'Картинки', 'Видео', 'Озвучка', 'Автопостинг', 'Комменты', 'Аналитика', 'Настройки'])
+    expect(within(smm()).getByRole('button', { name: /^Лента/ })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { name: 'Здесь — то, что вы выпускаете' })).toBeInTheDocument()
-    await userEvent.click(within(smm()).getByRole('button', { name: 'Аналитика — графики и посты' }))
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Аналитика — графики, посты, портрет ЦА' }))
     // без соцсетей и демо — графиков нет, уведомление «подключите»
     expect(screen.queryByRole('region', { name: 'Аналитика' })).toBeNull()
     const note = screen.getByRole('note')
@@ -44,7 +44,7 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
     // аккаунт — в фильтрах слева
     expect(within(screen.getByRole('complementary', { name: 'Фильтры' })).getByRole('button', { name: 'Мой блог' })).toHaveAttribute('aria-pressed', 'true')
 
-    await userEvent.click(within(smm()).getByRole('button', { name: 'Календарь контента' }))
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Контент-план — календарь' }))
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     expect(document.querySelectorAll('.cp-tg__col .cp-card')).toHaveLength(0)
     await userEvent.click(screen.getByRole('button', { name: 'Новый контент' }))
@@ -58,7 +58,7 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
 
     // на главной — в ленте, как выйдет
-    await userEvent.click(within(smm()).getByRole('button', { name: /^Главная/ }))
+    await userEvent.click(within(smm()).getByRole('button', { name: /^Лента/ }))
     expect(within(screen.getByRole('feed', { name: 'Лента: я выпускаю' })).getByRole('article', { name: 'Первый разбор' })).toBeInTheDocument()
     await userEvent.click(within(smm()).getByRole('button', { name: /^Аналитика/ }))
     const soon = screen.getByRole('region', { name: 'Ожидается' })
@@ -216,7 +216,7 @@ describe('T-CP-062 FR-CP-062 «Пересоздать» — та же форма
     await userEvent.click(within(sheet).getByRole('option', { name: 'Тезисы' }))
     await userEvent.click(within(sheet).getByRole('button', { name: 'Создать' }))
     expect(screen.getByText(/Создано: 3 коротких — все на 26 окт/)).toBeInTheDocument()
-    await userEvent.click(within(smm()).getByRole('button', { name: 'Календарь контента' }))
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Контент-план — календарь' }))
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     const day = document.querySelector('.cp-tg__col[data-date="2026-10-26"]') as HTMLElement
     for (const i of [1, 2, 3]) expect(within(day).getByRole('button', { name: new RegExp(`^Тезисы.*часть ${i} из 3`) })).toBeInTheDocument()
@@ -237,7 +237,7 @@ describe('T-CP-062 FR-CP-062 «Пересоздать» — та же форма
     await userEvent.click(within(s2).getByRole('radio', { name: 'По расписанию' }))
     expect(within(s2).getByText(/Друг за другом в ближайшие дни расписания: 27 окт \(пустое место\), 28 окт/)).toBeInTheDocument()
     await userEvent.click(within(s2).getByRole('button', { name: 'Создать' }))
-    await userEvent.click(within(smm()).getByRole('button', { name: 'Календарь контента' }))
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Контент-план — календарь' }))
     await screen.findByRole('grid', { name: 'Неделя по времени' })
     const tue = document.querySelector('.cp-tg__col[data-date="2026-10-27"]') as HTMLElement
     expect(within(tue).getByRole('button', { name: /^Тезисы.*часть 1 из 2/ })).toBeInTheDocument()

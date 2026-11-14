@@ -95,6 +95,9 @@ export function HomeView() {
         <div className="cp-body nr-scroll" ref={body} onScroll={onScroll}>
           <div className="cp-home">
             <Notice />
+            <p className="cp-soonline">
+              <b>Портрет ЦА</b> <span className="cp-soon">скоро</span> — кто вас читает и смотрит: возраст, интересы, когда онлайн, что заходит.
+            </p>
             {chips.length > 0 && (
               <div className="cp-chips cp-home__chips" role="group" aria-label="Включённые фильтры">
                 {chips.map((c) => (

@@ -22,7 +22,7 @@ export function matesOf(plan: Plan, it: Item): Item[] {
   return plan.items.filter((x) => x.id !== it.id && x.date === it.date && mateKey(x, ruleOf(plan, x.ruleId)) === key)
 }
 /** Что у карточки общее: тема, заметка, файлы, черновик и статус — правят один раз для всех её форматов. */
-const SHARED = ['title', 'note', 'files', 'images', 'draft', 'status'] as const
+const SHARED = ['title', 'note', 'files', 'images', 'draft', 'post', 'status'] as const
 
 /** Производные члены группы берут у главного заголовок (по шаблону) и рубрику. */
 const rederive = (items: Item[], head: Item) =>

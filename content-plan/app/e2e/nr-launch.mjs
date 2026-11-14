@@ -209,11 +209,11 @@ try {
       ...(await frame.evaluate(stripGeometry)),
     }
     // раздел переключается из шапки: календарь и обратно на главную
-    await tabs.getByRole('button', { name: 'Календарь' }).click()
+    await tabs.getByRole('button', { name: 'План' }).click()
     // на телефоне календарь открывается лентой по дням (FR-CP-072), неделя по шкале — если её выбрали
     out.calendar = await inside.locator('[aria-label="Лента по дням"], [aria-label="Неделя по времени"]').first().waitFor({ timeout: 4000 }).then(() => true, () => false)
-    await tabs.getByRole('button', { name: 'Главная' }).click()
-    out.home = await inside.getByRole('heading', { name: 'Главная' }).waitFor({ timeout: 4000 }).then(() => true, () => false)
+    await tabs.getByRole('button', { name: 'Лента', exact: true }).click()
+    out.home = await inside.getByRole('heading', { name: 'Лента', exact: true }).waitFor({ timeout: 4000 }).then(() => true, () => false)
     if (await button.count()) {
       Object.assign(out, await settingsMenu(inside, button))
       const bar = await frame.evaluate(() => document.querySelector('nav[aria-label="Разделы"]').getBoundingClientRect().bottom)
@@ -238,7 +238,7 @@ try {
     await page.goto(`http://localhost:${hostPort}/?app=${appPort}`)
     const inside = page.frameLocator('#f')
     const shown = await inside
-      .getByRole('heading', { name: 'Главная' })
+      .getByRole('heading', { name: 'Лента', exact: true })
       .waitFor({ timeout: 8000 })
       .then(() => true)
       .catch(() => false)
@@ -251,27 +251,27 @@ try {
 
   // T-CP-068: «Neuronium» из списка — SMM открыт в его окне и работает как есть (входа нет)
   const yes = await host(nr.port, appOn.port, 'nr-launch-frame.png')
-  check(yes.shown && yes.framed && !yes.errors.length, 'Neuronium из списка: SMM во фрейме — «Главная» на месте, ошибок нет', `во фрейме: ${JSON.stringify(yes)}`)
+  check(yes.shown && yes.framed && !yes.errors.length, 'Neuronium из списка: SMM во фрейме — «Лента» на месте, ошибок нет', `во фрейме: ${JSON.stringify(yes)}`)
   // T-CP-069: меню отделов одно — у Neuronium; своей панели, знака Nr и «— скоро» у SMM во фрейме нет
   const left = yes.left ?? {}
   check(
-    left.rail === 0 && left.brand === 0 && left.soon === 0 && left.items?.slice(0, 3).join('|') === 'Главная — лента: что выпускаю и что смотрю|Календарь контента|Аналитика — графики и посты',
+    left.rail === 0 && left.brand === 0 && left.soon === 0 && left.items?.slice(0, 3).join('|') === 'Лента — что выпускаю и что смотрю|Контент-план — календарь|Текст — посты и статьи с ассистентом',
     'во фрейме своей панели отделов у SMM нет: ни Nr, ни отделов; «Главная» и «Календарь» на месте',
     `слева во фрейме: ${JSON.stringify(left)}`,
   )
   // T-CP-070: меню профиля — «Настройки» шестерёнкой внизу колонки разделов, меню — справа от неё, без «Скоро: …»;
   // значка-человечка у SMM во фрейме нет ни в колонке, ни в меню — кружок аккаунта только у Neuronium
   check(
-    left.items?.at(-1) === 'Настройки' && left.gear && left.people === 0 && left.peopleOpen === 0 && left.foot >= 0 && left.foot <= 24 && left.beside >= 0 && left.beside <= 16 && left.note === 0 && left.settings === 1,
-    '«Настройки» шестерёнкой — внизу колонки разделов, меню — справа от неё (настройки на месте, «Скоро» нет); человечка во фрейме нет',
+    left.items?.at(-1) === 'Настройки' && left.items?.at(-2)?.startsWith('Аналитика') && left.gear && left.people === 0 && left.peopleOpen === 0 && left.beside >= 0 && left.beside <= 16 && left.note === 0 && left.settings === 1,
+    '«Настройки» шестерёнкой — сразу после «Аналитики» в колонке разделов, меню — справа от неё (настройки на месте, «Скоро» нет); человечка во фрейме нет',
     `настройки во фрейме: ${JSON.stringify(left)}`,
   )
-  // T-CP-070, телефон: внизу у SMM панели нет (она одна, у Neuronium); «Главная, Календарь, Аналитика, Настройки» — вверху, в шапке:
+  // T-CP-070, телефон: внизу у SMM панели нет (она одна, у Neuronium); «Лента, План, Текст, Ещё, Настройки» — вверху, в шапке:
   // шестерёнкой, человечка и кружка нет, меню то же и раскрывается под строкой
   const small = await phone(nr.port, appOn.port, 'nr-launch-frame-phone.png')
   check(
-    small.tabs === 'Главная|Календарь|Аналитика|Настройки' && small.gear && small.people === 0 && small.avatar === 0 && small.peopleOpen === 0 && small.note === 0 && small.settings === 1 && small.menuUnder,
-    'телефон во фрейме: «Главная, Календарь, Аналитика, Настройки» — вверху, в шапке; шестерёнкой, человечка нет, меню то же и под строкой',
+    small.tabs === 'Лента|План|Текст|Ещё|Настройки' && small.gear && small.people === 0 && small.avatar === 0 && small.peopleOpen === 0 && small.note === 0 && small.settings === 1 && small.menuUnder,
+    'телефон во фрейме: «Лента, План, Текст, Ещё, Настройки» — вверху, в шапке; шестерёнкой, человечка нет, меню то же и под строкой',
     `телефон во фрейме: ${JSON.stringify(small)}`,
   )
   check(
@@ -287,7 +287,7 @@ try {
   )
   const night = await phone(nr.port, appOn.port, 'nr-launch-frame-phone-dark.png', 'dark')
   check(
-    night.tabs === 'Главная|Календарь|Аналитика|Настройки' && night.dark && night.smallest >= 44 && !night.crossing && !night.clipped && !night.outside && !night.wide && night.contrast >= 4.5 && night.bottomBar === 0 && night.below === 0 && night.menuUnder,
+    night.tabs === 'Лента|План|Текст|Ещё|Настройки' && night.dark && night.smallest >= 44 && !night.crossing && !night.clipped && !night.outside && !night.wide && night.contrast >= 4.5 && night.bottomBar === 0 && night.below === 0 && night.menuUnder,
     `телефон во фрейме, тёмная тема: то же — кнопки от 44 px, без наложений, внизу ничего, контраст ${night.contrast}`,
     `телефон во фрейме, тёмная тема: ${JSON.stringify(night)}`,
   )
