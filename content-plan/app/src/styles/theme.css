@@ -843,6 +843,9 @@ input:focus-visible + .cp-check-row__box { outline: 2px solid var(--nr-focus); o
     min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--nr-text-3); cursor: pointer;
     font: var(--nr-fw-medium) var(--nr-fs-base)/1 var(--nr-font); white-space: nowrap; }
   .cp-topnav__tab { gap: 6px; padding: 0 10px; }
+  /* три раздела и шестерёнка — в одну строку и на узком окне: подписи без значков */
+  .cp-topnav__tab .nr-icon { display: none; }
+  .cp-topnav__tab { padding: 0 9px; }
   .cp-topnav__tab[aria-current='page'] { color: var(--nr-accent-text); }
   .cp-topnav__tab[aria-current='page']::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px;
     border-radius: 2px; background: var(--nr-accent); }

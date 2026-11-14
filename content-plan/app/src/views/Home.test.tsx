@@ -19,12 +19,14 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
     vi.useRealTimers()
   })
 
-  it('два пункта меню; «Подключите соцсети» ведёт в настройки; в календаре «+» сразу форма — новый канал прямо в ней', async () => {
+  it('три пункта меню, главная — лента; в «Аналитике» «Подключите соцсети» ведёт в настройки; в календаре «+» сразу форма — новый канал прямо в ней', async () => {
     // чистый лист — как после «Очистить всё» (без сохранённого плана программа открывает план Датаиста, FR-CP-071)
     render(<App storage={async () => memoryStorage()} initialPlan={emptyPlan('2026-11-03')} />)
     await screen.findByRole('navigation', { name: 'SMM' })
-    expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Лента'])
+    expect(within(smm()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Аналитика'])
     expect(within(smm()).getByRole('button', { name: /^Главная/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: 'Здесь — то, что вы выпускаете' })).toBeInTheDocument()
+    await userEvent.click(within(smm()).getByRole('button', { name: 'Аналитика — графики и посты' }))
     // без соцсетей и демо — графиков нет, уведомление «подключите»
     expect(screen.queryByRole('region', { name: 'Аналитика' })).toBeNull()
     const note = screen.getByRole('note')
@@ -55,7 +57,10 @@ describe('T-CP-060 FR-CP-060 с чистого листа: главная про
     await userEvent.click(within(form).getByRole('option', { name: 'Новая рубрика «Обзоры»' }))
     await userEvent.click(within(form).getByRole('button', { name: 'Создать' }))
 
+    // на главной — в ленте, как выйдет
     await userEvent.click(within(smm()).getByRole('button', { name: /^Главная/ }))
+    expect(within(screen.getByRole('feed', { name: 'Лента: я выпускаю' })).getByRole('article', { name: 'Первый разбор' })).toBeInTheDocument()
+    await userEvent.click(within(smm()).getByRole('button', { name: /^Аналитика/ }))
     const soon = screen.getByRole('region', { name: 'Ожидается' })
     expect(within(soon).getByRole('article', { name: 'Первый разбор' })).toHaveTextContent(/Мой блог.*Ожидается.*из календаря/)
     // рубрика — без решётки
@@ -74,8 +79,8 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
   })
 
   it('демо: плитки метрик, график, разрезы; щелчок по строке — провалиться (фильтр на графики и ленту); топики без «#»', async () => {
-    renderApp(undefined, { 'cp:section': '"home"' })
-    await screen.findByRole('heading', { name: 'Главная' })
+    renderApp(undefined, { 'cp:section': '"analytics"' })
+    await screen.findByRole('heading', { name: 'Аналитика' })
     // впереди у плана — только пустые слоты «Нужна тема» (2 и 9 ноября): это не материалы, в ленте их нет (FR-CP-075)
     expect(screen.queryByRole('region', { name: 'Ожидается' })).toBeNull()
     await userEvent.click(screen.getByRole('switch', { name: 'Демо' }))
@@ -139,9 +144,9 @@ describe('T-CP-061 FR-CP-061 главная: аналитика как в Search
   })
 
   it('поиск: лента конкурентов, кто впереди — разрез «Аккаунты», сортировка, поиск; конкуренты — в настройках', async () => {
-    renderApp(undefined, { 'cp:section': '"home"', 'cp:demo': 'true' })
-    await screen.findByRole('heading', { name: 'Главная' })
-    await userEvent.click(screen.getByRole('radio', { name: /Поиск/ }))
+    renderApp(undefined, { 'cp:section': '"analytics"', 'cp:demo': 'true' })
+    await screen.findByRole('heading', { name: 'Аналитика' })
+    await userEvent.click(screen.getByRole('radio', { name: /Конкуренты/ }))
     const ov = screen.getByRole('region', { name: 'Аналитика' })
     await userEvent.click(within(ov).getByRole('button', { name: /Подробнее/ }))
     // кто впереди: разрез по аккаунтам — четыре демо-конкурента
@@ -186,9 +191,9 @@ describe('T-CP-062 FR-CP-062 «Пересоздать» — та же форма
   })
 
   it('из видео конкурента — 3 коротких в один день; по расписанию — в ближайшие места рубрики, пустой слот занимается', async () => {
-    renderApp(undefined, { 'cp:section': '"home"', 'cp:demo': 'true' })
-    await screen.findByRole('heading', { name: 'Главная' })
-    await userEvent.click(screen.getByRole('radio', { name: /Поиск/ }))
+    renderApp(undefined, { 'cp:section': '"analytics"', 'cp:demo': 'true' })
+    await screen.findByRole('heading', { name: 'Аналитика' })
+    await userEvent.click(screen.getByRole('radio', { name: /Конкуренты/ }))
     const video = within(screen.getByRole('list', { name: 'Посты конкурентов' }))
       .getAllByRole('article')
       .find((a) => a.querySelector('.cp-post__media--video'))!
@@ -217,8 +222,8 @@ describe('T-CP-062 FR-CP-062 «Пересоздать» — та же форма
     for (const i of [1, 2, 3]) expect(within(day).getByRole('button', { name: new RegExp(`^Тезисы.*часть ${i} из 3`) })).toBeInTheDocument()
 
     // по расписанию: у Тезисов в Dataist короткие выходят по будням — первым занимается пустой слот 27 окт
-    await userEvent.click(within(smm()).getByRole('button', { name: /^Главная/ }))
-    await userEvent.click(screen.getByRole('radio', { name: /Поиск/ }))
+    await userEvent.click(within(smm()).getByRole('button', { name: /^Аналитика/ }))
+    await userEvent.click(screen.getByRole('radio', { name: /Конкуренты/ }))
     const again = within(screen.getByRole('list', { name: 'Посты конкурентов' }))
       .getAllByRole('article')
       .find((a) => a.querySelector('.cp-post__media--video'))!

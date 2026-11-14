@@ -1,6 +1,6 @@
-// Главная — первый экран СММ. Сверху — аналитика как в Google Search Console (период, плитки метрик, график, таблица по
-// разрезам с провалом), ниже — лента идей: «Моя лента» (что вышло и что ожидается — мои посты и материалы календаря) или
-// «Поиск» (лента конкурентов: поиск, сортировка). Листаешь — графики сворачиваются в строку сверху, справа внизу —
+// Аналитика — третья вкладка СММ (главная — лента как в TikTok, FeedView). Сверху — как в Google Search Console (период,
+// плитки метрик, график, таблица по разрезам с провалом), ниже — посты: «Мои» (что вышло и что ожидается — мои посты и
+// материалы календаря) или «Конкуренты» (поиск, сортировка, кто впереди). Листаешь — графики сворачиваются в строку сверху, справа внизу —
 // «Вернуться». Фильтры — панелью слева, как в календаре; аккаунты задаются в настройках. У каждого поста — короткое
 // саммери в подсвеченном окошке и «Пересоздать» — та же форма, что и новый контент, с постом как контекстом.
 // Посты и цифры придут из API соцсетей, когда подключим сервер; пока — «Демо» с выдуманными данными (помечены).
@@ -75,18 +75,18 @@ export function HomeView() {
             <Icon name="filter" size={20} />
             {n > 0 && <span className="cp-top__badge" aria-hidden="true">{n}</span>}
           </button>
-          <h1 className="nr-title">Главная</h1>
+          <h1 className="nr-title">Аналитика</h1>
         </div>
         <div className="cp-top__right">
           <Switch checked={demo} onChange={setDemo}>Демо</Switch>
-          <div className="nr-seg cp-home__tabs" role="radiogroup" aria-label="Лента">
+          <div className="nr-seg cp-home__tabs" role="radiogroup" aria-label="Чья аналитика">
             <button type="button" role="radio" aria-checked={mine} className="nr-seg__item" onClick={() => setHome({ tab: 'mine' })}>
-              <Icon name="home" size={16} />
-              Моя лента
+              <Icon name="user" size={16} />
+              Мои
             </button>
             <button type="button" role="radio" aria-checked={!mine} className="nr-seg__item" onClick={() => setHome({ tab: 'discover' })}>
-              <Icon name="search" size={16} />
-              Поиск
+              <Icon name="people" size={16} />
+              Конкуренты
             </button>
           </div>
         </div>

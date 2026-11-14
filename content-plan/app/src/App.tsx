@@ -88,18 +88,19 @@ const DEPARTMENTS: { id: string; label: string; icon: string }[] = [
 ]
 const SOON = DEPARTMENTS.filter((d) => d.id !== 'smm').map((d) => d.label)
 
-/** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная первой (графики и лента — моя и
- *  конкурентов), календарь контента второй; остальные появятся позже. В окне Neuronium отделы — у него, а меню
+/** Разделы СММ — колонкой справа от отделов (на телефоне — вкладками внизу): главная первой — лента как в TikTok (что
+ *  выпускаю и что смотрю, сторис подписок сверху), календарь контента второй, аналитика (графики и посты) третьей. В окне Neuronium отделы — у него, а меню
  *  профиля — «Настройками» внизу этой колонки; на телефоне в окне внизу у SMM панели нет (она у Neuronium), разделы и
  *  «Настройки» — вверху, в шапке (FR-CP-069, FR-CP-070). */
 const SECTIONS: { id: Section; label: string; full: string; icon: string }[] = [
-  { id: 'home', label: 'Главная', full: 'Главная — аналитика и лента', icon: 'home' },
+  { id: 'feed', label: 'Главная', full: 'Главная — лента: что выпускаю и что смотрю', icon: 'home' },
   { id: 'calendar', label: 'Календарь', full: 'Календарь контента', icon: 'calendar' },
-  { id: 'feed', label: 'Лента', full: 'Лента — что выпускаю и что смотрю', icon: 'play' },
+  { id: 'analytics', label: 'Аналитика', full: 'Аналитика — графики и посты', icon: 'chart' },
 ]
+/** Открытый раздел помнится; прежняя «Главная» (графики) — теперь лента, графики — в «Аналитике». */
 const readSection = (): Section => {
-  const s = readLS<string>('cp:section', 'home')
-  return s === 'calendar' || s === 'feed' ? s : 'home'
+  const s = readLS<string>('cp:section', 'feed')
+  return s === 'calendar' || s === 'analytics' ? s : 'feed'
 }
 
 function readLS<T>(key: string, fallback: T): T {
@@ -558,7 +559,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
       <div className={`nr-app${selected.size ? ' cp-has-sel' : ''}${framed ? ' cp-framed' : ''}`}>
         {phone && framed ? (
           /* телефон в окне Neuronium: внизу панель одна — у Neuronium (Files · Chats · Agents), у SMM внизу ничего нет;
-             «Главная», «Календарь» и «Настройки» — вверху, в шапке, строкой над датой и фильтрами. «Настройки»
+             «Главная», «Календарь», «Аналитика» и «Настройки» — вверху, в шапке, строкой над датой и фильтрами. «Настройки»
              шестерёнкой: кружок-человечек — аккаунт Neuronium, входа у SMM нет (FR-CP-070, NFR-CP-009) */
           <nav className="cp-topnav" aria-label="Разделы">
             {SECTIONS.map((s) => (
@@ -632,7 +633,7 @@ function Workspace({ plan, dispatch, canUndo, canRedo, saved, seedUrl, notice }:
         {narrow && sideOpen && <div className="cp-scrim" onClick={() => setSideOpen(false)} aria-hidden="true" />}
         {sideOpen && section !== 'feed' && (section === 'calendar' ? <Sidebar onClose={() => setSideOpen(false)} /> : <HomeSide onClose={() => setSideOpen(false)} />)}
         <main className="nr-main">
-          {section === 'home' ? <HomeView /> : section === 'feed' ? <FeedView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
+          {section === 'analytics' ? <HomeView /> : section === 'feed' ? <FeedView /> : ctx.span === 'month' ? <MonthView /> : ctx.mode === 'feed' ? <AgendaView /> : <WeekView />}
           {sheet?.kind === 'day' && <DayPanel date={sheet.date} onClose={closeSheet} />}
           {sheet?.kind === 'drafts' && <DraftsSheet onClose={closeSheet} />}
           {sheet?.kind === 'period' && <PeriodSheet onClose={closeSheet} />}

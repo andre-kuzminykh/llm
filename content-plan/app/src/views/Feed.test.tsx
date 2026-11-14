@@ -23,7 +23,7 @@ async function open(stored: Plan | null, opts: { demo?: boolean; side?: 'mine' |
   const storage = memoryStorage()
   if (stored) await storage.save(stored)
   render(<App storage={async () => storage} />)
-  await screen.findByRole('heading', { name: 'Лента' })
+  await screen.findByRole('heading', { name: 'Главная' })
 }
 
 describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и смотрю других — по одному материалу, саммери и «Пересоздать» в одном окне', () => {
@@ -35,9 +35,12 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и
     vi.useRealTimers()
   })
 
-  it('«Лента» — третьим разделом; пусто — подсказка: своё — тема в календаре, чужое — подписка по ссылке', async () => {
+  it('лента — главная, первым разделом (и для того, у кого раньше главной были графики); пусто — подсказка: своё — тема в календаре, чужое — подписка по ссылке', async () => {
     await open(null)
-    expect(within(screen.getByRole('navigation', { name: 'SMM' })).getByRole('button', { name: 'Лента — что выпускаю и что смотрю' })).toHaveAttribute('aria-current', 'page')
+    localStorage.setItem('cp:section', JSON.stringify('home')) // прежняя «Главная» с графиками — теперь лента
+    const nav = screen.getByRole('navigation', { name: 'SMM' })
+    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — лента: что выпускаю и что смотрю', 'Календарь контента', 'Аналитика — графики и посты'])
+    expect(within(nav).getByRole('button', { name: 'Главная — лента: что выпускаю и что смотрю' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('heading', { name: 'Здесь — то, что вы выпускаете' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'В календарь' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('radio', { name: 'Смотрю других' }))
@@ -80,6 +83,18 @@ describe('T-CP-078 FR-CP-078 лента как в TikTok: я выпускаю и
     await userEvent.click(within(sheet).getByRole('button', { name: 'Пересоздать у себя' }))
     const form = screen.getByRole('complementary', { name: 'Новый контент' })
     expect((within(form).getByRole('textbox', { name: 'Заметка' }) as HTMLTextAreaElement).value).toContain(`По мотивам: «${title}»`)
+  })
+
+  it('сторис подписок — сверху и в «Я выпускаю»: щелчок по аккаунту — к его постам', async () => {
+    await open(null, { demo: true })
+    expect(screen.getByRole('radio', { name: 'Я выпускаю' })).toHaveAttribute('aria-checked', 'true')
+    const subs = screen.getByRole('group', { name: 'Подписки' })
+    expect(within(subs).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(within(subs).getByRole('button', { name: 'Tech Shorts, TikTok' }))
+    expect(screen.getByRole('radio', { name: 'Смотрю других' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(subs).getByRole('button', { name: 'Tech Shorts, TikTok' })).toHaveAttribute('aria-pressed', 'true')
+    const feed = screen.getByRole('feed', { name: 'Лента: смотрю других' })
+    expect(within(feed).getAllByRole('button', { name: /^Только / }).every((b) => b.getAttribute('aria-label') === 'Только Tech Shorts')).toBe(true)
   })
 
   it('аккаунт в строке подписок — только его посты; пост с несколькими мыслями — карусель: стрелкой к следующему слайду', async () => {

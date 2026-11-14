@@ -161,7 +161,7 @@ describe('T-CP-069 FR-CP-069 NFR-CP-008 одно меню отделов вну�
     expect(screen.queryAllByRole('button', { name: /— скоро$/ })).toHaveLength(0)
     // разделы, шапка и фильтры — как на своём адресе
     const smm = screen.getByRole('navigation', { name: 'SMM' })
-    expect(within(smm).getByRole('button', { name: 'Главная — аналитика и лента' })).toBeInTheDocument()
+    expect(within(smm).getByRole('button', { name: 'Главная — лента: что выпускаю и что смотрю' })).toBeInTheDocument()
     expect(within(smm).getByRole('button', { name: 'Календарь контента' })).toHaveAttribute('aria-current', 'page')
     expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Фильтры' })).toHaveAttribute('aria-expanded', 'true')
     expect(within(side()).getByRole('button', { name: 'Andre AIT' })).toBeInTheDocument()
@@ -179,7 +179,7 @@ describe('T-CP-069 FR-CP-069 NFR-CP-008 одно меню отделов вну�
     expect(within(nav).getByRole('button', { name: 'SMM — контент-план' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getAllByRole('button', { name: /— скоро$/ })).toHaveLength(9)
     // в колонке разделов — только «Главная» и «Календарь»: профиль — внизу панели отделов
-    expect(within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Лента'])
+    expect(within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Аналитика'])
     await userEvent.click(within(nav).getByRole('button', { name: 'Профиль' }))
     expect(within(screen.getByRole('menu', { name: 'Профиль' })).getByText(/^Скоро: Главное, HR, Рынок/)).toBeInTheDocument()
   })
@@ -228,7 +228,7 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     expect(document.querySelector('.cp-topnav')).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Разделы' })).toBeNull()
     const items = within(screen.getByRole('navigation', { name: 'SMM' })).getAllByRole('button')
-    expect(items.map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — аналитика и лента', 'Календарь контента', 'Лента — что выпускаю и что смотрю', 'Настройки'])
+    expect(items.map((b) => b.getAttribute('aria-label'))).toEqual(['Главная — лента: что выпускаю и что смотрю', 'Календарь контента', 'Аналитика — графики и посты', 'Настройки'])
     const settings = items[3]
     expect(settings).toHaveClass('cp-sub__item')
     expect(settings).toHaveTextContent('Настройки')
@@ -286,10 +286,10 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     // ниже страницы навигации нет — внизу окна ничего, панель у Neuronium
     const below = [...document.querySelectorAll('nav')].filter((n) => !main.contains(n) && main.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING)
     expect(below).toEqual([])
-    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Главная', 'Календарь', 'Лента', 'Настройки'])
+    expect(within(nav).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Главная', 'Календарь', 'Аналитика', 'Настройки'])
     expect(within(nav).queryByRole('button', { name: 'Профиль' })).toBeNull()
   })
-  it('телефон в окне Neuronium: «Главная» и «Календарь» в шапке переключают разделы, выбранный отмечен', async () => {
+  it('телефон в окне Neuronium: «Главная», «Календарь» и «Аналитика» в шапке переключают разделы, выбранный отмечен', async () => {
     inNeuronium()
     onPhone()
     renderApp()
@@ -302,7 +302,11 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     expect(screen.queryByRole('grid', { name: 'Неделя по времени' })).toBeNull()
     expect(within(nav).getByRole('button', { name: 'Главная' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByRole('button', { name: 'Календарь' })).not.toHaveAttribute('aria-current')
-    expect(localStorage.getItem('cp:section')).toBe(JSON.stringify('home'))
+    expect(localStorage.getItem('cp:section')).toBe(JSON.stringify('feed'))
+    // «Аналитика» — третьей: графики и посты
+    await userEvent.click(within(nav).getByRole('button', { name: 'Аналитика' }))
+    expect(await screen.findByRole('heading', { name: 'Аналитика' })).toBeInTheDocument()
+    expect(localStorage.getItem('cp:section')).toBe(JSON.stringify('analytics'))
     await userEvent.click(within(nav).getByRole('button', { name: 'Календарь' }))
     await ready()
     expect(within(nav).getByRole('button', { name: 'Календарь' })).toHaveAttribute('aria-current', 'page')
@@ -371,7 +375,7 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     renderApp()
     await ready()
     const tabs = screen.getByRole('navigation', { name: 'Разделы' })
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Лента', 'Профиль'])
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Главная', 'Календарь', 'Аналитика', 'Профиль'])
     // та же нижняя панель, что была: рейл-вкладки первым в оболочке (внизу её ставит CSS), строки в шапке нет
     expect(tabs).toHaveClass('nr-rail', 'cp-tabs')
     expect(tabs).not.toHaveClass('cp-topnav')
@@ -384,10 +388,10 @@ describe('T-CP-070 FR-CP-070 NFR-CP-009 меню профиля в окне Neur
     await userEvent.click(profile)
     expect(within(screen.getByRole('menu', { name: 'Профиль' })).getAllByRole('menuitem').map((m) => m.textContent?.trim())).toEqual(MENU_ITEMS)
   })
-  it('«Подключить соцсети — в настройках» на главной открывает настройки и в окне Neuronium', async () => {
+  it('«Подключить соцсети — в настройках» в «Аналитике» открывает настройки и в окне Neuronium', async () => {
     inNeuronium()
-    renderApp(smallPlan(), { 'cp:section': JSON.stringify('home') })
-    await screen.findByRole('heading', { name: 'Главная' })
+    renderApp(smallPlan(), { 'cp:section': JSON.stringify('analytics') })
+    await screen.findByRole('heading', { name: 'Аналитика' })
     expect(screen.getByText(/— в настройках/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Подключить соцсети' }))
     expect(screen.getByRole('complementary', { name: 'Настройки' })).toBeInTheDocument()

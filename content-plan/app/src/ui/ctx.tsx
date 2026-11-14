@@ -21,7 +21,7 @@ export interface ToastAction {
   label: string
   run: () => void
 }
-export type Section = 'home' | 'calendar' | 'feed'
+export type Section = 'feed' | 'calendar' | 'analytics'
 
 /** Главная: чья лента (моя или конкурентов — «Поиск»), период графиков и фильтры — общие для графиков, таблицы и ленты. */
 export interface HomeState {

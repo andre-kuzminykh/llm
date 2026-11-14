@@ -1,4 +1,4 @@
-// Лента как в TikTok: по одному материалу на экран, листается вверх-вниз (колесо, стрелки, свайп, кнопки справа).
+// Главная — лента как в TikTok: по одному материалу на экран, листается вверх-вниз (колесо, стрелки, свайп, кнопки справа).
 // «Я выпускаю» — карточки календаря с темой (вид на каждый формат карточки, фото — из заметки) и мои посты;
 // «Смотрю других» — посты подписок: ссылку на соцсеть вставили — следите, «Отписаться» — открепились.
 // Короткое видео — кадр 9:16 с надписью; длинное — 16:9 в рамке; пост — карточка или карусель с подписью; статья —
@@ -123,7 +123,7 @@ export function FeedView() {
     <>
       <header className="cp-top cp-reels__top">
         <div className="cp-top__left">
-          <h1 className="nr-title">Лента</h1>
+          <h1 className="nr-title">Главная</h1>
         </div>
         <div className="cp-top__right">
           <Switch checked={demo} onChange={setDemo}>
@@ -143,18 +143,20 @@ export function FeedView() {
           </div>
         </div>
       </header>
-      {side === 'theirs' && (
-        <Subs
-          stored={stored}
-          shown={data.theirs}
-          owner={owner}
-          setOwner={setOwner}
-          open={subsOpen}
-          setOpen={setSubsOpen}
-          onFollow={follow}
-          onUnfollow={unfollow}
-        />
-      )}
+      {/* сторис подписок — сверху всегда, как в Instagram: из «Я выпускаю» щелчок ведёт к постам этого аккаунта */}
+      <Subs
+        stored={stored}
+        shown={data.theirs}
+        owner={side === 'theirs' ? owner : undefined}
+        setOwner={(id) => {
+          if (side !== 'theirs') setSide('theirs')
+          setOwner(id)
+        }}
+        open={subsOpen}
+        setOpen={setSubsOpen}
+        onFollow={follow}
+        onUnfollow={unfollow}
+      />
       <div className="cp-reels__wrap">
         {list.length ? (
           <div className="cp-reels nr-scroll" ref={feedRef} role="feed" aria-label={side === 'mine' ? 'Лента: я выпускаю' : 'Лента: смотрю других'} aria-busy="false" tabIndex={0} onKeyDown={onKey} onScroll={onScroll}>
@@ -498,11 +500,11 @@ function SummarySheet({ reel, onClose, onRecreate, onOpen, onUnfollow }: {
   )
 }
 
-/** Подписки строкой сверху, как истории: «Все», аккаунты (щелчок — только он), «Подписаться»; панель — ссылкой. */
+/** Сторис подписок строкой сверху: «Все», аккаунты (щелчок — только он), «Подписаться»; панель — ссылкой. */
 function Subs({ stored, shown, owner, setOwner, open, setOpen, onFollow, onUnfollow }: {
   stored: { id: string; name: string; platform: string; handle: string }[]
   shown: { id: string; name: string; platform: string; handle: string }[]
-  owner: string | null
+  owner: string | null | undefined // undefined — смотрим свою ленту: ничего не выбрано
   setOwner: (id: string | null) => void
   open: boolean
   setOpen: (v: boolean) => void
@@ -522,7 +524,7 @@ function Subs({ stored, shown, owner, setOwner, open, setOpen, onFollow, onUnfol
   return (
     <div className="cp-subs">
       <div className="cp-subs__row" role="group" aria-label="Подписки">
-        <button type="button" className="cp-subs__item" aria-pressed={!owner} onClick={() => setOwner(null)}>
+        <button type="button" className="cp-subs__item" aria-pressed={owner === null} onClick={() => setOwner(null)}>
           <span className="cp-subs__ava cp-subs__ava--all">
             <Icon name="people" size={18} />
           </span>
